@@ -37,6 +37,33 @@ entrar automáticamente al dashboard.
 | `Index.html`       | El dashboard (HTML + CSS + JS en un archivo)       |
 | `appsscript.json`  | Manifiesto: zona horaria, scopes y Drive API v3    |
 
+## El panel
+
+Tres vistas: **Suministro** (la regla del mes, KPIs, gráficos, tablas y
+plan de acción), **Mapeos** (aserraderos en el mapa y armado de rutas) y
+**Apuntes** (pauta de la reunión semanal y su registro).
+
+### Sistema visual
+
+El color del dato significa una sola cosa, siempre la misma:
+
+| Color    | Qué es                                     |
+|----------|--------------------------------------------|
+| Verde    | Ingreso real, confirmado en `Ingresos`     |
+| Madera   | Complemento estimado del reservador        |
+| Pizarra  | Plan (referencia, no material)             |
+| Ladrillo | Riesgo: bajo plan, precio sin homologar    |
+
+Nada decorativo usa esos cuatro. Tres familias tipográficas con un solo
+trabajo cada una: **Fraunces** para titulares (serif con eje óptico, aire
+de informe impreso), **Inter** para interfaz y tablas, **IBM Plex Mono**
+para toda cifra.
+
+Hay **modo claro y oscuro**: por defecto sigue al sistema y el
+interruptor de la barra deja fija la preferencia. Las tablas anchas
+mantienen fija la columna del proveedor al desplazarse, y hay hoja de
+estilos de impresión para llevar el panel en papel a la reunión.
+
 ## Instalación
 
 1. Abrir el spreadsheet → **Extensiones › Apps Script**.
