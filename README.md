@@ -64,6 +64,30 @@ interruptor de la barra deja fija la preferencia. Las tablas anchas
 mantienen fija la columna del proveedor al desplazarse, y hay hoja de
 estilos de impresión para llevar el panel en papel a la reunión.
 
+### Filtrar y ordenar
+
+Cada tabla lleva su propia tira de mandos: búsqueda, las facetas que esa
+tabla necesita (subproducto, fuente, brecha, tendencia, estado…) y la
+cuenta de filas cuando algún filtro está puesto. Se suman a los filtros
+globales de arriba, así que se puede acotar una tabla sin mover el resto
+del panel.
+
+El orden vive en el encabezado: un clic ordena por esa columna, otro da
+vuelta el sentido. Los valores vacíos van siempre al final, porque «sin
+precio» no es un precio de cero.
+
+### Plan de acción
+
+Agrupado por **caso**, no por proveedor: el guion de una conversación es
+el mismo para todos los que están en esa situación, así que se dice una
+vez y debajo va la lista de a quién llamar, con la **cinta de ingresos**
+de cada uno —una barra por día hábil, verde lo recibido y madera lo
+estimado— y las TS en juego.
+
+Solo habla de suministro. Un proveedor sin precio homologado no genera
+una conversación sino una fila que falta en el Plan o un alias que falta
+en Proveedores: eso se cuenta al pie del panel y se arregla en la hoja.
+
 ## Instalación
 
 1. Abrir el spreadsheet → **Extensiones › Apps Script**.

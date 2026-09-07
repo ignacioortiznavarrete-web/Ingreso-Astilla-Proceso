@@ -853,18 +853,6 @@
       }
     }
 
-    /* Mandos de una tabla: filtrar y ordenar sin salir del panel. */
-    .tabla-mandos {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--s3);
-      margin-bottom: var(--s3);
-      align-items: end;
-    }
-
-    .tabla-mandos .campo { min-width: 140px; }
-    .tabla-mandos .campo-buscar { flex: 1 1 200px; min-width: 170px; }
-
     /* ---------------------------------------------------------------
        PAUTA DE REUNIÓN
        --------------------------------------------------------------- */
@@ -1425,9 +1413,19 @@
        PLAN DE ACCIÓN
        --------------------------------------------------------------- */
 
+    /* La severidad vive dentro de la misma tira que la búsqueda: son
+       el mismo gesto —acotar el plan— y no merecen dos filas. */
     .accion-filtros {
-      display: flex; flex-wrap: wrap; gap: 6px;
-      margin-bottom: var(--s4);
+      display: flex; flex-wrap: wrap; gap: 5px;
+      padding-right: var(--s2);
+      margin-right: var(--s1);
+      border-right: 1px solid var(--rule);
+    }
+
+    .mandos-hueco { display: contents; }
+
+    @media (max-width: 760px) {
+      .accion-filtros { border-right: 0; padding-right: 0; }
     }
 
     .pastilla {
@@ -1535,10 +1533,114 @@
       line-height: 1.55; text-wrap: pretty;
     }
 
-    .accion-ts {
+    /* --- Un bloque por caso ------------------------------------------
+       El guion arriba, la lista de a quién llamar debajo. */
+
+    .caso {
+      border: 1px solid var(--rule);
+      border-radius: var(--r2);
+      background: var(--paper);
+    }
+
+    .caso.es-critico { border-color: var(--ladrillo-linea); }
+    .caso.es-atencion { border-color: var(--madera-linea); }
+    .caso.es-oportunidad { border-color: var(--verde-linea); }
+
+    .caso-cuerpo {
+      padding: var(--s4) var(--s5) var(--s3);
+      border-radius: var(--r2);
+    }
+
+    .caso-cab {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      gap: var(--s1) var(--s3); margin-bottom: var(--s3);
+    }
+
+    /* El dato que comparten todas las filas del caso: se dice aquí y
+       no ocho veces abajo. */
+    .caso-comun {
+      font-size: var(--t-fino);
+      color: var(--ink-2);
+    }
+
+    .caso-cuenta {
       margin-left: auto;
-      font-family: var(--mono); font-size: var(--t-chico);
-      color: var(--ink-3); white-space: nowrap;
+      font-family: var(--mono);
+      font-size: var(--t-fino);
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
+
+    .caso .accion-pasos { border-top: 0; padding-top: 0; }
+
+    .caso-lista {
+      margin: var(--s3) 0 0;
+      padding: 0;
+      list-style: none;
+      border-top: 1px solid var(--rule-soft);
+    }
+
+    /* Nombre · cinta · el dato de esa fila · lo que hay en juego. */
+    .caso-fila {
+      display: grid;
+      grid-template-columns: minmax(0, 230px) 78px minmax(0, 1fr) auto;
+      gap: var(--s3);
+      align-items: center;
+      padding: var(--s2) var(--s2);
+      margin: 0 calc(var(--s2) * -1);
+      border-bottom: 1px solid var(--rule-soft);
+      border-radius: var(--r1);
+      transition: background .14s var(--ease);
+    }
+
+    /* Es una lista de a quién llamar: conviene saber en qué renglón va
+       la vista cuando se lee de arriba abajo. */
+    .caso-fila:hover { background: var(--surface); }
+    .caso-fila:last-child { border-bottom: 0; }
+
+    /* Sin columna de dato, la cinta se queda junto al nombre.
+       Va tras un min-width y no suelta: con tres clases le gana por
+       especificidad a la regla de pantalla angosta de más abajo, y en
+       el teléfono la columna de la cifra quedaba en cero. */
+    @media (min-width: 861px) {
+      .caso-lista.es-corta .caso-fila {
+        grid-template-columns: minmax(0, 230px) 78px minmax(0, 1fr);
+      }
+
+      .caso-lista.es-corta .caso-ts { grid-column: 3; }
+    }
+
+    .caso-quien {
+      font-weight: 600;
+      font-size: var(--t-chico);
+      overflow-wrap: anywhere;
+    }
+
+    .caso-cinta { display: flex; align-items: center; }
+
+    .caso-dato {
+      font-size: var(--t-fino);
+      line-height: 1.5;
+      color: var(--ink-2);
+      text-wrap: pretty;
+    }
+
+    .caso-ts {
+      font-family: var(--mono);
+      font-size: var(--t-fino);
+      color: var(--ink-3);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 860px) {
+      .caso-fila {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--s1) var(--s3);
+      }
+      .caso-cinta { grid-row: 1; grid-column: 2; justify-content: flex-end; }
+      .caso-dato { grid-column: 1 / -1; }
+      .caso-ts { grid-column: 1 / -1; text-align: left; }
     }
 
     .accion-mas {
@@ -1582,7 +1684,6 @@
 
     @media (max-width: 640px) {
       .accion-paso { grid-template-columns: minmax(0, 1fr); gap: 1px; }
-      .accion-ts { margin-left: 0; }
     }
 
     .vacio {
@@ -1682,6 +1783,194 @@
       display: block; height: 100%; border-radius: inherit;
       background: var(--verde);
       transition: width .8s var(--ease);
+    }
+
+    /* ---------------------------------------------------------------
+       MANDOS DE TABLA
+
+       Seis tablas, un solo componente. La búsqueda a la izquierda, las
+       facetas que esa tabla necesita, y a la derecha cuántas filas
+       quedaron. "Limpiar" solo aparece cuando hay algo que limpiar.
+
+       Las facetas no llevan rótulo aparte: su primera opción ES el
+       rótulo ("Todos los subproductos"). Seis tablas × cuatro rótulos
+       son veinticuatro palabras que no dicen nada que el desplegable
+       no diga ya.
+       --------------------------------------------------------------- */
+
+    .mandos {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--s2);
+      margin-bottom: var(--s3);
+      padding: var(--s2) var(--s3);
+      border: 1px solid var(--rule);
+      border-radius: var(--r2);
+      background: var(--surface);
+    }
+
+    .mandos-buscar {
+      position: relative;
+      flex: 1 1 190px;
+      min-width: 150px;
+      max-width: 300px;
+    }
+
+    .mandos-buscar svg {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      transform: translateY(-50%);
+      stroke: var(--ink-3);
+      fill: none;
+      pointer-events: none;
+    }
+
+    .mandos input,
+    .mandos select {
+      height: 34px;
+      padding: 0 10px;
+      font-size: var(--t-chico);
+      color: var(--ink);
+      border: 1px solid var(--rule);
+      border-radius: var(--r1);
+      background: var(--paper);
+      outline: 0;
+      transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
+    }
+
+    .mandos input { width: 100%; padding-left: 31px; }
+    .mandos select { max-width: 220px; }
+
+    .mandos input:hover, .mandos select:hover { border-color: var(--ink-3); }
+
+    .mandos input:focus, .mandos select:focus {
+      border-color: var(--verde-2);
+      box-shadow: 0 0 0 3px var(--verde-linea);
+    }
+
+    .mandos input::placeholder { color: var(--ink-3); }
+
+    /* Una faceta puesta se marca sola: si no, hay que abrir cada
+       desplegable para saber por qué la tabla muestra ocho filas. */
+    .mandos select.puesta {
+      border-color: var(--verde-2);
+      color: var(--verde);
+      font-weight: 600;
+    }
+
+    .mandos-cuenta {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: var(--t-mini);
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
+
+    .mandos-limpiar {
+      min-height: 30px;
+      padding: 0 var(--s3);
+      font-size: var(--t-fino);
+      font-weight: 500;
+      color: var(--ink-2);
+      cursor: pointer;
+      border: 1px solid var(--rule);
+      border-radius: var(--r1);
+      background: var(--paper);
+      transition: border-color .15s var(--ease), color .15s var(--ease);
+    }
+
+    .mandos-limpiar:hover { border-color: var(--ink-3); color: var(--ink); }
+    .mandos-limpiar[hidden] { display: none !important; }
+
+    /* --- Orden en el encabezado -------------------------------------
+       Una tabla se ordena haciendo clic en la columna que interesa, que
+       es donde la gente ya lo busca. Eso además saca dos desplegables
+       de cada panel. */
+
+    .th-orden {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+      padding: 0;
+      cursor: pointer;
+      font: inherit;
+      letter-spacing: inherit;
+      text-transform: inherit;
+      color: inherit;
+      border: 0;
+      background: none;
+      transition: color .14s var(--ease);
+    }
+
+    th.number .th-orden { justify-content: flex-end; }
+    .th-orden:hover { color: var(--ink); }
+
+    /* La flecha neutra ocupa su sitio siempre —así nada se mueve al
+       pasar por encima— pero apenas se ve hasta que hace falta. */
+    .th-orden::after {
+      content: '↕';
+      font-family: var(--mono);
+      font-size: 11px;
+      opacity: .22;
+      transition: opacity .14s var(--ease);
+    }
+
+    .th-orden:hover::after { opacity: .6; }
+
+    th[aria-sort] { color: var(--ink); }
+
+    th[aria-sort] .th-orden::after {
+      opacity: 1;
+      color: var(--verde);
+    }
+
+    th[aria-sort="ascending"] .th-orden::after { content: '↑'; }
+    th[aria-sort="descending"] .th-orden::after { content: '↓'; }
+
+    /* --- La cinta de ingresos ---------------------------------------
+       Una barra por día hábil del período: verde lo recibido, madera lo
+       estimado. "Viene a la baja" deja de ser una afirmación y pasa a
+       ser algo que se ve. Es la misma lectura de la regla del mes, a
+       escala de una fila. */
+
+    .tendencia { display: flex; align-items: center; gap: var(--s2); }
+
+    .chispa { display: block; overflow: visible; }
+    .chispa-real { fill: var(--verde); }
+    .chispa-est { fill: var(--madera); }
+    .chispa-base { fill: var(--rule); }
+
+    .accion-cinta {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: var(--t-fino);
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
+
+    .accion-nota {
+      margin: var(--s4) 0 0;
+      padding-top: var(--s3);
+      border-top: 1px solid var(--rule-soft);
+      font-size: var(--t-fino);
+      line-height: 1.55;
+      color: var(--ink-3);
+      max-width: 78ch;
+    }
+
+    .accion-nota b { color: var(--ink-2); font-weight: 600; }
+
+    @media (max-width: 640px) {
+      .accion-cinta { margin-left: 0; width: 100%; }
+      .mandos-cuenta { margin-left: 0; }
     }
 
     /* ---------------------------------------------------------------
@@ -2166,6 +2455,14 @@
       .sello { display: none; }
     }
 
+    @media (max-width: 640px) {
+      /* La píldora del panel no se puede encoger —es una sola línea de
+         cifras— así que en pantalla angosta baja a su propio renglón en
+         vez de empujar la página hacia el costado. */
+      .panel-cab { flex-wrap: wrap; }
+      .conteo { margin-left: 0; }
+    }
+
     @media (max-width: 820px) {
       .barra-fila { flex-wrap: wrap; gap: var(--s3); padding: var(--s3) var(--s4); }
       .marca { flex: 1 1 100%; }
@@ -2209,9 +2506,11 @@
         font-size: 10pt;
       }
 
-      .barra, .filtros, .tabla-mandos, .accion-filtros,
+      .barra, .filtros, .mandos, .accion-filtros,
       .velo, #globo, .mapa-cinta, .gestion, .apunte-form,
       .boton, .pastilla, .conteo { display: none !important; }
+
+      .th-orden::after { display: none; }
 
       main { width: auto; padding: 0; }
 
@@ -2537,19 +2836,21 @@
             </div>
             <div class="conteo" id="conteoProducto">—</div>
           </div>
+          <div class="mandos" id="mandosProducto" data-mandos="producto"></div>
+
           <div class="tabla-marco tabla-fija">
-            <table>
+            <table data-tabla="producto">
               <thead><tr>
-                <th>Subproducto</th>
-                <th class="number">Plan período</th>
-                <th class="number">Plan a fecha</th>
-                <th class="number">Real</th>
-                <th class="number">Estimado</th>
-                <th class="number">Total</th>
-                <th class="number">Desvío</th>
-                <th class="number">Cumpl.</th>
-                <th class="number">Proyección</th>
-                <th class="number">Cumpl. proy.</th>
+                <th data-orden="subproducto">Subproducto</th>
+                <th class="number" data-orden="planPeriod">Plan período</th>
+                <th class="number" data-orden="planToDate">Plan a fecha</th>
+                <th class="number" data-orden="real">Real</th>
+                <th class="number" data-orden="estimate">Estimado</th>
+                <th class="number" data-orden="total">Total</th>
+                <th class="number" data-orden="deviation">Desvío</th>
+                <th class="number" data-orden="compliance">Cumpl.</th>
+                <th class="number" data-orden="projection">Proyección</th>
+                <th class="number" data-orden="projectedCompliance">Cumpl. proy.</th>
               </tr></thead>
               <tbody id="productBody"></tbody>
               <tfoot id="productFoot"></tfoot>
@@ -2570,56 +2871,23 @@
             <div class="conteo" id="conteoPrecios">—</div>
           </div>
 
-          <div class="tabla-mandos">
-            <div class="campo campo-buscar">
-              <label for="pBuscar">Buscar proveedor</label>
-              <input id="pBuscar" type="search" placeholder="Nombre o parte">
-            </div>
-            <div class="campo">
-              <label for="pBrecha">Brecha</label>
-              <select id="pBrecha">
-                <option value="">Todas</option>
-                <option value="bajo">Bajo plan</option>
-                <option value="sobre">Sobre plan</option>
-                <option value="sinplan">Sin plan</option>
-                <option value="sinprecio">Sin precio</option>
-              </select>
-            </div>
-            <div class="campo">
-              <label for="pOrden">Ordenar por</label>
-              <select id="pOrden">
-                <option value="total">Cantidad</option>
-                <option value="brecha">Brecha</option>
-                <option value="precio">Precio</option>
-                <option value="plan">Plan del mes</option>
-                <option value="costo">Costo valorizado</option>
-                <option value="proveedor">Proveedor</option>
-              </select>
-            </div>
-            <div class="campo">
-              <label for="pSentido">Sentido</label>
-              <select id="pSentido">
-                <option value="desc">Mayor a menor</option>
-                <option value="asc">Menor a mayor</option>
-              </select>
-            </div>
-          </div>
+          <div class="mandos" id="mandosPrecios" data-mandos="precios"></div>
 
           <div class="tabla-marco tabla-fija">
-            <table>
+            <table data-tabla="precios">
               <thead><tr>
-                <th>Proveedor operativo</th>
-                <th>Proveedor en Plan</th>
-                <th>Subproducto</th>
-                <th class="number">Precio/TS</th>
-                <th class="number">Plan mes</th>
-                <th class="number">Plan a fecha</th>
-                <th class="number">Real</th>
-                <th class="number">Estimado</th>
-                <th class="number">Total</th>
-                <th class="number">Brecha</th>
-                <th class="number">Costo val.</th>
-                <th class="number">Part.</th>
+                <th data-orden="proveedor">Proveedor operativo</th>
+                <th data-orden="proveedorPlan">Proveedor en Plan</th>
+                <th data-orden="subproducto">Subproducto</th>
+                <th class="number" data-orden="precio">Precio/TS</th>
+                <th class="number" data-orden="monthlyPlan">Plan mes</th>
+                <th class="number" data-orden="planToDate">Plan a fecha</th>
+                <th class="number" data-orden="real">Real</th>
+                <th class="number" data-orden="estimate">Estimado</th>
+                <th class="number" data-orden="total">Total</th>
+                <th class="number" data-orden="gapToDate">Brecha</th>
+                <th class="number" data-orden="cost">Costo val.</th>
+                <th class="number" data-orden="costShare">Part.</th>
                 <th>Match</th>
               </tr></thead>
               <tbody id="pricingBody"></tbody>
@@ -2639,23 +2907,25 @@
             </div>
             <div class="conteo" id="conteoProveedor">—</div>
           </div>
+          <div class="mandos" id="mandosProveedor" data-mandos="proveedor"></div>
+
           <div class="tabla-marco tabla-fija-2">
-            <table>
+            <table data-tabla="proveedor">
               <thead><tr>
-                <th>#</th>
-                <th>Proveedor</th>
-                <th class="number">Total</th>
-                <th class="number">Real</th>
-                <th class="number">Estimado</th>
-                <th class="number">Part.</th>
-                <th class="number">Acum.</th>
-                <th class="number">Últ. 7d</th>
-                <th>Tendencia</th>
-                <th class="number">Días</th>
-                <th class="number">Prom./día</th>
-                <th class="number">Precio pond.</th>
-                <th class="number">Costo val.</th>
-                <th>Último</th>
+                <th data-orden="rank">#</th>
+                <th data-orden="proveedor">Proveedor</th>
+                <th class="number" data-orden="total">Total</th>
+                <th class="number" data-orden="real">Real</th>
+                <th class="number" data-orden="estimate">Estimado</th>
+                <th class="number" data-orden="share">Part.</th>
+                <th class="number" data-orden="cumulativeShare">Acum.</th>
+                <th class="number" data-orden="recent7">Últ. 7d</th>
+                <th data-orden="trend">Tendencia</th>
+                <th class="number" data-orden="days">Días</th>
+                <th class="number" data-orden="average">Prom./día</th>
+                <th class="number" data-orden="weightedPrice">Precio pond.</th>
+                <th class="number" data-orden="cost">Costo val.</th>
+                <th data-orden="last">Último</th>
                 <th>Subproductos</th>
               </tr></thead>
               <tbody id="providerBody"></tbody>
@@ -2669,27 +2939,32 @@
             <div>
               <h2>Plan de acción</h2>
               <p class="panel-nota">
-                Qué hacer con lo que muestran los números de arriba, y con
-                qué argumento. Ordenado por lo que está en juego, no por
-                orden alfabético.
+                Qué hacer con el ingreso de cada proveedor, y con qué
+                argumento. Solo suministro: lo que falta homologar en la
+                planilla se arregla en la hoja y no ocupa lugar aquí.
+                Ordenado por lo que está en juego.
               </p>
             </div>
             <div class="conteo" id="conteoAccion">—</div>
           </div>
 
-          <div class="accion-filtros" role="group"
-               aria-label="Filtrar plan de acción">
-            <button type="button" class="pastilla activa"
-                    data-sev="">Todo</button>
-            <button type="button" class="pastilla"
-                    data-sev="critico">Crítico</button>
-            <button type="button" class="pastilla"
-                    data-sev="atencion">Atención</button>
-            <button type="button" class="pastilla"
-                    data-sev="oportunidad">Oportunidad</button>
+          <div class="mandos" id="mandosAccion" data-mandos="accion">
+            <div class="accion-filtros" role="group"
+                 aria-label="Filtrar por severidad">
+              <button type="button" class="pastilla activa"
+                      data-sev="">Todo</button>
+              <button type="button" class="pastilla"
+                      data-sev="critico">Crítico</button>
+              <button type="button" class="pastilla"
+                      data-sev="atencion">Atención</button>
+              <button type="button" class="pastilla"
+                      data-sev="oportunidad">Oportunidad</button>
+            </div>
+            <span class="mandos-hueco" data-mandos-slot></span>
           </div>
 
           <div id="listaAccion" class="acciones"></div>
+          <p class="accion-nota" id="accionNota" hidden></p>
         </article>
 
         <article class="panel">
@@ -2703,20 +2978,22 @@
             </div>
             <div class="conteo" id="conteoDetalle">—</div>
           </div>
+          <div class="mandos" id="mandosDetalle" data-mandos="detalle"></div>
+
           <div class="tabla-marco tabla-fija">
-            <table>
+            <table data-tabla="detalle">
               <thead><tr>
-                <th>Fecha</th>
-                <th>Fuente</th>
-                <th>Subproducto</th>
-                <th>Proveedor</th>
-                <th>Destino</th>
-                <th>Material</th>
-                <th>Predio</th>
-                <th class="number">Camiones</th>
-                <th class="number">TS</th>
-                <th class="number">Precio/TS</th>
-                <th class="number">Costo val.</th>
+                <th data-orden="fecha">Fecha</th>
+                <th data-orden="source">Fuente</th>
+                <th data-orden="subproducto">Subproducto</th>
+                <th data-orden="proveedor">Proveedor</th>
+                <th data-orden="destino">Destino</th>
+                <th data-orden="material">Material</th>
+                <th data-orden="predio">Predio</th>
+                <th class="number" data-orden="camiones">Camiones</th>
+                <th class="number" data-orden="ts">TS</th>
+                <th class="number" data-orden="precioUnitario">Precio/TS</th>
+                <th class="number" data-orden="costoEstimado">Costo val.</th>
                 <th>Match precio</th>
               </tr></thead>
               <tbody id="detailBody"></tbody>
@@ -2783,15 +3060,17 @@
             </div>
             <div class="conteo" id="conteoMapeos">—</div>
           </div>
+          <div class="mandos" id="mandosMapeos" data-mandos="mapeos"></div>
+
           <div class="tabla-marco">
-            <table>
+            <table data-tabla="mapeos">
               <thead><tr>
-                <th>Aserradero</th>
-                <th>Dirección</th>
-                <th>Estado</th>
-                <th class="number">Cargas</th>
-                <th>Contacto</th>
-                <th>Actualizado</th>
+                <th data-orden="nombre">Aserradero</th>
+                <th data-orden="direccion">Dirección</th>
+                <th data-orden="estado">Estado</th>
+                <th class="number" data-orden="cargas">Cargas</th>
+                <th data-orden="contacto">Contacto</th>
+                <th data-orden="actualizado">Actualizado</th>
               </tr></thead>
               <tbody id="mapeosBody"></tbody>
               <tfoot id="mapeosFoot"></tfoot>
@@ -2812,17 +3091,19 @@
             </div>
             <div class="conteo" id="conteoRutas">—</div>
           </div>
+          <div class="mandos" id="mandosRutas" data-mandos="rutas"></div>
+
           <div class="tabla-marco">
-            <table>
+            <table data-tabla="rutas">
               <thead><tr>
-                <th>Ruta</th>
-                <th>Fecha</th>
-                <th>Salida</th>
-                <th class="number">Paradas</th>
-                <th class="number">Km aprox.</th>
-                <th class="number">Duración</th>
-                <th>Término</th>
-                <th>Calendario</th>
+                <th data-orden="nombre">Ruta</th>
+                <th data-orden="fecha">Fecha</th>
+                <th data-orden="hora">Salida</th>
+                <th class="number" data-orden="paradas">Paradas</th>
+                <th class="number" data-orden="km">Km aprox.</th>
+                <th class="number" data-orden="minutosTotal">Duración</th>
+                <th data-orden="horaTermino">Término</th>
+                <th data-orden="eventoId">Calendario</th>
                 <th></th>
               </tr></thead>
               <tbody id="rutasBody"></tbody>
@@ -3075,7 +3356,7 @@
     }, 200));
 
     montarFiltrosAccion();
-    montarMandosPrecios();
+    montarMandos();
     cargarTodo();
     montarApuntes();
 
@@ -3798,6 +4079,9 @@
             pricedTs: 0,
             cost: 0,
             dates: {},
+            // Serie diaria partida en real y estimado: es lo que dibuja
+            // la cinta de ingresos.
+            dias: {},
             products: {},
             last: ''
           };
@@ -3826,6 +4110,14 @@
         item.dates[row.fecha] =
           (item.dates[row.fecha] || 0) +
           rowTs;
+
+        if (!item.dias[row.fecha]) { item.dias[row.fecha] = { r: 0, e: 0 }; }
+
+        if (row.source === 'PLANILLA') {
+          item.dias[row.fecha].e += rowTs;
+        } else {
+          item.dias[row.fecha].r += rowTs;
+        }
 
         item.products[row.subproducto] =
           (item.products[row.subproducto] || 0) +
@@ -3899,6 +4191,7 @@
               ? Math.max(0, dateDiffDays(item.last, reference))
               : null,
           products: products,
+          porDia: item.dias,
           recent7: recent7,
           previous7: previous7,
           trend: trend,
@@ -5450,6 +5743,658 @@
     }
 
 /* =====================================================================
+ * MANDOS DE TABLA
+ *
+ * Seis tablas, un solo componente. Cada tabla declara qué facetas
+ * necesita y por qué columnas se puede ordenar; buscar, contar, limpiar
+ * y recordar el orden es común a todas.
+ *
+ * El orden vive en el encabezado, no en un desplegable: una tabla se
+ * ordena haciendo clic en la columna que interesa, que es donde la
+ * gente ya lo busca. Eso saca dos controles de cada panel y deja sitio
+ * para las facetas, que es lo que de verdad no se podía hacer antes.
+ * ===================================================================== */
+
+    var MANDOS = {};
+
+    function mandos(clave) {
+      if (!MANDOS[clave]) {
+        const cfg = CONFIG_MANDOS[clave] || {};
+
+        MANDOS[clave] = {
+          buscar: '',
+          faceta: {},
+          orden: cfg.orden || '',
+          sentido: cfg.sentido || 'desc'
+        };
+      }
+
+      return MANDOS[clave];
+    }
+
+    /** Lista de valores distintos, ordenada como se lee en español. */
+    function unicos(valores) {
+      const vistos = {};
+      const salida = [];
+
+      valores.forEach(function(v) {
+        const t = String(v === null || v === undefined ? '' : v).trim();
+
+        if (t && !vistos[t]) { vistos[t] = true; salida.push(t); }
+      });
+
+      return salida.sort(function(a, b) {
+        return a.localeCompare(b, 'es', { sensitivity: 'base' });
+      });
+    }
+
+    /* --- Facetas reutilizables ---------------------------------------
+       Una faceta no lleva rótulo aparte: su primera opción ES el
+       rótulo. Seis tablas por cuatro rótulos son veinticuatro palabras
+       que no dicen nada que el desplegable no diga ya. */
+
+    function facetaSubproducto(campo) {
+      const leer = campo || 'subproducto';
+
+      return {
+        clave: 'sub',
+        etiqueta: 'Todos los subproductos',
+        titulo: 'Filtrar por subproducto',
+        opciones: function(filas) {
+          return unicos(filas.map(function(f) { return f[leer]; }))
+            .map(function(n) { return { v: n, t: shortProduct(n) }; });
+        },
+        prueba: function(f, v) { return f[leer] === v; }
+      };
+    }
+
+    function facetaLista(clave, etiqueta, titulo, opciones, prueba) {
+      return {
+        clave: clave,
+        etiqueta: etiqueta,
+        titulo: titulo,
+        opciones: function() { return opciones; },
+        prueba: prueba
+      };
+    }
+
+    const FACETA_BRECHA = facetaLista(
+      'brecha', 'Cumplan o no el plan', 'Filtrar por brecha contra el plan',
+      [{ v: 'bajo', t: 'Bajo plan' }, { v: 'sobre', t: 'Sobre plan' }],
+      function(f, v) {
+        const g = f.deviation === undefined ? f.gapToDate : f.deviation;
+
+        if (g === null || g === undefined) { return false; }
+
+        return v === 'bajo' ? g < 0 : g > 0;
+      }
+    );
+
+    const CONFIG_MANDOS = {
+      producto: {
+        // Tres filas: una caja de búsqueda sobraría. Lo útil aquí es
+        // quedarse solo con lo que va bajo plan.
+        facetas: [FACETA_BRECHA],
+        orden: 'total', sentido: 'desc'
+      },
+
+      precios: {
+        buscar: {
+          campos: ['proveedor', 'proveedorPlan', 'subproducto', 'matchMethod'],
+          marcador: 'Proveedor, subproducto o match'
+        },
+        facetas: [
+          facetaSubproducto(),
+          facetaLista(
+            'brecha', 'Con y sin plan', 'Filtrar por situación',
+            [
+              { v: 'bajo', t: 'Bajo plan' },
+              { v: 'sobre', t: 'Sobre plan' },
+              { v: 'sinplan', t: 'Sin plan' },
+              { v: 'sinprecio', t: 'Sin precio' }
+            ],
+            function(f, v) {
+              if (v === 'sinprecio') {
+                return f.precio === null || f.precio === undefined;
+              }
+
+              if (v === 'sinplan') { return !f.monthlyPlan; }
+              if (f.gapToDate === null || f.gapToDate === undefined) {
+                return false;
+              }
+
+              return v === 'bajo' ? f.gapToDate < 0 : f.gapToDate > 0;
+            }
+          )
+        ],
+        orden: 'total', sentido: 'desc'
+      },
+
+      proveedor: {
+        buscar: { campos: ['proveedor'], marcador: 'Nombre del proveedor' },
+        facetas: [
+          {
+            clave: 'sub',
+            etiqueta: 'Todos los subproductos',
+            titulo: 'Filtrar por subproducto',
+            opciones: function(filas) {
+              const todos = [];
+
+              filas.forEach(function(f) {
+                (f.products || []).forEach(function(p) { todos.push(p); });
+              });
+
+              return unicos(todos).map(function(n) {
+                return { v: n, t: shortProduct(n) };
+              });
+            },
+            prueba: function(f, v) {
+              return (f.products || []).indexOf(v) !== -1;
+            }
+          },
+          facetaLista(
+            'senal', 'Cualquier tendencia', 'Filtrar por tendencia de ingreso',
+            [
+              { v: 'sube', t: 'Al alza' },
+              { v: 'baja', t: 'A la baja' },
+              { v: 'parado', t: 'Sin despachar hace 7+ días' },
+              { v: 'estimado', t: 'Todo sin confirmar en SAP' }
+            ],
+            function(f, v) {
+              if (v === 'sube') { return f.trend === Infinity || f.trend > .1; }
+              if (v === 'baja') {
+                return f.trend !== Infinity && isFinite(f.trend) && f.trend < -.1;
+              }
+              if (v === 'parado') {
+                return f.daysSinceLast !== null && f.daysSinceLast >= 7;
+              }
+              return f.estimate > 0 && f.real === 0;
+            }
+          )
+        ],
+        orden: 'total', sentido: 'desc',
+        valor: {
+          trend: function(f) { return f.trend === Infinity ? 1e9 : f.trend; }
+        }
+      },
+
+      detalle: {
+        buscar: {
+          campos: ['proveedor', 'subproducto', 'destino', 'predio', 'rol',
+                   'material', 'precioMatchMethod'],
+          marcador: 'Proveedor, predio, destino…'
+        },
+        facetas: [
+          facetaSubproducto(),
+          facetaLista(
+            'fuente', 'Real y estimado', 'Filtrar por fuente del dato',
+            [{ v: 'INGRESOS', t: 'Solo real' },
+             { v: 'PLANILLA', t: 'Solo estimado' }],
+            function(f, v) { return f.source === v; }
+          )
+        ],
+        orden: 'fecha', sentido: 'desc'
+      },
+
+      mapeos: {
+        buscar: {
+          campos: ['nombre', 'direccion', 'comuna', 'contacto', 'notas'],
+          marcador: 'Aserradero, comuna o contacto'
+        },
+        facetas: [
+          {
+            clave: 'ubic',
+            etiqueta: 'Ubicados y sin ubicar',
+            titulo: 'Filtrar por ubicación en el mapa',
+            opciones: function() {
+              return [{ v: 'si', t: 'En el mapa' },
+                      { v: 'no', t: 'Sin ubicar' }];
+            },
+            prueba: function(f, v) {
+              return v === 'si' ? f.lat !== null : f.lat === null;
+            }
+          }
+        ],
+        orden: 'nombre', sentido: 'asc',
+        valor: {
+          actualizado: function(m) {
+            const p = String(m.actualizado || '')
+              .match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+
+            return p ? Number(p[3] + p[2] + p[1] + p[4] + p[5]) : null;
+          }
+        }
+      },
+
+      rutas: {
+        buscar: { campos: ['nombre', 'notas'], marcador: 'Nombre de la ruta' },
+        facetas: [
+          facetaLista(
+            'agenda', 'Agendadas y sin agendar', 'Filtrar por calendario',
+            [{ v: 'si', t: 'Agendadas' }, { v: 'no', t: 'Sin agendar' }],
+            function(r, v) { return v === 'si' ? !!r.eventoId : !r.eventoId; }
+          )
+        ],
+        orden: 'fecha', sentido: 'desc',
+        valor: {
+          paradas: function(r) { return (r.paradas || []).length; },
+          eventoId: function(r) { return r.eventoId ? 1 : 0; }
+        }
+      },
+
+      accion: {
+        buscar: {
+          campos: ['proveedor', 'caso', 'porque'],
+          marcador: 'Proveedor o caso'
+        },
+        facetas: [
+          {
+            clave: 'prov',
+            etiqueta: 'Todos los proveedores',
+            titulo: 'Filtrar por proveedor',
+            opciones: function(filas) {
+              return unicos(filas.map(function(a) { return a.proveedor; }))
+                .map(function(n) { return { v: n, t: shortProvider(n) }; });
+            },
+            prueba: function(a, v) { return a.proveedor === v; }
+          },
+          {
+            clave: 'sub',
+            etiqueta: 'Todos los subproductos',
+            titulo: 'Filtrar por subproducto',
+            opciones: function(filas) {
+              const todos = [];
+
+              filas.forEach(function(a) {
+                ((a.ficha && a.ficha.products) || []).forEach(function(p) {
+                  todos.push(p);
+                });
+              });
+
+              return unicos(todos).map(function(n) {
+                return { v: n, t: shortProduct(n) };
+              });
+            },
+            prueba: function(a, v) {
+              return ((a.ficha && a.ficha.products) || []).indexOf(v) !== -1;
+            }
+          },
+          {
+            clave: 'caso',
+            etiqueta: 'Todos los casos',
+            titulo: 'Filtrar por tipo de caso',
+            opciones: function(filas) {
+              return unicos(filas.map(function(a) { return a.caso; }))
+                .map(function(n) { return { v: n, t: n }; });
+            },
+            prueba: function(a, v) { return a.caso === v; }
+          }
+        ],
+        orden: '', sentido: 'desc'
+      }
+    };
+
+    /** Qué redibujar cuando cambia un mando. */
+    function redibujar(clave) {
+      if (clave === 'producto') { dibujarTablaProducto(CURRENT_PRODUCTS); }
+      if (clave === 'precios') {
+        dibujarTablaPrecios(CURRENT_PRICING, CURRENT_METRICS);
+      }
+      if (clave === 'proveedor') { dibujarTablaProveedor(CURRENT_PROVIDERS); }
+      if (clave === 'detalle') { dibujarDetalle(CURRENT_ROWS); }
+      if (clave === 'mapeos' && MAPEOS) { dibujarTablaMapeos(); }
+      if (clave === 'rutas' && RUTAS) { dibujarTablaRutas(); }
+      if (clave === 'accion') { pintarAcciones(); }
+    }
+
+    /**
+     * Filtra y ordena una lista con los mandos de esa tabla, pinta la
+     * tira de controles y devuelve lo que hay que dibujar.
+     */
+    function aplicarMandos(clave, filas) {
+      const cfg = CONFIG_MANDOS[clave] || {};
+      const m = mandos(clave);
+      const todas = filas || [];
+
+      let lista = todas.slice();
+
+      if (cfg.buscar && m.buscar) {
+        const aguja = normalizar(m.buscar);
+
+        lista = lista.filter(function(f) {
+          const pajar = normalizar(cfg.buscar.campos.map(function(c) {
+            return f[c];
+          }).join(' '));
+
+          return pajar.indexOf(aguja) !== -1;
+        });
+      }
+
+      (cfg.facetas || []).forEach(function(faceta) {
+        const v = m.faceta[faceta.clave];
+
+        if (v) {
+          lista = lista.filter(function(f) { return faceta.prueba(f, v); });
+        }
+      });
+
+      if (m.orden) {
+        const leer = (cfg.valor || {})[m.orden] ||
+          function(f) { return f[m.orden]; };
+
+        lista.sort(function(a, b) {
+          return compararOrden(leer(a), leer(b), m.sentido);
+        });
+      }
+
+      pintarMandos(clave, todas, lista.length);
+      marcarOrden(clave);
+
+      return lista;
+    }
+
+    /** Los vacíos van siempre al final: "sin precio" no es cero. */
+    function compararOrden(a, b, sentido) {
+      const va = a === null || a === undefined || a === '' ||
+        (typeof a === 'number' && !isFinite(a));
+      const vb = b === null || b === undefined || b === '' ||
+        (typeof b === 'number' && !isFinite(b));
+
+      if (va && vb) { return 0; }
+      if (va) { return 1; }
+      if (vb) { return -1; }
+
+      if (typeof a === 'string' || typeof b === 'string') {
+        const d = String(a).localeCompare(String(b), 'es', {
+          numeric: true, sensitivity: 'base'
+        });
+
+        return sentido === 'asc' ? d : -d;
+      }
+
+      return sentido === 'asc' ? a - b : b - a;
+    }
+
+    /**
+     * La tira se construye una sola vez; después solo se refrescan las
+     * opciones y la cuenta. Volver a escribir el HTML en cada redibujo
+     * le robaría el foco a quien está escribiendo en la búsqueda.
+     */
+    function pintarMandos(clave, todas, mostrados) {
+      const caja = document.querySelector('[data-mandos="' + clave + '"]');
+
+      if (!caja) { return; }
+
+      const cfg = CONFIG_MANDOS[clave] || {};
+      const m = mandos(clave);
+
+      if (caja.getAttribute('data-listo') !== '1') {
+        const partes = [];
+
+        if (cfg.buscar) {
+          partes.push(
+            '<label class="mandos-buscar">' +
+            '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" ' +
+            'stroke-linecap="round" aria-hidden="true">' +
+            '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>' +
+            '<input type="search" data-buscar spellcheck="false" ' +
+            'placeholder="' + esc(cfg.buscar.marcador) + '" ' +
+            'aria-label="Buscar en la tabla"></label>'
+          );
+        }
+
+        (cfg.facetas || []).forEach(function(faceta) {
+          partes.push(
+            '<select data-faceta="' + esc(faceta.clave) + '" aria-label="' +
+            esc(faceta.titulo) + '"></select>'
+          );
+        });
+
+        partes.push('<span class="mandos-cuenta" data-cuenta ' +
+          'aria-live="polite"></span>');
+        partes.push('<button type="button" class="mandos-limpiar" ' +
+          'data-limpiar hidden>Limpiar</button>');
+
+        // Si la tira trae marcado propio —las pastillas de severidad—
+        // los controles van en su hueco, no encima.
+        (caja.querySelector('[data-mandos-slot]') || caja).innerHTML =
+          partes.join('');
+
+        caja.setAttribute('data-listo', '1');
+      }
+
+      const entrada = caja.querySelector('[data-buscar]');
+
+      if (entrada && entrada.value !== m.buscar) { entrada.value = m.buscar; }
+
+      (cfg.facetas || []).forEach(function(faceta) {
+        const select = caja.querySelector(
+          '[data-faceta="' + faceta.clave + '"]'
+        );
+
+        if (!select) { return; }
+
+        const opciones = faceta.opciones(todas) || [];
+        const actual = m.faceta[faceta.clave] || '';
+
+        // La opción elegida se mantiene aunque el filtro global haya
+        // dejado la tabla sin filas de ese valor: si no, cambiar el mes
+        // borraría el filtro sin avisar.
+        const tiene = opciones.some(function(o) { return o.v === actual; });
+
+        select.innerHTML =
+          '<option value="">' + esc(faceta.etiqueta) + '</option>' +
+          opciones.map(function(o) {
+            return '<option value="' + esc(o.v) + '">' + esc(o.t) + '</option>';
+          }).join('') +
+          (actual && !tiene
+            ? '<option value="' + esc(actual) + '">' + esc(actual) + '</option>'
+            : '');
+
+        select.value = actual;
+        select.classList.toggle('puesta', !!actual);
+      });
+
+      const activo = !!m.buscar || Object.keys(m.faceta).some(function(k) {
+        return !!m.faceta[k];
+      });
+
+      const cuenta = caja.querySelector('[data-cuenta]');
+
+      if (cuenta) {
+        cuenta.textContent = activo
+          ? formatInteger(mostrados) + ' de ' + formatInteger(todas.length)
+          : '';
+      }
+
+      const limpiar = caja.querySelector('[data-limpiar]');
+
+      if (limpiar) { limpiar.hidden = !activo; }
+    }
+
+    /** Deja la flecha de orden solo en la columna que manda. */
+    function marcarOrden(clave) {
+      const tabla = document.querySelector('table[data-tabla="' + clave + '"]');
+
+      if (!tabla) { return; }
+
+      const m = mandos(clave);
+
+      Array.prototype.forEach.call(
+        tabla.querySelectorAll('th[data-orden]'),
+        function(th) {
+          if (th.getAttribute('data-orden') === m.orden) {
+            th.setAttribute('aria-sort',
+              m.sentido === 'asc' ? 'ascending' : 'descending');
+          } else {
+            th.removeAttribute('aria-sort');
+          }
+        }
+      );
+    }
+
+    var refrescarBusqueda = debounce(function(clave) {
+      redibujar(clave);
+    }, 180);
+
+    /**
+     * Un solo juego de escuchas para las siete tiras. Delegadas, porque
+     * las tablas se redibujan enteras y volver a colgar escuchas en
+     * cada redibujo es la forma más rápida de acumular cientos.
+     */
+    function montarMandos() {
+      // El encabezado ordenable se arma desde el marcado: así la tabla
+      // sigue siendo legible en el HTML y no hay un botón repetido
+      // catorce veces a mano.
+      Array.prototype.forEach.call(
+        document.querySelectorAll('table[data-tabla] th[data-orden]'),
+        function(th) {
+          if (th.querySelector('.th-orden')) { return; }
+
+          const boton = document.createElement('button');
+
+          boton.type = 'button';
+          boton.className = 'th-orden';
+          boton.textContent = th.textContent.trim();
+          th.textContent = '';
+          th.appendChild(boton);
+        }
+      );
+
+      document.addEventListener('input', function(ev) {
+        const entrada = ev.target.closest
+          ? ev.target.closest('[data-buscar]')
+          : null;
+
+        if (!entrada) { return; }
+
+        const caja = entrada.closest('[data-mandos]');
+        const clave = caja.getAttribute('data-mandos');
+
+        mandos(clave).buscar = entrada.value;
+        refrescarBusqueda(clave);
+      });
+
+      document.addEventListener('change', function(ev) {
+        const select = ev.target.closest
+          ? ev.target.closest('[data-faceta]')
+          : null;
+
+        if (!select) { return; }
+
+        const caja = select.closest('[data-mandos]');
+        const clave = caja.getAttribute('data-mandos');
+
+        mandos(clave).faceta[select.getAttribute('data-faceta')] = select.value;
+        redibujar(clave);
+      });
+
+      document.addEventListener('click', function(ev) {
+        if (!ev.target.closest) { return; }
+
+        const limpiar = ev.target.closest('[data-limpiar]');
+
+        if (limpiar) {
+          const clave = limpiar.closest('[data-mandos]')
+            .getAttribute('data-mandos');
+          const m = mandos(clave);
+
+          m.buscar = '';
+          m.faceta = {};
+          redibujar(clave);
+          return;
+        }
+
+        const th = ev.target.closest('th[data-orden]');
+
+        if (!th) { return; }
+
+        const tabla = th.closest('table[data-tabla]');
+
+        if (!tabla) { return; }
+
+        const clave = tabla.getAttribute('data-tabla');
+        const campo = th.getAttribute('data-orden');
+        const m = mandos(clave);
+
+        // Segundo clic en la misma columna: se da vuelta el sentido.
+        if (m.orden === campo) {
+          m.sentido = m.sentido === 'desc' ? 'asc' : 'desc';
+        } else {
+          m.orden = campo;
+          m.sentido = 'desc';
+        }
+
+        redibujar(clave);
+      });
+    }
+
+/* =====================================================================
+ * LA CINTA DE INGRESOS
+ *
+ * Una barra por día hábil del período: verde lo recibido, madera lo
+ * estimado, y una raya en la base los días sin despacho. Es la misma
+ * lectura de la regla del mes a escala de una fila.
+ *
+ * Existe porque "cayó 40% entre las dos últimas semanas" es una
+ * afirmación que hay que creer, y esto es algo que se ve: si la caída
+ * es una parada de dos días o el proveedor se apagó, la forma lo dice
+ * y el porcentaje no.
+ * ===================================================================== */
+
+    function chispa(porDia, ancho, alto) {
+      const claves = (CURRENT_METRICS && CURRENT_METRICS.period.selectedKeys) ||
+        [];
+
+      if (claves.length < 2 || !porDia) { return ''; }
+
+      let tope = 0;
+
+      claves.forEach(function(k) {
+        const d = porDia[k];
+
+        if (d) { tope = Math.max(tope, d.r + d.e); }
+      });
+
+      if (!tope) { return ''; }
+
+      const paso = ancho / claves.length;
+      const grueso = Math.max(1.4, paso - 1.3);
+      const partes = [];
+
+      claves.forEach(function(k, i) {
+        const d = porDia[k] || { r: 0, e: 0 };
+        const x = (i * paso + (paso - grueso) / 2).toFixed(1);
+
+        if (!(d.r + d.e)) {
+          // Un día sin despacho también es dato: se marca en la base.
+          partes.push('<rect class="chispa-base" x="' + x + '" y="' +
+            (alto - 1) + '" width="' + grueso.toFixed(1) + '" height="1"/>');
+          return;
+        }
+
+        const hr = (d.r / tope) * alto;
+        const he = (d.e / tope) * alto;
+
+        if (he > 0) {
+          partes.push('<rect class="chispa-est" x="' + x + '" y="' +
+            (alto - hr - he).toFixed(1) + '" width="' + grueso.toFixed(1) +
+            '" height="' + Math.max(.8, he).toFixed(1) + '"/>');
+        }
+
+        if (hr > 0) {
+          partes.push('<rect class="chispa-real" x="' + x + '" y="' +
+            (alto - hr).toFixed(1) + '" width="' + grueso.toFixed(1) +
+            '" height="' + Math.max(.8, hr).toFixed(1) + '"/>');
+        }
+      });
+
+      return '<svg class="chispa" viewBox="0 0 ' + ancho + ' ' + alto +
+        '" width="' + ancho + '" height="' + alto + '" aria-hidden="true">' +
+        partes.join('') + '</svg>';
+    }
+
+/* =====================================================================
  * TABLAS
  * ===================================================================== */
 
@@ -5494,6 +6439,7 @@
           previous7: p.previous7,
           daysSinceLast: p.daysSinceLast,
           products: p.products || [],
+          porDia: p.porDia || {},
           precio: p.weightedPrice,
           cost: p.cost,
           planToDate: 0,
@@ -5514,8 +6460,8 @@
             proveedor: x.proveedor,
             total: 0, real: 0, estimate: 0, share: 0, rank: null,
             days: 0, average: 0, trend: null, recent7: 0, previous7: 0,
-            daysSinceLast: null, products: [], precio: null, cost: 0,
-            planToDate: 0, planPeriod: 0, monthlyPlan: 0, gap: null,
+            daysSinceLast: null, products: [], porDia: {}, precio: null,
+            cost: 0, planToDate: 0, planPeriod: 0, monthlyPlan: 0, gap: null,
             sinPrecio: 0, enPlan: false
           };
         }
@@ -5565,6 +6511,7 @@
           decir: 'Que tiene cupo asegurado en cuanto retome, y que la ' +
             'programación de descarga se le respeta: el costo de volver ' +
             'es cero.',
+          dato: 'Última carga hace ' + f.daysSinceLast + ' días',
           ts: faltan || f.average * f.daysSinceLast
         });
       }
@@ -5586,6 +6533,8 @@
           decir: 'Que se le puede dar continuidad de retiro y previsibilidad ' +
             'de pago, que es lo que le permite programar aserrío. Si el ' +
             'problema es transporte, ofrecer coordinar el flete.',
+          dato: formatCorto(f.previous7) + ' → ' + formatCorto(f.recent7) +
+            ' TS · ' + formatPercent(f.trend),
           ts: Math.max(0, f.previous7 - f.recent7)
         });
       }
@@ -5610,6 +6559,7 @@
               ? ' Está bajo el precio medio, así que hay espacio para ' +
                 'conversar precio a cambio de volumen firme.'
               : ''),
+          dato: formatPercent(f.cumplimiento) + ' de lo comprometido',
           ts: faltan
         });
       }
@@ -5626,6 +6576,7 @@
             'volumen ahora, no a fin de mes.',
           decir: 'Que el volumen comprometido se reasigna si no hay ' +
             'despacho: el cupo tiene valor y no se guarda indefinidamente.',
+          dato: 'Sin despachos en el rango',
           ts: f.monthlyPlan
         });
       }
@@ -5646,6 +6597,8 @@
           decir: 'Que el precio sobre mercado se sostiene con cumplimiento; ' +
             'sin volumen firme, corresponde revisarlo a la baja o ' +
             'redistribuir a quien sí entrega.',
+          dato: formatPrice(f.precio) + '/TS contra ' +
+            formatPrice(ctx.precioMedio) + ' de promedio',
           ts: faltan
         });
       }
@@ -5665,6 +6618,8 @@
             'proveedor nuevo: cada TS que tome él baja el costo medio.',
           decir: 'Ofrecer más volumen comprometido y continuidad para el ' +
             'mes siguiente a cambio de mantener el precio.',
+          dato: formatPrice(f.precio) + '/TS · ' +
+            formatPrice(ctx.precioMedio - f.precio) + ' bajo el promedio',
           ts: f.total * 0.2
         });
       }
@@ -5680,6 +6635,7 @@
             'para cubrir la brecha de los que están abajo.',
           decir: 'Reconocer el cumplimiento y ofrecerle mayor volumen ' +
             'comprometido: es la moneda que valora un aserradero.',
+          dato: formatPercent(f.cumplimiento) + ' de su plan a la fecha',
           ts: f.gap
         });
       }
@@ -5694,25 +6650,18 @@
           hacer: 'Verificar recepción con romana antes de darlo por bueno. ' +
             'Si SAP no lo registra, el volumen del mes está inflado.',
           decir: 'Nada todavía: primero confirmar que la carga existe.',
+          dato: 'Nada suyo aparece en Ingresos todavía',
           ts: f.estimate
         });
       }
 
-      // --- 9. Sin precio homologado ---------------------------------
-      if (f.sinPrecio > ctx.umbralTs) {
-        out.push({
-          severidad: 'atencion',
-          caso: 'Sin precio homologado',
-          porque: formatTs(f.sinPrecio) + ' entraron sin precio, así que ' +
-            'quedan fuera del costo del mes.',
-          hacer: 'Esto no es del proveedor: es de la hoja. Agregar la ' +
-            'equivalencia en Proveedores, o la fila que falta en el Plan.',
-          decir: 'Nada. Se arregla en la planilla, no en la reunión.',
-          ts: f.sinPrecio
-        });
-      }
+      // Lo que falta homologar en la planilla NO es una acción de
+      // reunión: no se le pide nada a un proveedor porque a su nombre
+      // le falte una fila en el Plan. Antes salía como tarjeta y era el
+      // caso más repetido del panel, empujando hacia abajo las que sí
+      // se conversan. Va al pie del panel, contado y sin ocupar sitio.
 
-      // --- 10. Despacha a saltos ------------------------------------
+      // --- 9. Despacha a saltos -------------------------------------
       if (
         f.total > 0 && f.days > 0 && ctx.diasConIngreso >= 6 &&
         f.days <= Math.max(2, Math.round(ctx.diasConIngreso * 0.34)) &&
@@ -5727,6 +6676,8 @@
             'saturan la descarga y dejan días sin abastecimiento.',
           decir: 'Que una frecuencia pareja le asegura ventana de descarga ' +
             'sin cola, y a la planta le evita el vacío entre camionadas.',
+          dato: f.days + ' de ' + ctx.diasConIngreso +
+            ' días con movimiento',
           ts: f.total * 0.15
         });
       }
@@ -5770,6 +6721,7 @@
                   'prospectos nuevos antes de que la concentración apriete.'),
           decir: 'A los nuevos: que hay demanda estable y pago al día. ' +
             'A los actuales, nada: la alternativa se construye callado.',
+          dato: 'Top 3 = ' + formatPercent(top3) + ' del suministro',
           ts: 0
         });
       }
@@ -5795,6 +6747,7 @@
             'demostraron que pueden.',
           decir: 'Al que está sobre plan: volumen adicional pagado al mismo ' +
             'precio, cerrado esta semana.',
+          dato: enRiesgo.length + ' proveedores por debajo de su plan',
           ts: brecha
         });
       }
@@ -5854,19 +6807,73 @@
 
     function dibujarAcciones() {
       ACCIONES = planDeAccion();
+      notaDeAccion();
       pintarAcciones();
     }
 
+    /**
+     * Lo que el plan NO está mirando, dicho una vez y al pie.
+     *
+     * Un proveedor sin precio homologado no genera una conversación:
+     * genera una fila que falta en el Plan o un alias que falta en
+     * Proveedores. Sacarlo de las tarjetas fue la mitad del arreglo;
+     * la otra mitad es no hacer como que no existe.
+     */
+    function notaDeAccion() {
+      var nodo = document.getElementById('accionNota');
+
+      if (!nodo) { return; }
+
+      var fichas = fichasProveedor().filter(function(f) {
+        return f.sinPrecio > 0;
+      });
+
+      if (!fichas.length) {
+        nodo.hidden = true;
+        return;
+      }
+
+      var ts = fichas.reduce(function(t, f) { return t + f.sinPrecio; }, 0);
+
+      nodo.hidden = false;
+      nodo.innerHTML =
+        'Fuera de este plan: <b>' + formatTs(ts) + '</b> de ' +
+        fichas.length + (fichas.length === 1
+          ? ' proveedor sin precio homologado'
+          : ' proveedores sin precio homologado') +
+        ' (' + esc(fichas.slice(0, 4).map(function(f) {
+          return shortProvider(f.proveedor);
+        }).join(', ')) +
+        (fichas.length > 4 ? ' y ' + (fichas.length - 4) + ' más' : '') +
+        '). Eso se arregla en la hoja Proveedores o en el Plan, no en la ' +
+        'reunión.';
+    }
+
+    /**
+     * El plan se agrupa por CASO, no por proveedor.
+     *
+     * Agrupado por proveedor, "Comprometido y sin entregar" escribía la
+     * misma receta de tres líneas seis veces seguidas: la pantalla se
+     * llenaba de un párrafo que ya se había leído y los proveedores
+     * quedaban enterrados debajo. El guion de una conversación es el
+     * mismo para todos los que están en esa situación; lo que cambia de
+     * uno a otro es el dato y cuánto hay en juego.
+     *
+     * Así que el guion se dice una vez, arriba, y debajo va la lista de
+     * a quién llamar, con su cinta de ingresos y su cifra al lado.
+     */
     function pintarAcciones() {
       var caja = document.getElementById('listaAccion');
 
       if (!caja) { return; }
 
-      var lista = FILTRO_SEVERIDAD
+      var porSeveridad = FILTRO_SEVERIDAD
         ? ACCIONES.filter(function(a) {
             return a.severidad === FILTRO_SEVERIDAD;
           })
         : ACCIONES;
+
+      var lista = aplicarMandos('accion', porSeveridad);
 
       var criticos = ACCIONES.filter(function(a) {
         return a.severidad === 'critico';
@@ -5885,82 +6892,122 @@
 
       if (!ACCIONES.length) {
         caja.innerHTML = vacio(
-          'Nada que corregir con estos filtros: todos los proveedores ' +
+          'Nada que conversar con estos filtros: todos los proveedores ' +
           'van dentro de su plan y sin caídas de tendencia.'
         );
         return;
       }
 
       if (!lista.length) {
-        caja.innerHTML = vacio('No hay acciones de ese tipo.');
+        caja.innerHTML = vacio(
+          'Ningún proveedor cumple ese filtro. Prueba con «Todo» o ' +
+          'limpia la búsqueda.'
+        );
         return;
       }
 
-      // Una tarjeta por proveedor. Cinco viñetas sueltas del mismo
-      // aserradero no son cinco tareas: son una conversación. Manda la
-      // más grave, el resto queda plegado debajo.
-      var orden = [];
-      var porProveedor = {};
+      var casos = agruparPorCaso(lista);
 
-      lista.forEach(function(a) {
-        if (!porProveedor[a.proveedor]) {
-          porProveedor[a.proveedor] = [];
-          orden.push(a.proveedor);
-        }
-
-        porProveedor[a.proveedor].push(a);
-      });
-
-      caja.innerHTML = orden.map(function(nombre) {
-        var grupo = porProveedor[nombre];
-        var principal = grupo[0];
-        var resto = grupo.slice(1);
-
-        var enJuego = grupo.reduce(function(t, a) {
-          return Math.max(t, a.ts || 0);
-        }, 0);
-
-        return '<article class="accion es-' + principal.severidad + '">' +
-          '<div class="accion-cuerpo">' +
-            '<div class="accion-cab">' +
-              '<strong>' + esc(shortProvider(nombre)) + '</strong>' +
-              '<span class="accion-caso">' + esc(principal.caso) + '</span>' +
-              (enJuego > 0
-                ? '<span class="accion-ts">' + formatTs(enJuego) +
-                  ' en juego</span>'
+      caja.innerHTML = casos.map(function(g) {
+        return '<article class="caso es-' + g.severidad + '">' +
+          '<div class="caso-cuerpo">' +
+            '<div class="caso-cab">' +
+              '<span class="accion-caso">' + esc(g.caso) + '</span>' +
+              (g.datoComun
+                ? '<span class="caso-comun">' + esc(g.datoComun) + '</span>'
                 : '') +
+              '<span class="caso-cuenta">' +
+                g.filas.length +
+                (g.filas.length === 1 ? ' proveedor' : ' proveedores') +
+                (g.ts > 0 ? ' · ' + formatTs(g.ts) + ' en juego' : '') +
+              '</span>' +
             '</div>' +
-            '<p class="accion-porque">' + esc(principal.porque) + '</p>' +
             '<dl class="accion-pasos">' +
               '<div class="accion-paso"><dt>Hacer</dt><dd>' +
-                esc(principal.hacer) + '</dd></div>' +
+                esc(g.hacer) + '</dd></div>' +
               '<div class="accion-paso"><dt>Decirle</dt><dd>' +
-                esc(principal.decir) + '</dd></div>' +
+                esc(g.decir) + '</dd></div>' +
             '</dl>' +
-            (resto.length ? bloqueResto(resto) : '') +
+            '<ul class="caso-lista' +
+              (g.datoComun ? ' es-corta' : '') + '">' +
+              g.filas.map(function(a) {
+                return '<li class="caso-fila">' +
+                  '<span class="caso-quien">' +
+                    esc(shortProvider(a.proveedor)) + '</span>' +
+                  '<span class="caso-cinta">' +
+                    chispa((a.ficha || {}).porDia, 78, 20) + '</span>' +
+                  (g.datoComun
+                    ? ''
+                    : '<span class="caso-dato">' +
+                      esc(a.dato || a.porque) + '</span>') +
+                  '<span class="caso-ts">' +
+                    (a.ts > 0 ? formatTs(a.ts) : '') + '</span>' +
+                '</li>';
+              }).join('') +
+            '</ul>' +
           '</div>' +
         '</article>';
       }).join('');
     }
 
-    function bloqueResto(resto) {
-      return '<details class="accion-mas">' +
-        '<summary>' + resto.length +
-        (resto.length === 1 ? ' punto más' : ' puntos más') + ': ' +
-        esc(resto.map(function(a) { return a.caso; }).join(' · ')) +
-        '</summary>' +
-        resto.map(function(a) {
-          return '<div class="accion-extra es-' + a.severidad + '">' +
-            '<span class="accion-caso">' + esc(a.caso) + '</span>' +
-            '<p class="accion-porque">' + esc(a.porque) + '</p>' +
-            '<dl class="accion-pasos">' +
-              '<div class="accion-paso"><dt>Hacer</dt><dd>' +
-                esc(a.hacer) + '</dd></div>' +
-              '<div class="accion-paso"><dt>Decirle</dt><dd>' +
-                esc(a.decir) + '</dd></div>' +
-            '</dl></div>';
-        }).join('') +
-        '</details>';
+    /**
+     * Junta las acciones que comparten caso. El guion se toma de la
+     * primera —es el mismo por construcción— y el orden es por
+     * severidad y después por lo que está en juego.
+     */
+    function agruparPorCaso(acciones) {
+      var mapa = {};
+      var orden = [];
+
+      acciones.forEach(function(a) {
+        if (!mapa[a.caso]) {
+          mapa[a.caso] = {
+            caso: a.caso,
+            severidad: a.severidad,
+            hacer: a.hacer,
+            decir: a.decir,
+            ts: 0,
+            filas: []
+          };
+
+          orden.push(a.caso);
+        }
+
+        var g = mapa[a.caso];
+
+        // Dentro de un caso puede haber grados: manda el peor, que es
+        // el que decide el color del bloque.
+        if (SEVERIDAD[a.severidad] < SEVERIDAD[g.severidad]) {
+          g.severidad = a.severidad;
+        }
+
+        g.ts += Number(a.ts) || 0;
+        g.filas.push(a);
+      });
+
+      return orden.map(function(c) {
+        var g = mapa[c];
+
+        g.filas.sort(function(a, b) { return (b.ts || 0) - (a.ts || 0); });
+
+        // Hay casos donde el dato es idéntico para todos —"sin
+        // despachos en el rango" ocho veces— y lo único que cambia es
+        // la cifra, que ya está en su columna. Ese dato sube al
+        // encabezado y la lista se queda con nombre, cinta y cifra.
+        var distintos = unicos(g.filas.map(function(a) {
+          return a.dato || a.porque;
+        }));
+
+        if (g.filas.length > 1 && distintos.length === 1) {
+          g.datoComun = distintos[0];
+        }
+
+        return g;
+      }).sort(function(a, b) {
+        var d = SEVERIDAD[a.severidad] - SEVERIDAD[b.severidad];
+
+        return d !== 0 ? d : b.ts - a.ts;
+      });
     }
 
     function montarFiltrosAccion() {
@@ -6771,15 +7818,18 @@
       recado.textContent = texto;
     }
 
-    function dibujarTablaProducto(resumen) {
+    function dibujarTablaProducto(todos) {
       var cuerpo = document.getElementById('productBody');
       var pie = document.getElementById('productFoot');
+      var resumen = aplicarMandos('producto', todos || []);
 
-      setText('conteoProducto', resumen.length + ' subproductos');
+      setText('conteoProducto', (todos || []).length + ' subproductos');
 
       if (!resumen.length) {
         cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="10">' +
-          'Nada que mostrar con estos filtros.</td></tr>';
+          ((todos || []).length
+            ? 'Ningún subproducto cumple ese filtro.'
+            : 'Nada que mostrar con estos filtros.') + '</td></tr>';
         pie.innerHTML = '';
         return;
       }
@@ -6829,110 +7879,18 @@
         '</tr>';
     }
 
-    /**
-     * Filtra y ordena la tabla de precio/plan/cantidad. La tabla completa
-     * son decenas de cruces; casi siempre se entra a ella buscando una
-     * sola cosa: quién está bajo plan, o quién cobra más.
-     */
-    function ordenarPrecios(resumen) {
-      var buscar = normalizar(valorApunte('pBuscar'));
-      var brecha = valorApunte('pBrecha');
-      var orden = valorApunte('pOrden') || 'total';
-      var asc = valorApunte('pSentido') === 'asc';
-
-      var lista = resumen.filter(function(x) {
-        if (buscar) {
-          var nombre = normalizar(x.proveedor) + ' ' +
-            normalizar(x.proveedorPlan) + ' ' +
-            normalizar(x.subproducto);
-
-          if (nombre.indexOf(buscar) === -1) { return false; }
-        }
-
-        var sinPrecio = x.precio === null || x.precio === undefined;
-
-        if (brecha === 'sinprecio') { return sinPrecio; }
-        if (brecha === 'sinplan') { return !x.monthlyPlan; }
-        if (brecha === 'bajo') {
-          return x.gapToDate !== null && x.gapToDate < 0;
-        }
-        if (brecha === 'sobre') {
-          return x.gapToDate !== null && x.gapToDate > 0;
-        }
-
-        return true;
-      });
-
-      var llave = {
-        total: function(x) { return x.total; },
-        brecha: function(x) { return x.gapToDate; },
-        precio: function(x) { return x.precio; },
-        plan: function(x) { return x.monthlyPlan; },
-        costo: function(x) { return x.cost; }
-      }[orden];
-
-      if (orden === 'proveedor') {
-        lista.sort(function(a, b) {
-          var d = String(a.proveedor).localeCompare(
-            String(b.proveedor), 'es'
-          );
-          return asc ? d : -d;
-        });
-
-        return lista;
-      }
-
-      // Los nulos van siempre al final, se ordene como se ordene: un
-      // "sin precio" no es un precio de cero.
-      lista.sort(function(a, b) {
-        var va = llave(a);
-        var vb = llave(b);
-
-        var na = va === null || va === undefined || !isFinite(va);
-        var nb = vb === null || vb === undefined || !isFinite(vb);
-
-        if (na && nb) { return 0; }
-        if (na) { return 1; }
-        if (nb) { return -1; }
-
-        return asc ? va - vb : vb - va;
-      });
-
-      return lista;
-    }
-
-    function montarMandosPrecios() {
-      ['pBuscar', 'pBrecha', 'pOrden', 'pSentido'].forEach(function(id) {
-        var nodo = document.getElementById(id);
-
-        if (!nodo) { return; }
-
-        nodo.addEventListener(
-          nodo.tagName === 'INPUT' ? 'input' : 'change',
-          function() {
-            if (CURRENT_METRICS) {
-              dibujarTablaPrecios(CURRENT_PRICING, CURRENT_METRICS);
-            }
-          }
-        );
-      });
-    }
-
     function dibujarTablaPrecios(todos, m) {
       var cuerpo = document.getElementById('pricingBody');
       var pie = document.getElementById('pricingFoot');
 
-      var resumen = ordenarPrecios(todos || []);
+      var resumen = aplicarMandos('precios', todos || []);
 
       var conPrecio = resumen.filter(function(x) {
         return x.precio !== null && x.precio !== undefined;
       }).length;
 
       setText('conteoPrecios',
-        (resumen.length === (todos || []).length
-          ? resumen.length + ' cruces'
-          : resumen.length + ' de ' + (todos || []).length + ' cruces') +
-        ' · ' + conPrecio + ' con precio');
+        (todos || []).length + ' cruces · ' + conPrecio + ' con precio');
 
       if (!resumen.length) {
         cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="13">' +
@@ -6987,24 +7945,34 @@
         '<td></td></tr>';
     }
 
-    function dibujarTablaProveedor(resumen) {
+    function dibujarTablaProveedor(todos) {
       var cuerpo = document.getElementById('providerBody');
       var pie = document.getElementById('providerFoot');
+      var resumen = aplicarMandos('proveedor', todos || []);
 
-      setText('conteoProveedor', resumen.length + ' proveedores');
+      var top3 = (todos || []).slice(0, 3).reduce(function(t, x) {
+        return t + x.share;
+      }, 0);
+
+      setText('conteoProveedor',
+        (todos || []).length + ' proveedores · top 3 ' + formatPercent(top3));
 
       if (!resumen.length) {
         cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="15">' +
-          'Nada que mostrar con estos filtros.</td></tr>';
+          ((todos || []).length
+            ? 'Ningún proveedor cumple ese filtro.'
+            : 'Nada que mostrar con estos filtros.') + '</td></tr>';
         pie.innerHTML = '';
         return;
       }
 
-      cuerpo.innerHTML = resumen.map(function(x, i) {
+      cuerpo.innerHTML = resumen.map(function(x) {
         var t = trendLabel(x.trend);
 
+        // El puesto es el del ranking por volumen, no el de la fila:
+        // ordenar por precio no convierte al más caro en el número uno.
         return '<tr>' +
-          '<td><span class="puesto">' + (i + 1) + '</span></td>' +
+          '<td><span class="puesto">' + (x.rank || '') + '</span></td>' +
           '<td><strong>' + esc(shortProvider(x.proveedor)) + '</strong></td>' +
           celdaN('<strong>' + formatQuantity(x.total) + '</strong>') +
           celdaN(formatQuantity(x.real)) +
@@ -7012,10 +7980,11 @@
           celdaN(formatPercent(x.share)) +
           celdaN(formatPercent(x.cumulativeShare)) +
           celdaN(formatQuantity(x.recent7)) +
-          '<td><span class="sello-fuente ' +
+          '<td><div class="tendencia">' + chispa(x.porDia, 68, 20) +
+            '<span class="sello-fuente ' +
             (t.className === 'trend-down' ? 'es-flojo'
               : t.className === 'trend-up' ? 'es-real' : 'es-est') +
-            '">' + esc(t.text) + '</span></td>' +
+            '">' + esc(t.text) + '</span></div></td>' +
           celdaN(formatInteger(x.days)) +
           celdaN(formatQuantity(x.average)) +
           celdaN(
@@ -7045,19 +8014,18 @@
 
     function dibujarDetalle(rows) {
       var cuerpo = document.getElementById('detailBody');
-
-      var orden = rows.slice().sort(function(a, b) {
-        if (a.fecha !== b.fecha) { return a.fecha < b.fecha ? 1 : -1; }
-        return (Number(b.ts) || 0) - (Number(a.ts) || 0);
-      });
+      var orden = aplicarMandos('detalle', rows || []);
 
       setText('conteoDetalle',
-        formatInteger(orden.length) + ' filas' +
+        formatInteger((rows || []).length) + ' filas' +
         (orden.length > 600 ? ' · se muestran 600' : ''));
 
       if (!orden.length) {
         cuerpo.innerHTML =
-          '<tr class="fila-vacia"><td colspan="12">Sin datos.</td></tr>';
+          '<tr class="fila-vacia"><td colspan="12">' +
+          ((rows || []).length
+            ? 'Ninguna fila cumple ese filtro.'
+            : 'Sin datos.') + '</td></tr>';
         return;
       }
 
@@ -7514,16 +8482,19 @@
 
       if (!RUTAS) { return; }
 
-      var filas = RUTAS.rows || [];
+      var todas = RUTAS.rows || [];
+      var filas = aplicarMandos('rutas', todas);
 
       setText('conteoRutas',
-        filas.length + (filas.length === 1 ? ' ruta' : ' rutas'));
+        todas.length + (todas.length === 1 ? ' ruta' : ' rutas'));
 
       if (!filas.length) {
         cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="9">' +
           (RUTAS.missingSheet
             ? 'Corre «Astilla Dashboard › Preparar hoja de rutas».'
-            : 'Sin rutas guardadas. Pulsa «Armar ruta» para crear una.') +
+            : todas.length
+              ? 'Ninguna ruta cumple ese filtro.'
+              : 'Sin rutas guardadas. Pulsa «Armar ruta» para crear una.') +
           '</td></tr>';
         return;
       }
@@ -8159,17 +9130,20 @@
     function dibujarTablaMapeos() {
       var cuerpo = document.getElementById('mapeosBody');
       var pie = document.getElementById('mapeosFoot');
-      var filas = filasMapeo();
+      var todos = filasMapeo();
+      var filas = aplicarMandos('mapeos', todos);
 
       setText('conteoMapeos',
-        filas.length + ' de ' + (MAPEOS.rows || []).length +
+        todos.length + ' de ' + (MAPEOS.rows || []).length +
         (FILTRO_ESTADO ? ' · ' + FILTRO_ESTADO : ''));
 
       if (!filas.length) {
         cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="6">' +
           (MAPEOS.missingSheet
             ? 'Corre «Preparar hoja de mapeos» y agrega los aserraderos.'
-            : 'Ningún aserradero en este estado.') + '</td></tr>';
+            : todos.length
+              ? 'Ningún aserradero cumple ese filtro.'
+              : 'Ningún aserradero en este estado.') + '</td></tr>';
         pie.innerHTML = '';
         return;
       }
