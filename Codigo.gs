@@ -382,6 +382,15 @@ function getDashboardData() {
   );
 
   const plan = readPlan_(spreadsheet, month);
+
+  // El plan mes a mes es lo que permite comparar; readPlan_ solo mira
+  // la columna del mes vigente.
+  const planMeses = readPlanMeses_(
+    spreadsheet,
+    historyStart.slice(0, 7),
+    month.prefix
+  );
+
   const pricing = applyPlanPricing_(
     baseRows,
     plan.details,
@@ -476,6 +485,7 @@ function getDashboardData() {
     },
     plan: plan.rows,
     planDetails: plan.details,
+    planMeses: planMeses,
     pricing: pricing.stats,
     rows: rows
   };
@@ -2266,6 +2276,172 @@ function readPlan_(spreadsheet, month) {
       pricedPlanTs > 0
         ? plannedCost / pricedPlanTs
         : null
+  };
+}
+
+/**
+ * El plan de TODOS los meses de la ventana, no solo el vigente.
+ *
+ * readPlan_ busca una sola columna —la del mes en curso— porque es lo
+ * único que necesita el prorrateo diario. Para comparar meses hace
+ * falta la fila entera, así que esto recorre todas las columnas de mes
+ * que caigan dentro de la historia.
+ *
+ * Se devuelve indexado por planKey (el mismo "subproducto||proveedor
+ * normalizado" que ya llevan las filas operativas), para que el
+ * navegador pueda cruzar ingreso contra plan sin volver a normalizar
+ * nombres por su cuenta. Solo eso: el nombre del proveedor del plan no
+ * viaja, porque en pantalla se muestra el de Ingresos.
+ */
+function readPlanMeses_(spreadsheet, desde, hasta) {
+  const vacio = { meses: [], porMes: {} };
+  const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PLAN);
+
+  if (!sheet || sheet.getLastRow() < 2) {
+    return vacio;
+  }
+
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  const displayed = range.getDisplayValues();
+
+  let headerRowIndex = -1;
+  let suministroColumn = -1;
+  let proveedorColumn = -1;
+
+  for (
+    let rowIndex = 0;
+    rowIndex < Math.min(values.length, 20);
+    rowIndex++
+  ) {
+    const map = buildHeaderMap_(values[rowIndex]);
+
+    if (
+      map['suministro'] !== undefined &&
+      map['proveedor'] !== undefined &&
+      map['precio'] !== undefined
+    ) {
+      headerRowIndex = rowIndex;
+      suministroColumn = map['suministro'];
+      proveedorColumn = map['proveedor'];
+      break;
+    }
+  }
+
+  if (headerRowIndex === -1) {
+    return vacio;
+  }
+
+  const header = values[headerRowIndex];
+  const shown = displayed[headerRowIndex] || [];
+  const columnas = [];
+  const vistos = {};
+
+  for (
+    let columnIndex = 0;
+    columnIndex < header.length;
+    columnIndex++
+  ) {
+    let prefijo = '';
+
+    if (header[columnIndex] instanceof Date) {
+      prefijo = Utilities.formatDate(
+        header[columnIndex],
+        CONFIG.TIMEZONE,
+        'yyyy-MM'
+      );
+    }
+
+    if (!prefijo) {
+      prefijo = parseMonthHeader_(
+        shown[columnIndex] || header[columnIndex]
+      );
+    }
+
+    // Fuera de la ventana de historia no sirve de nada: el panel no
+    // tiene ingresos con los que compararlo.
+    if (!prefijo || prefijo < desde || prefijo > hasta) {
+      continue;
+    }
+
+    // Dos columnas para el mismo mes: manda la primera, como en el
+    // resto de la hoja.
+    if (vistos[prefijo]) {
+      continue;
+    }
+
+    vistos[prefijo] = true;
+    columnas.push({ prefijo: prefijo, columna: columnIndex });
+  }
+
+  if (!columnas.length) {
+    return vacio;
+  }
+
+  const porMes = {};
+
+  columnas.forEach(function(item) {
+    porMes[item.prefijo] = { total: 0, sub: {}, planKeys: {} };
+  });
+
+  let currentSubproducto = '';
+
+  for (
+    let rowIndex = headerRowIndex + 1;
+    rowIndex < values.length;
+    rowIndex++
+  ) {
+    const supplyCell = text_(
+      displayed[rowIndex][suministroColumn] !== ''
+        ? displayed[rowIndex][suministroColumn]
+        : values[rowIndex][suministroColumn]
+    );
+
+    // "Suministro" se arrastra hacia abajo dentro del grupo.
+    if (supplyCell) {
+      currentSubproducto = resolvePlanSubproducto_(supplyCell);
+    }
+
+    const proveedorPlan = text_(
+      displayed[rowIndex][proveedorColumn] !== ''
+        ? displayed[rowIndex][proveedorColumn]
+        : values[rowIndex][proveedorColumn]
+    );
+
+    if (!currentSubproducto || !proveedorPlan) {
+      continue;
+    }
+
+    const planKey =
+      currentSubproducto +
+      '||' +
+      priceProviderComparable_(proveedorPlan);
+
+    columnas.forEach(function(item) {
+      const crudo =
+        displayed[rowIndex][item.columna] !== ''
+          ? displayed[rowIndex][item.columna]
+          : values[rowIndex][item.columna];
+
+      const cantidad = parseOptionalNumber_(crudo);
+
+      if (cantidad === null || !cantidad) {
+        return;
+      }
+
+      const mes = porMes[item.prefijo];
+
+      mes.total += cantidad;
+      mes.sub[currentSubproducto] =
+        (mes.sub[currentSubproducto] || 0) + cantidad;
+      mes.planKeys[planKey] =
+        (mes.planKeys[planKey] || 0) + cantidad;
+    });
+  }
+
+  return {
+    meses: columnas.map(function(item) { return item.prefijo; }).sort(),
+    porMes: porMes
   };
 }
 

@@ -39,9 +39,10 @@ entrar automáticamente al dashboard.
 
 ## El panel
 
-Tres vistas: **Suministro** (la regla del mes, KPIs, gráficos, tablas y
-plan de acción), **Mapeos** (aserraderos en el mapa y armado de rutas) y
-**Apuntes** (pauta de la reunión semanal y su registro).
+Cuatro vistas: **Suministro** (la regla del mes, KPIs, gráficos, tablas
+y plan de acción), **Comparación** (el año partido por mes),
+**Mapeos** (aserraderos en el mapa y armado de rutas) y **Apuntes**
+(pauta de la reunión semanal y su registro).
 
 ### Sistema visual
 
@@ -87,6 +88,40 @@ recorren esa historia sin escribir fechas a mano, y el aviso de arriba
 dice desde cuándo hay datos. El plan solo se prorratea dentro del mes
 vigente: con un rango más ancho, las columnas de plan quedan en «—» y
 dicen por qué.
+
+### Comparación entre meses
+
+Suministro responde «cómo va este mes». Comparación responde «cómo viene
+el año, y quién cambió». Son cuatro paneles:
+
+- **El año, mes a mes** — una columna por mes, verde lo real y rayado lo
+  estimado, con el plan del mes como travesaño encima.
+- **Quién despachó cada mes** — matriz proveedor × mes. El tono de cada
+  celda es su volumen contra **el mejor mes de ese mismo proveedor**, no
+  contra los demás, así que la fila se lee como una tendencia y un hueco
+  es un mes en que no despachó.
+- **Resumen por mes** — real, estimado, plan, cumplimiento, proveedores,
+  precio ponderado y costo valorizado.
+- **Mezcla de subproductos por mes** — para ver un cambio de mezcla que
+  el total esconde.
+
+Dos diferencias de fondo con Suministro, y conviene tenerlas presentes:
+
+1. **El plan no se prorratea.** Un mes cerrado se compara con su plan
+   completo; prorratear un mes terminado sería inventar un objetivo que
+   ya no existe. Los planes salen de todas las columnas de mes de la
+   hoja `Plan`, y se acotan con el filtro: si se filtra por pino verde,
+   el plan también.
+2. **No usa los filtros de Suministro.** Tiene los suyos y siempre mira
+   toda la historia disponible; «comparar meses» con un rango de un mes
+   no compara nada.
+
+**El mes en curso está marcado en todas partes** —un `·` en la columna,
+«en curso» en el resumen, un aviso arriba— y queda fuera de las cifras
+que lo volverían mentira: el cumplimiento del período se calcula solo
+sobre meses cerrados, y la columna de tendencia compara los **dos
+últimos meses cerrados**, no el mes a medias contra el anterior. Sin
+eso, cada proveedor aparecía cayendo un 20% el día 10 del mes.
 
 ### Filtrar y ordenar
 
