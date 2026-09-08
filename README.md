@@ -64,6 +64,30 @@ interruptor de la barra deja fija la preferencia. Las tablas anchas
 mantienen fija la columna del proveedor al desplazarse, y hay hoja de
 estilos de impresión para llevar el panel en papel a la reunión.
 
+### Cuánta historia se ve
+
+Dos reglas en `CONFIG`, y la ventana es la más larga de las dos:
+
+| Ajuste | Qué hace |
+|---|---|
+| `HISTORY_MONTHS: 6` | Ventana móvil de seis meses hacia atrás |
+| `HISTORY_DESDE_ENERO: true` | Además, nunca corta después del 1 de enero del año en curso |
+
+La segunda existe porque una ventana móvil **no puede** significar «desde
+enero»: en septiembre harían falta 9 meses, en octubre 10 y en marzo del
+año siguiente 15. Subir el número arregla el mes en que se sube y se
+vuelve a romper al siguiente. En enero manda la ventana móvil, que llega
+más atrás, para que el panel no arranque el día 1 sin nada que comparar.
+
+Estas filas viajan enteras al navegador. Si el panel se pone lento,
+`HISTORY_MONTHS` es la perilla.
+
+En pantalla, los atajos **Mes · 3 meses · Año** junto a las fechas
+recorren esa historia sin escribir fechas a mano, y el aviso de arriba
+dice desde cuándo hay datos. El plan solo se prorratea dentro del mes
+vigente: con un rango más ancho, las columnas de plan quedan en «—» y
+dicen por qué.
+
 ### Filtrar y ordenar
 
 Cada tabla lleva su propia tira de mandos: búsqueda, las facetas que esa

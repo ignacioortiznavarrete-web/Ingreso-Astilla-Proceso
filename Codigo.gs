@@ -62,9 +62,28 @@ const CONFIG = Object.freeze({
   }),
   UNIDAD: 'TS',
 
-  // Meses de historia que viajan al dashboard (el mes vigente
-  // siempre entra). Súbelo si quieres más estadística.
+  // Historia que viaja al dashboard. Son DOS reglas y la ventana es
+  // la más larga de las dos:
+  //
+  //   HISTORY_MONTHS      ventana móvil de N meses hacia atrás.
+  //   HISTORY_DESDE_ENERO además, nunca corta después del 1 de enero
+  //                       del año en curso.
+  //
+  // La segunda existe porque una ventana móvil NUNCA puede significar
+  // "desde enero": en septiembre hacen falta 9 meses, en octubre 10 y
+  // en marzo del año siguiente 15. Subir el número arregla el mes en
+  // que se sube y se vuelve a romper al siguiente.
+  //
+  // En enero manda la ventana móvil, que es más larga: si no, el panel
+  // arrancaría el día 1 sin nada con qué comparar.
+  //
+  // Estas filas viajan enteras al navegador, así que la ventana se
+  // deja en el mínimo que cumple: seis meses de estadística y, encima,
+  // la garantía de enero. Subir HISTORY_MONTHS a 12 haría la regla de
+  // enero inerte —la ventana móvil ya la taparía— y mandaría el doble
+  // de filas para nada.
   HISTORY_MONTHS: 6,
+  HISTORY_DESDE_ENERO: true,
 
   FUZZY_THRESHOLD: 0.72,
 
@@ -358,7 +377,8 @@ function getDashboardData() {
     timezone,
     month,
     supplement.lastActualDate,
-    supplement.latestReportDate
+    supplement.latestReportDate,
+    historyStart
   );
 
   const plan = readPlan_(spreadsheet, month);
@@ -396,6 +416,9 @@ function getDashboardData() {
       supplementCamiones: supplement.camiones,
       reports: informe.reports,
       errors: informe.errors,
+      historyStart: historyStart,
+      historyStartLabel: formatDateKey_(historyStart),
+      historyMonths: CONFIG.HISTORY_MONTHS,
       lastActualDate: supplement.lastActualDate,
       lastActualDateLabel: supplement.lastActualDate
         ? formatDateKey_(supplement.lastActualDate)
@@ -468,11 +491,21 @@ function buildHistoryStart_(month) {
     Date.UTC(month.year, month.month - 1 - back, 1)
   );
 
-  return buildDateKey_(
+  const movil = buildDateKey_(
     date.getUTCFullYear(),
     date.getUTCMonth() + 1,
     1
   );
+
+  if (!CONFIG.HISTORY_DESDE_ENERO) {
+    return movil;
+  }
+
+  // La más larga de las dos ventanas. En enero gana la móvil, que
+  // llega más atrás; el resto del año gana enero.
+  const enero = buildDateKey_(month.year, 1, 1);
+
+  return movil < enero ? movil : enero;
 }
 
 /* =====================================================================
@@ -579,8 +612,6 @@ function readIngresos_(
 
     rows.push({
       fecha: dateKey,
-      fechaNumero: Number(dateKey.replace(/-/g, '')),
-      fechaLabel: formatDateKey_(dateKey),
       source: 'INGRESOS',
       subproducto: resolved.subproducto,
       subproductoRaw: descripcion || text_(material),
@@ -588,21 +619,17 @@ function readIngresos_(
       proveedor: proveedor,
       proveedorRaw: proveedorSap,
       matchMethod: resolved.method,
-      matchScore: 1,
       destino: columns.DESTINO >= 0
         ? text_(row[columns.DESTINO])
         : '',
       camiones: null,
-      factor: null,
       ts: cantidad,
-      um: text_(row[columns.UM]) || CONFIG.UNIDAD,
       predio: columns.PREDIO >= 0
         ? text_(row[columns.PREDIO])
         : '',
       rol: columns.ROL >= 0
         ? text_(row[columns.ROL])
-        : '',
-      messageId: ''
+        : ''
     });
   }
 
@@ -924,8 +951,6 @@ function readInformeRows_(
 
     byDate[dateKey].rows.push({
       fecha: dateKey,
-      fechaNumero: Number(dateKey.replace(/-/g, '')),
-      fechaLabel: formatDateKey_(dateKey),
       source: 'PLANILLA',
       subproducto: subproducto,
       subproductoRaw: text_(
@@ -934,15 +959,11 @@ function readInformeRows_(
       proveedor: match.proveedor,
       proveedorRaw: proveedorRaw,
       matchMethod: match.method,
-      matchScore: match.score,
       destino: text_(row[map['destino']]),
       camiones: camiones,
-      factor: factor,
       ts: camiones * factor,
-      um: CONFIG.UNIDAD,
       predio: '',
-      rol: '',
-      messageId: messageId
+      rol: ''
     });
   }
 
@@ -2618,9 +2639,7 @@ function applyPlanPricing_(rows, planDetails, homologacion) {
       planProveedor: detail ? detail.proveedorPlan : '',
       precioUnitario: hasPrice ? precio : null,
       costoEstimado: hasPrice ? ts * precio : null,
-      precioMatchMethod: match.method,
-      precioMatchScore: match.score,
-      precioSecondScore: match.secondScore
+      precioMatchMethod: match.method
     });
 
     output.push(enriched);
@@ -3878,11 +3897,27 @@ function getProcessedMessageIds_(sheet) {
  * DÍAS HÁBILES
  * ===================================================================== */
 
+/**
+ * Días hábiles.
+ *
+ * Devuelve DOS cosas que conviene no confundir:
+ *
+ *   total / elapsed / remaining  son del MES VIGENTE. Es lo que usa el
+ *                                prorrateo del plan, que solo tiene
+ *                                sentido dentro del mes.
+ *   workdayKeys                  cubre TODA la ventana de historia. Es
+ *                                el eje de los gráficos.
+ *
+ * Antes workdayKeys era también del mes: al pedir "el año", las tablas
+ * mostraban nueve meses y el gráfico acumulado seguía dibujando solo
+ * septiembre, sin decir por qué.
+ */
 function buildWorkdaysInfo_(
   timezone,
   month,
   lastActualDate,
-  latestReportDate
+  latestReportDate,
+  historyStart
 ) {
   const todayKey = Utilities.formatDate(
     new Date(),
@@ -3914,38 +3949,55 @@ function buildWorkdaysInfo_(
     holidays[key] = true;
   });
 
-  const lastDay = Number(month.endKey.split('-')[2]);
+  // Del primer día de la historia al último del mes vigente.
+  const desde = historyStart && historyStart < month.startKey
+    ? historyStart
+    : month.startKey;
+
+  const partes = desde.split('-');
   const workdayKeys = [];
 
+  let total = 0;
   let elapsed = 0;
 
-  for (let day = 1; day <= lastDay; day++) {
-    const key = buildDateKey_(
+  const cursor = new Date(
+    Date.UTC(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]))
+  );
+
+  const fin = new Date(
+    Date.UTC(
       month.year,
-      month.month,
-      day
+      month.month - 1,
+      Number(month.endKey.split('-')[2])
+    )
+  );
+
+  while (cursor.getTime() <= fin.getTime()) {
+    const key = buildDateKey_(
+      cursor.getUTCFullYear(),
+      cursor.getUTCMonth() + 1,
+      cursor.getUTCDate()
     );
 
-    const dayOfWeek = new Date(
-      Date.UTC(month.year, month.month - 1, day)
-    ).getUTCDay();
+    const esHabil =
+      CONFIG.WORKDAYS.indexOf(cursor.getUTCDay()) !== -1 &&
+      !holidays[key];
 
-    if (CONFIG.WORKDAYS.indexOf(dayOfWeek) === -1) {
-      continue;
+    if (esHabil) {
+      workdayKeys.push(key);
+
+      // El conteo del plan mira solo el mes vigente.
+      if (key >= month.startKey) {
+        total++;
+
+        if (key <= referenceDate) {
+          elapsed++;
+        }
+      }
     }
 
-    if (holidays[key]) {
-      continue;
-    }
-
-    workdayKeys.push(key);
-
-    if (key <= referenceDate) {
-      elapsed++;
-    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-
-  const total = workdayKeys.length;
 
   return {
     todayKey: todayKey,

@@ -839,6 +839,29 @@
     .campo input::placeholder,
     .campo textarea::placeholder { color: var(--ink-3); }
 
+    /* Atajos de rango: escribir dos fechas para ver el año entero es
+       trabajo que la pantalla puede ahorrarse. Ocupan dos celdas de la
+       rejilla porque cuatro pastillas en una no caben. */
+    .campo-rango { grid-column: span 2; }
+
+    .rangos { display: flex; flex-wrap: wrap; gap: 5px; }
+
+    .rangos .pastilla { flex: 1 1 auto; min-height: 38px; }
+
+    /* Nueve controles no caben en una fila, así que "Limpiar" baja. Se
+       ancla a la última columna en vez de quedar suelto a la izquierda:
+       un botón solo al principio de un renglón vacío parece un error de
+       maquetación, y al final del bloque parece lo que es. */
+    .campo-limpiar { grid-column: -2 / -1; }
+
+    @media (max-width: 620px) {
+      .campo-limpiar { grid-column: auto; }
+    }
+
+    @media (max-width: 620px) {
+      .campo-rango { grid-column: span 1; }
+    }
+
     /* El selector de fecha nativo trae su icono en negro fijo: en modo
        oscuro queda invisible sobre el campo. */
     :root[data-tema="oscuro"] input[type="date"]::-webkit-calendar-picker-indicator,
@@ -2657,7 +2680,7 @@
       <div class="portada">
         <div class="regla">
           <div class="regla-cab">
-            <div class="regla-titulo">La regla del mes</div>
+            <div class="regla-titulo" id="reglaTitulo">La regla del mes</div>
             <div class="regla-leyenda">
               <span><i style="background:var(--verde)"></i>Ingreso real</span>
               <span><i style="background:var(--madera)"></i>Complemento estimado</span>
@@ -2691,6 +2714,18 @@
             <label for="dateTo">Hasta</label>
             <input id="dateTo" type="date" onchange="renderAll()">
           </div>
+          <div class="campo campo-rango">
+            <label id="rotuloRango">Rango</label>
+            <div class="rangos" role="group" aria-labelledby="rotuloRango">
+              <button type="button" class="pastilla" data-rango="mes">
+                Mes</button>
+              <button type="button" class="pastilla" data-rango="trimestre">
+                3 meses</button>
+              <button type="button" class="pastilla" data-rango="anio">
+                Año</button>
+            </div>
+          </div>
+
           <div class="campo">
             <label for="subproductoFilter">Subproducto</label>
             <select id="subproductoFilter" onchange="renderAll()">
@@ -2723,7 +2758,7 @@
                    placeholder="Proveedor, predio, rol…"
                    oninput="renderAllDebounced()">
           </div>
-          <div class="campo">
+          <div class="campo campo-limpiar">
             <label>&nbsp;</label>
             <button class="boton" type="button" style="width:100%"
                     onclick="resetFilters()">Limpiar</button>
@@ -3357,6 +3392,7 @@
 
     montarFiltrosAccion();
     montarMandos();
+    montarRangos();
     cargarTodo();
     montarApuntes();
 
@@ -3501,6 +3537,12 @@
           'se ve está confirmado en la hoja Ingresos.';
 
       nota +=
+        ' Hay historia disponible desde <b>' +
+        esc(formatDateKey(primeraFecha()) || '—') +
+        '</b>: los atajos de rango de abajo la recorren sin escribir ' +
+        'fechas a mano.';
+
+      nota +=
         ' Solo se leen correos originales de <b>' +
         'reservador.horario@masisa.com</b> con el asunto oficial; ' +
         'se excluyen respuestas, reenvíos, filas «Total…» y filas sin ' +
@@ -3577,6 +3619,84 @@
       caja.classList.toggle('se-ve', ojo.length > 0);
     }
 
+    /* =================================================================
+       ATAJOS DE RANGO
+
+       La pantalla abre en el mes vigente, que es la lectura de todos
+       los días. Para mirar el año había que escribir dos fechas a mano
+       y, sobre todo, adivinar hasta dónde llega la historia que el
+       servidor mandó. Estos cuatro botones lo resuelven.
+       ================================================================= */
+
+    /** La fecha más antigua que llegó de verdad, no la que se pidió. */
+    function primeraFecha() {
+      return (DATA.rows || []).reduce(function(min, row) {
+        return !min || row.fecha < min ? row.fecha : min;
+      }, '') || (DATA.month || {}).startKey || '';
+    }
+
+    function rangoDe(cual) {
+      var mes = DATA.month || {};
+      var fin = mes.endKey || '';
+
+      if (cual === 'trimestre') {
+        var m = mes.month - 2;
+        var a = mes.year;
+
+        while (m < 1) { m += 12; a--; }
+
+        return [a + '-' + String(m).padStart(2, '0') + '-01', fin];
+      }
+
+      if (cual === 'anio') { return [mes.year + '-01-01', fin]; }
+
+      return [mes.startKey || '', fin];
+    }
+
+    function ponerRango(cual) {
+      var r = rangoDe(cual);
+
+      // El servidor manda una ventana acotada: pedir enero cuando la
+      // historia empieza en marzo mostraría un rango vacío por delante
+      // y parecería que faltan datos. Se recorta a lo que existe.
+      var piso = primeraFecha();
+
+      document.getElementById('dateFrom').value =
+        piso && r[0] < piso ? piso : r[0];
+      document.getElementById('dateTo').value = r[1];
+
+      renderAll();
+    }
+
+    /** Marca el atajo que coincide con las fechas puestas. */
+    function marcarRango() {
+      var desde = document.getElementById('dateFrom').value;
+      var hasta = document.getElementById('dateTo').value;
+      var piso = primeraFecha();
+
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.rangos .pastilla'),
+        function(b) {
+          var r = rangoDe(b.getAttribute('data-rango'));
+          var inicio = piso && r[0] < piso ? piso : r[0];
+
+          b.classList.toggle('activa', inicio === desde && r[1] === hasta);
+        }
+      );
+    }
+
+    function montarRangos() {
+      var caja = document.querySelector('.rangos');
+
+      if (!caja) { return; }
+
+      caja.addEventListener('click', function(ev) {
+        var boton = ev.target.closest('.pastilla');
+
+        if (boton) { ponerRango(boton.getAttribute('data-rango')); }
+      });
+    }
+
     function fillSelect(id, values, firstLabel) {
       var select = document.getElementById(id);
       var previous = select.value;
@@ -3624,6 +3744,7 @@
       dibujarPauta();
       dibujarDetalle(CURRENT_ROWS);
       dibujarGraficos();
+      marcarRango();
       observarPaneles();
     }
 
@@ -4470,6 +4591,13 @@
      * ir hoy y dónde vamos a terminar.
      */
     function dibujarRegla(m) {
+      var mes = DATA.month || {};
+
+      setText('reglaTitulo',
+        m.period.from === mes.startKey && m.period.to === mes.endKey
+          ? 'La regla del mes'
+          : 'La regla del período');
+
       var tope = Math.max(
         m.planValid ? m.planPeriod : 0,
         m.total,
@@ -8035,7 +8163,7 @@
           f.precioUnitario === null || f.precioUnitario === undefined;
 
         return '<tr>' +
-          '<td class="num">' + esc(f.fechaLabel) + '</td>' +
+          '<td class="num">' + esc(formatDateKey(f.fecha)) + '</td>' +
           '<td><span class="sello-fuente ' +
             (esEst ? 'es-est' : 'es-real') + '">' +
             (esEst ? 'ESTIMADO' : 'REAL') + '</span></td>' +
