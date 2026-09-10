@@ -1372,6 +1372,29 @@
       font-weight: 500; fill: var(--verde);
     }
 
+    /* Estos gráficos terminan pegados en una lámina, donde no hay
+       cursor: una cifra que solo vive en el globo, ahí no existe. El
+       halo del color del papel la deja legible aunque caiga sobre una
+       rejilla o sobre otra barra. */
+    .rotulo {
+      font-family: var(--mono); font-size: 10px;
+      font-weight: 500; fill: var(--ink-2);
+      paint-order: stroke;
+      stroke: var(--paper); stroke-width: 3px; stroke-linejoin: round;
+    }
+
+    .rotulo-verde { fill: var(--verde); }
+    .rotulo-madera { fill: var(--madera); }
+    .rotulo-pizarra { fill: var(--pizarra); }
+    .rotulo-ladrillo { fill: var(--ladrillo); }
+    .rotulo-fuerte { font-weight: 600; }
+
+    /* Dentro de la barra: sin halo, porque el fondo es la barra. El
+       color lo decide la barra, no el dato: sobre el verde va claro,
+       sobre el rayado madera —que es claro— va oscuro. */
+    .rotulo-dentro { fill: var(--paper); stroke: none; }
+    .rotulo-dentro-oscuro { fill: var(--ink); stroke: none; }
+
     /* --- globo de detalle ------------------------------------------- */
 
     #globo {
@@ -3005,6 +3028,22 @@
             <div class="conteo" id="conteoPareto">—</div>
           </div>
           <div id="grafPareto"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
+              <h2>Brecha vs plan a la fecha</h2>
+              <p class="panel-nota">
+                Cuánto le falta o le sobra a cada proveedor contra su
+                plan prorrateado a los días hábiles corridos, en TS. A
+                la izquierda lo que no llegó; a la derecha, lo que se
+                adelantó.
+              </p>
+            </div>
+            <div class="conteo" id="conteoBrecha">—</div>
+          </div>
+          <div id="grafBrecha"></div>
         </article>
 
         <article class="panel">
@@ -5357,6 +5396,48 @@
       grafMix();
       grafPrecio();
       grafPareto();
+      grafBrecha();
+    }
+
+    /* --- Rótulos de valor -------------------------------------------
+       Se rotula la marca, pero solo si cabe: dos cifras encimadas se
+       leen peor que ninguna. Por eso todo pasa antes por cabenRotulos,
+       que compara el rótulo más largo contra el paso disponible. */
+
+    var ROTULO_TAM = 10;
+
+    /**
+     * El formato de toda una serie, elegido por su techo. Mezclar
+     * "874" con "1k" en el mismo gráfico obliga a convertir de cabeza
+     * para comparar dos barras vecinas; y "852,4" en un eje es
+     * precisión que el dato no tiene.
+     */
+    function formatoSerie(tope) {
+      return Math.abs(Number(tope) || 0) >= 10000
+        ? formatCorto
+        : formatInteger;
+    }
+
+    /** Ancho aproximado de un texto en el mono del panel. */
+    function anchoTexto(texto, tamano) {
+      return String(texto).length * (tamano || ROTULO_TAM) * 0.6;
+    }
+
+    function cabenRotulos(textos, paso, tamano) {
+      var mayor = 0;
+
+      textos.forEach(function(t) {
+        mayor = Math.max(mayor, anchoTexto(t, tamano));
+      });
+
+      return mayor + 6 <= paso;
+    }
+
+    function rotulo(cx, cy, texto, clase, anclaje) {
+      return '<text class="rotulo' + (clase ? ' ' + clase : '') +
+        '" x="' + Number(cx).toFixed(1) + '" y="' + Number(cy).toFixed(1) +
+        '" text-anchor="' + (anclaje || 'middle') + '">' +
+        esc(texto) + '</text>';
     }
 
     function ejeY(M, w, h, tope, formato) {
@@ -5369,7 +5450,7 @@
           '" x2="' + (M.l + w) + '" y2="' + y + '"/>');
         partes.push('<text x="' + (M.l - 8) + '" y="' + (y + 3.5) +
           '" text-anchor="end" font-size="10">' +
-          (formato || formatCorto)(tope * (1 - g / 4)) + '</text>');
+          (formato || formatoSerie(tope))(tope * (1 - g / 4)) + '</text>');
       }
 
       return partes.join('');
@@ -5468,6 +5549,39 @@
           (iRef > claves.length * 0.8 ? 'end' : 'start') + '">' +
           formatCorto(enRef) + '</text>');
       }
+
+      // Las dos cifras que se buscan en un acumulado y hoy solo
+      // existían en el globo: dónde termina el plan y dónde termina
+      // la proyección. Si caen una sobre otra se separan, porque dos
+      // rótulos encimados no son dos cifras.
+      var cierres = [];
+
+      if (m.planValid && m.planPeriod > 0) {
+        cierres.push({
+          y: y(m.planPeriod), texto: formatCorto(m.planPeriod),
+          clase: 'rotulo-pizarra'
+        });
+      }
+
+      if (iRef >= 0 && iRef < claves.length - 1) {
+        var finProy = enRef + ritmo * (claves.length - 1 - iRef);
+
+        cierres.push({
+          y: y(finProy), texto: formatCorto(finProy),
+          clase: 'rotulo-madera'
+        });
+      }
+
+      if (cierres.length === 2 && Math.abs(cierres[0].y - cierres[1].y) < 13) {
+        var arriba = cierres[0].y <= cierres[1].y ? 0 : 1;
+
+        cierres[arriba].y -= 7;
+        cierres[1 - arriba].y += 7;
+      }
+
+      cierres.forEach(function(c) {
+        partes.push(rotulo(M.l + w, c.y - 6, c.texto, c.clase, 'end'));
+      });
 
       var salto = Math.max(1, Math.ceil(claves.length / 12));
 
@@ -5637,7 +5751,8 @@
 
       var W = Math.max(360, caja.clientWidth || 900);
       var H = 300;
-      var M = { t: 14, r: 14, b: 30, l: 56 };
+      // El techo deja aire para el rótulo de la barra más alta.
+      var M = { t: 24, r: 14, b: 30, l: 56 };
       var w = W - M.l - M.r;
       var h = H - M.t - M.b;
       var paso = w / fechas.length;
@@ -5674,13 +5789,37 @@
         }
       });
 
+      var comoDia = formatoSerie(tope);
+
+      var cifrasDia = fechas.map(function(k) {
+        return comoDia(agrupado[k].real + agrupado[k].est);
+      });
+
+      var rotulosDia = [];
+
+      if (cabenRotulos(cifrasDia, paso)) {
+        fechas.forEach(function(k, i) {
+          var d = agrupado[k];
+          var t = d.real + d.est;
+
+          if (!t) { return; }
+
+          rotulosDia.push(rotulo(
+            M.l + paso * i + paso / 2, y(t) - 6, cifrasDia[i],
+            d.est > 0 && d.real === 0 ? 'rotulo-madera' : 'rotulo-verde'
+          ));
+        });
+      }
+
       if (planDiario > 0) {
         partes.push('<line class="traza-plan" x1="' + M.l + '" y1="' +
           y(planDiario) + '" x2="' + (M.l + w) + '" y2="' + y(planDiario) + '"/>');
         partes.push('<text x="' + (M.l + w) + '" y="' + (y(planDiario) - 5) +
           '" text-anchor="end" font-size="9.5" fill="var(--pizarra)">' +
-          'plan diario ' + formatCorto(planDiario) + '</text>');
+          'plan diario ' + comoDia(planDiario) + '</text>');
       }
+
+      partes = partes.concat(rotulosDia);
 
       var salto = Math.max(1, Math.ceil(fechas.length / 14));
 
@@ -5857,7 +5996,7 @@
       var tope = datos[0].total || 1;
       var W = Math.max(360, caja.clientWidth || 900);
       var H = 300;
-      var M = { t: 14, r: 44, b: 74, l: 56 };
+      var M = { t: 24, r: 44, b: 74, l: 56 };
       var w = W - M.l - M.r;
       var h = H - M.t - M.b;
       var paso = w / datos.length;
@@ -5869,6 +6008,16 @@
       var acum = 0;
       var puntos = [];
 
+      var comoPareto = formatoSerie(tope);
+
+      var cifrasPareto = datos.map(function(x) {
+        return comoPareto(x.total);
+      });
+
+      var rotulosPareto = [];
+
+      var rotularPareto = cabenRotulos(cifrasPareto, paso);
+
       datos.forEach(function(x, i) {
         var cx = M.l + paso * i + paso / 2;
 
@@ -5876,6 +6025,11 @@
           (cx - ancho / 2) + '" y="' + y(x.total) + '" width="' + ancho +
           '" height="' + Math.max(1, (x.total / tope) * h) +
           '" fill="var(--verde)" rx="2"/>');
+
+        if (rotularPareto) {
+          rotulosPareto.push(rotulo(cx, y(x.total) - 6, cifrasPareto[i],
+            'rotulo-verde'));
+        }
 
         acum += x.share;
         puntos.push([cx, M.t + h - Math.min(1, acum) * h]);
@@ -5894,6 +6048,8 @@
         partes.push('<circle cx="' + pt[0] + '" cy="' + pt[1] +
           '" r="2.6" fill="var(--pizarra)"/>');
       });
+
+      partes = partes.concat(rotulosPareto);
 
       [0, 0.5, 1].forEach(function(v) {
         partes.push('<text x="' + (M.l + w + 7) + '" y="' +
@@ -5971,6 +6127,244 @@
       });
     }
 
+    /* --- Brecha vs plan a la fecha -----------------------------------
+       El Pareto dice quién es grande. Este dice quién está en deuda,
+       que no es lo mismo: un proveedor chico que no entregó la mitad
+       de su plan es una llamada más urgente que uno grande que entregó
+       el 98%.
+
+       El plan viene por fila de la hoja Plan —subproducto × proveedor—
+       y aquí se quiere un proveedor por barra, así que sus filas se
+       suman. La escala es simétrica alrededor del cero para que un
+       -500 y un +500 se vean del mismo largo. */
+
+    var BRECHA_TOPE = 10;
+
+    function grafBrecha() {
+      var caja = document.getElementById('grafBrecha');
+      var m = CURRENT_METRICS;
+
+      if (!m.planValid || !m.period.inCurrentMonth) {
+        caja.innerHTML = vacio(planDisabledReason());
+        setText('conteoBrecha', '—');
+        return;
+      }
+
+      var porProveedor = {};
+
+      CURRENT_PRICING.forEach(function(x) {
+        if (x.gapToDate === null || x.gapToDate === undefined) { return; }
+
+        var nombre = x.proveedor || x.proveedorPlan;
+
+        if (!nombre) { return; }
+
+        if (!porProveedor[nombre]) {
+          porProveedor[nombre] = { proveedor: nombre, total: 0, plan: 0 };
+        }
+
+        porProveedor[nombre].total += Number(x.total) || 0;
+        porProveedor[nombre].plan += Number(x.planToDate) || 0;
+      });
+
+      var todos = Object.keys(porProveedor).map(function(k) {
+        var x = porProveedor[k];
+
+        x.brecha = x.total - x.plan;
+        x.cumplimiento = x.plan > 0 ? x.total / x.plan : null;
+
+        return x;
+      }).filter(function(x) {
+        return x.plan > 0 || x.total > 0;
+      });
+
+      if (!todos.length) {
+        caja.innerHTML = vacio(
+          'Ningún proveedor del rango cruza con una fila del Plan.'
+        );
+        setText('conteoBrecha', '—');
+        return;
+      }
+
+      // Los más desviados en cualquiera de los dos sentidos; después
+      // se ordenan con signo, para que la lámina se lea de la peor
+      // brecha a la mejor.
+      var datos = todos.slice()
+        .sort(function(a, b) {
+          return Math.abs(b.brecha) - Math.abs(a.brecha);
+        })
+        .slice(0, BRECHA_TOPE)
+        .sort(function(a, b) { return a.brecha - b.brecha; });
+
+      setText('conteoBrecha',
+        datos.length + ' de ' + todos.length + ' proveedores');
+
+      var brechas = datos.map(function(x) { return x.brecha; });
+      var minB = Math.min(0, Math.min.apply(null, brechas));
+      var maxB = Math.max(0, Math.max.apply(null, brechas));
+      var rango = (maxB - minB) || 1;
+
+      var W = Math.max(360, caja.clientWidth || 900);
+      var alto = 34;
+      var M = { t: 10, r: 78, b: 34, l: Math.min(190, Math.max(120, W * 0.24)) };
+      var h = datos.length * alto;
+      var H = M.t + h + M.b;
+      var w = W - M.l - M.r;
+
+      var x = function(v) { return M.l + ((v - minB) / rango) * w; };
+      var partes = [];
+
+      // Marcas de referencia, para poder leer el largo de una barra
+      // sin ir a buscar su rótulo.
+      var marcas = [0];
+
+      if (minB < 0) { marcas.push(-marcaRedonda(-minB)); }
+      if (maxB > 0) { marcas.push(marcaRedonda(maxB)); }
+
+      marcas.forEach(function(v) {
+        partes.push('<line class="' + (v === 0 ? 'eje' : 'rejilla') +
+          '" x1="' + x(v).toFixed(1) + '" y1="' + M.t + '" x2="' +
+          x(v).toFixed(1) + '" y2="' + (M.t + h) + '"/>');
+        partes.push('<text x="' + x(v).toFixed(1) + '" y="' + (M.t + h + 18) +
+          '" text-anchor="middle" font-size="10">' +
+          esc(v === 0 ? '0' : formatoSerie(rango)(v)) + '</text>');
+      });
+
+      datos.forEach(function(d, i) {
+        var cy = M.t + alto * i + alto / 2;
+        var x0 = x(0);
+        var x1 = x(d.brecha);
+        var izq = Math.min(x0, x1);
+        var ancho = Math.max(1.5, Math.abs(x1 - x0));
+        var falta = d.brecha < 0;
+
+        partes.push('<rect class="barra-svg" data-i="' + i + '" x="' +
+          izq.toFixed(1) + '" y="' + (cy - 10) + '" width="' +
+          ancho.toFixed(1) + '" height="20" rx="2" fill="var(--' +
+          (falta ? 'ladrillo' : 'verde') + ')"/>');
+
+        // El rótulo va siempre al costado derecho de la barra, como en
+        // una tabla: así todas las cifras quedan en la misma columna
+        // visual aunque las barras salgan para lados distintos.
+        // El plan prorrateado trae decimales, y "-1.142,4 TS" en una
+        // lámina es precisión falsa: nadie va a pedir 400 kilos.
+        partes.push(rotulo(Math.max(x0, x1) + 7, cy + 3.5,
+          (d.brecha > 0 ? '+' : '') + formatInteger(d.brecha),
+          (falta ? 'rotulo-ladrillo' : 'rotulo-verde') + ' rotulo-fuerte',
+          'start'));
+
+        partes.push(nombreEnDosLineas(
+          shortProvider(d.proveedor), M.l - 12, cy
+        ));
+      });
+
+      caja.innerHTML = '<svg class="grafico" viewBox="0 0 ' + W + ' ' + H +
+        '" height="' + H + '" role="img" ' +
+        'aria-label="Brecha contra el plan a la fecha">' +
+        partes.join('') +
+        datos.map(function(d, i) {
+          return '<g class="banda-g" data-g="' + i + '">' +
+            '<rect class="banda-fondo" x="' + M.l + '" y="' +
+            (M.t + alto * i) + '" width="' + w + '" height="' + alto + '"/>' +
+            '<rect class="banda" data-i="' + i + '" x="' + M.l + '" y="' +
+            (M.t + alto * i) + '" width="' + w + '" height="' + alto +
+            '"/></g>';
+        }).join('') +
+        '</svg>';
+
+      montarGlobo(caja, {
+        contenido: function(i) {
+          var d = datos[i];
+
+          var filas = [
+            {
+              color: 'var(--pizarra)', etiqueta: 'Plan a la fecha',
+              valor: formatTs(d.plan)
+            },
+            {
+              color: 'var(--verde)', etiqueta: 'Ingresado',
+              valor: formatTs(d.total)
+            },
+            {
+              etiqueta: 'Brecha', valor: signo(d.brecha),
+              clase: claseDesvio(d.brecha)
+            }
+          ];
+
+          if (d.cumplimiento !== null) {
+            filas.push({
+              etiqueta: 'Cumplimiento',
+              valor: formatPercent(d.cumplimiento)
+            });
+          }
+
+          return globoHTML({
+            titulo: d.proveedor,
+            subtitulo: 'Prorrateado a ' + m.period.elapsedWorkdays +
+              ' de ' + m.period.totalMonthWorkdays + ' días hábiles',
+            filas: filas,
+            pie: d.brecha < 0
+              ? 'Le falta ' + formatTs(-d.brecha) + ' para estar al día.'
+              : 'Va adelantado respecto de su plan.'
+          });
+        },
+        destacar: function(i) { encender(caja, i, true); },
+        apagar: function() { apagar(caja); }
+      });
+    }
+
+    /**
+     * La marca redonda más grande que todavía cabe dentro del tope:
+     * un eje que marca 1.000 se lee; uno que marca 1.047, no.
+     */
+    function marcaRedonda(v) {
+      var n = Math.abs(Number(v) || 0);
+
+      if (!n) { return 0; }
+
+      var exp = Math.pow(10, Math.floor(Math.log(n) / Math.LN10));
+      var mant = n / exp;
+
+      return (mant >= 5 ? 5 : mant >= 2 ? 2 : 1) * exp;
+    }
+
+    /**
+     * SVG no corta líneas solo. Un nombre largo se parte en dos por el
+     * espacio más cercano a la mitad, que es donde menos se nota.
+     */
+    function nombreEnDosLineas(texto, x, cy) {
+      var t = String(texto || '');
+      var limite = 17;
+
+      if (t.length <= limite) {
+        return '<text x="' + x + '" y="' + (cy + 3.5) +
+          '" text-anchor="end" font-size="10.5">' + esc(t) + '</text>';
+      }
+
+      var corte = -1;
+      var mitad = t.length / 2;
+
+      for (var i = 0; i < t.length; i++) {
+        if (t.charAt(i) !== ' ') { continue; }
+        if (corte === -1 || Math.abs(i - mitad) < Math.abs(corte - mitad)) {
+          corte = i;
+        }
+      }
+
+      if (corte === -1) {
+        return '<text x="' + x + '" y="' + (cy + 3.5) +
+          '" text-anchor="end" font-size="10.5">' +
+          esc(recortar(t, limite + 3)) + '</text>';
+      }
+
+      return '<text x="' + x + '" y="' + (cy - 2) +
+        '" text-anchor="end" font-size="10.5">' +
+        esc(recortar(t.slice(0, corte), 22)) + '</text>' +
+        '<text x="' + x + '" y="' + (cy + 10) +
+        '" text-anchor="end" font-size="10.5">' +
+        esc(recortar(t.slice(corte + 1), 22)) + '</text>';
+    }
+
     function grafPrecio() {
       var caja = document.getElementById('grafPrecio');
 
@@ -6002,7 +6396,7 @@
 
       var W = Math.max(360, caja.clientWidth || 520);
       var H = 300;
-      var M = { t: 14, r: 52, b: 78, l: 52 };
+      var M = { t: 24, r: 52, b: 78, l: 52 };
       var w = W - M.l - M.r;
       var h = H - M.t - M.b;
       var paso = w / datos.length;
@@ -6016,6 +6410,13 @@
 
       var partes = [ejeY(M, w, h, topeTs)];
 
+      // Solo se rotula el volumen. El precio tiene su propio eje a la
+      // derecha, y su punto cae dentro de la barra: un número ahí se
+      // superpone a la barra y, con doce proveedores, a su vecino.
+      var comoTs = formatoSerie(topeTs);
+      var cifrasTs = datos.map(function(x) { return comoTs(x.total); });
+      var rotularPrecio = cabenRotulos(cifrasTs, paso);
+
       datos.forEach(function(x, i) {
         var cx = M.l + paso * i + paso / 2;
 
@@ -6025,6 +6426,20 @@
           (cx - ancho / 2) + '" y="' + y(x.total) + '" width="' + ancho +
           '" height="' + Math.max(1, (x.total / topeTs) * h) + '" fill="' +
           colorProducto(x.subproducto) + '" rx="2"/>');
+
+        if (rotularPrecio) {
+          var yRot = y(x.total) - 6;
+
+          // Una barra baja deja su rótulo a la altura del punto de
+          // precio. Cuando eso pasa, el rótulo salta por encima.
+          if (x.precio !== null && x.precio !== undefined) {
+            var yPunto = yP(Number(x.precio));
+
+            if (Math.abs(yPunto - yRot) < 14) { yRot = yPunto - 12; }
+          }
+
+          partes.push(rotulo(cx, yRot, cifrasTs[i]));
+        }
 
         if (x.precio !== null && x.precio !== undefined) {
           partes.push('<circle class="barra-svg" data-i="' + i + '" cx="' + cx +
@@ -9994,7 +10409,7 @@
 
       var W = Math.max(360, caja.clientWidth || 900);
       var H = 300;
-      var M = { t: 14, r: 14, b: 34, l: 60 };
+      var M = { t: 26, r: 14, b: 34, l: 60 };
       var w = W - M.l - M.r;
       var h = H - M.t - M.b;
       var paso = w / meses.length;
@@ -10009,6 +10424,10 @@
         '<rect width="6" height="6" fill="var(--madera-2)"/>' +
         '<rect width="3" height="6" fill="var(--madera)"/></pattern>'
       );
+
+      var comoMes = formatoSerie(tope);
+      var cifrasMes = meses.map(function(c) { return comoMes(c.total); });
+      var rotularMes = cabenRotulos(cifrasMes, paso);
 
       meses.forEach(function(c, i) {
         var cx = M.l + paso * i + paso / 2;
@@ -10036,6 +10455,20 @@
             (cx + ancho / 2 + 5) + '" y1="' + y(c.plan) + '" y2="' +
             y(c.plan) + '" stroke="var(--pizarra)" stroke-width="2.5" ' +
             'stroke-linecap="round"/>');
+        }
+
+        // Dentro de la columna, no encima: encima queda pegado al
+        // travesaño del plan y se lee como si fuera la cifra del plan,
+        // que es justo la confusión que este panel no puede permitirse.
+        if (rotularMes && c.total > 0) {
+          var yTope = y(c.total);
+
+          if (yTope + 24 < M.t + h) {
+            partes.push(rotulo(cx, yTope + 16, cifrasMes[i],
+              c.est > 0 ? 'rotulo-dentro-oscuro' : 'rotulo-dentro'));
+          } else {
+            partes.push(rotulo(cx, yTope - 7, cifrasMes[i], 'rotulo-verde'));
+          }
         }
 
         partes.push('<text x="' + cx + '" y="' + (M.t + h + 19) +

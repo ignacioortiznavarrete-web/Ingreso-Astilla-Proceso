@@ -65,6 +65,48 @@ interruptor de la barra deja fija la preferencia. Las tablas anchas
 mantienen fija la columna del proveedor al desplazarse, y hay hoja de
 estilos de impresión para llevar el panel en papel a la reunión.
 
+### Cifras dentro de los gráficos
+
+Los gráficos se pegan en presentaciones, donde no hay cursor: una cifra
+que solo vive en el globo, en una lámina no existe. Por eso cada marca
+va rotulada, con tres reglas:
+
+- **Solo si cabe.** Antes de rotular se compara el rótulo más largo
+  contra el ancho disponible por marca. Con el rango en «Año» —187
+  días— no se dibuja ninguno: a esa densidad el gráfico es una forma,
+  no una tabla.
+- **Un formato por serie.** El techo de la serie decide si todo va en
+  entero (`874`, `1.036`) o todo en corto (`19,1k`). Mezclar `874` con
+  `1k` en el mismo gráfico obliga a convertir de cabeza para comparar
+  dos barras vecinas.
+- **Nunca sobre otra cosa.** Los rótulos se dibujan al final, con un
+  halo del color del papel, para que una traza que pase por encima no
+  los tache. Donde hay dos series —precio y volumen— se rotula una
+  sola.
+
+En el acumulado no se rotula cada día sino las tres cifras que se
+buscan: dónde va el real, dónde termina el plan y dónde termina la
+proyección.
+
+### Brecha vs plan a la fecha
+
+El Pareto dice quién es grande; este gráfico dice quién está en deuda,
+que no es lo mismo: un proveedor chico que entregó la mitad de su plan
+es una llamada más urgente que uno grande que entregó el 98%.
+
+Barras divergentes, un proveedor por fila: a la izquierda lo que no
+llegó, a la derecha lo que se adelantó, contra el plan prorrateado a
+los días hábiles corridos. Se muestran los diez más desviados en
+cualquiera de los dos sentidos, ordenados de la peor brecha a la mejor.
+
+El eje se arma sobre el rango real de los datos —no simétrico— porque a
+mitad de mes casi todos caen del mismo lado y media lámina en blanco no
+dice nada. La comparación no se pierde: la escala es lineal, así que un
+-500 y un +500 siguen midiendo lo mismo.
+
+Depende del plan prorrateado, así que solo aparece con el mes vigente
+seleccionado; con cualquier otro rango dice por qué no está.
+
 ### Cuánta historia se ve
 
 Dos reglas en `CONFIG`, y la ventana es la más larga de las dos:
