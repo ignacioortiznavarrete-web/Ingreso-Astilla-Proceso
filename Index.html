@@ -3813,9 +3813,24 @@
           formatInteger(source.supplementCamiones) + ' camiones</b>, ' +
           'convertidos a TS con el factor de cada material (' +
           esc(factoresLegibles()) + '). ' +
-          'El estimado desaparece solo cuando la fecha aparece en Ingresos.'
-        : 'No hay fechas posteriores al último registro real: todo lo que ' +
-          'se ve está confirmado en la hoja Ingresos.';
+          'El estimado desaparece solo cuando la fecha aparece en ' +
+          'Ingresos con TS.'
+        : 'No hay días pendientes: todo lo que se ve está confirmado en ' +
+          'la hoja Ingresos.';
+
+      // Un día anterior al último registro real que igual hubo que
+      // completar es un hueco en Ingresos, no un desfase. Se dice,
+      // porque es lo que hay que ir a cargar.
+      var huecos = source.huecosLabel || [];
+
+      if (huecos.length) {
+        nota +=
+          ' <b>' + huecos.length +
+          (huecos.length === 1
+            ? ' día quedó sin TS en Ingresos</b> y se tomó'
+            : ' días quedaron sin TS en Ingresos</b> y se tomaron') +
+          ' de la planilla: ' + esc(huecos.join(', ')) + '.';
+      }
 
       nota +=
         ' Hay historia disponible desde <b>' +
