@@ -43,19 +43,15 @@ llegaron a SAP.
 | Archivo            | Qué es                                            |
 |--------------------|---------------------------------------------------|
 | `Codigo.gs`        | El servidor: lectura, cruces, Gmail, Calendar      |
-| `Alertas.gs`       | Las alertas por correo. Aparte y opcional          |
 | `Index.html`       | El dashboard (HTML + CSS + JS en un archivo)       |
 | `appsscript.json`  | Manifiesto: zona horaria, scopes y Drive API v3    |
+| `alertas/`         | Proyecto de Apps Script **aparte**: el correo diario |
 
-`Alertas.gs` es un añadido, no una pieza del panel: si se borra del
-proyecto, el dashboard sigue igual y el menú sale sin sus ítems —
-`Codigo.gs` los agrega solo si la función existe. La dependencia va en
-un solo sentido: las alertas leen `getDashboardData()`, el panel no
-sabe que las alertas existen.
+`alertas/` no es parte de este proyecto de Apps Script: es otro, que
+abre la misma planilla en modo lectura. Ver `alertas/README.md`.
 
-El envío de correo necesita el scope `script.send_mail`, que ya está en
-el manifiesto: si se instala el aviso diario sobre una autorización
-antigua, hay que volver a autorizar el proyecto.
+El panel no manda correo: eso vive en `alertas/`, con su propio
+manifiesto y sus propios permisos.
 
 ## El panel
 
@@ -211,61 +207,14 @@ en Proveedores: eso se cuenta al pie del panel y se arregla en la hoja.
 
 ## Aviso diario de proveedores sin despachar
 
-Vive en `Alertas.gs`, separado del panel.
-
-### Quién lo ejecuta
-
-**Nadie tiene que abrir la web.** El disparador horario de Apps Script
-corre solo, con la autorización de quien lo instaló desde el menú,
-aunque no haya nadie conectado; el correo sale desde esa cuenta. El
-`executeAs: USER_DEPLOYING` del manifiesto es otra cosa: rige para
-quien abre el dashboard, no para el disparador.
-
-Se instala una vez. La cuenta que aprieta **Instalar aviso diario** es
-la que queda ejecutándolo y la que aparece como remitente, así que
-conviene instalarlo desde la cuenta corporativa que corresponde, no
-desde una personal.
-
-### Qué manda
-
 Un correo cada mañana a `francisco.correa@masisa.com` y
 `jaime.rojas@masisa.com` con los proveedores que tienen plan del mes y
-llevan días sin un ingreso. Tres tablas:
+llevan 3, 5 o 7 días hábiles sin un ingreso, en tres tablas.
 
-| Tabla | Quién entra |
-|---|---|
-| 3 a 4 días hábiles | Se apagaron esta semana |
-| 5 a 6 días hábiles | Ya es un patrón |
-| 7 días hábiles o más | Incluye a los que no registran ningún ingreso en la ventana |
-
-Cuatro decisiones que conviene conocer, todas en `CONFIG.AVISO`:
-
-- **Los tramos son excluyentes.** Un proveedor aparece en una sola
-  tabla. Si fueran acumulativos, el que lleva ocho días saldría en las
-  tres y el correo diría tres veces lo mismo.
-- **Los días son hábiles, no corridos.** Con días corridos, un proveedor
-  que despachó el viernes aparecería todos los lunes con tres días de
-  silencio sin que hubiera pasado nada. Usa los mismos días hábiles y
-  feriados que el prorrateo del plan.
-- **Una fila por proveedor, no por fila del Plan.** «No está
-  despachando» se resuelve con una llamada, y la llamada es una sola
-  aunque tenga tres subproductos comprometidos; la columna de
-  subproductos dice cuáles son.
-- **Sábado y domingo no sale.** El número no cambia —no son días
-  hábiles— y el correo saldría idéntico al del viernes. Se controla con
-  `SOLO_HABILES`.
-
-El encabezado del correo repite hasta qué fecha hay datos reales y hasta
-cuándo llega la planilla: sin eso, un proveedor puede parecer callado
-cuando lo que está atrasado es la carga.
-
-Si no hay nadie atrasado, el correo igual sale diciéndolo. Un correo que
-no llega es ambiguo: puede ser que esté todo al día o que el script haya
-fallado.
-
-Se instala desde el menú (**Instalar aviso diario**) y se puede mandar a
-mano con **Enviar aviso de sin despachar (ahora)**, que salta el filtro
-de día hábil.
+**Vive en un proyecto de Apps Script aparte**, en `alertas/`, y no
+necesita que nadie abra la web: el disparador horario corre solo con
+la autorización de quien lo instaló. Cómo instalarlo y por qué toma
+las decisiones que toma, en [`alertas/README.md`](alertas/README.md).
 
 ## Instalación
 
@@ -297,8 +246,6 @@ clasp push
 | Diagnosticar cruce Ingresos vs planilla| Qué materiales y proveedores no están cruzando  |
 | Validar hoja Plan                      | Solo lee y valida; no modifica formato          |
 | Ubicar en el mapa                      | Geocodifica los aserraderos de la hoja Mapeos   |
-| Enviar aviso de sin despachar (ahora)  | Manda el correo del día al instante             |
-| Instalar / Eliminar aviso diario       | Disparador diario del correo de proveedores     |
 
 ## Origen de la planilla
 

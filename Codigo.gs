@@ -201,7 +201,7 @@ const INFORME_HEADERS = Object.freeze([
  * ===================================================================== */
 
 function onOpen() {
-  const menu = SpreadsheetApp.getUi()
+  SpreadsheetApp.getUi()
     .createMenu('Astilla Dashboard')
     .addItem('Abrir dashboard', 'abrirDashboard')
     .addSeparator()
@@ -233,16 +233,8 @@ function onOpen() {
     .addItem('Preparar hoja de apuntes', 'instalarApuntes')
     .addSeparator()
     .addItem('Instalar automatización', 'instalarDisparador')
-    .addItem('Eliminar automatización', 'eliminarDisparadores');
-
-  // Alertas.gs se agrega solo. Si ese archivo no está en el proyecto,
-  // el menú sale sin esos ítems en vez de romperse: es un añadido,
-  // no una pieza de la que dependa el panel.
-  if (typeof menuAlertas_ === 'function') {
-    menuAlertas_(menu);
-  }
-
-  menu.addToUi();
+    .addItem('Eliminar automatización', 'eliminarDisparadores')
+    .addToUi();
 }
 
 function doGet() {
