@@ -42,9 +42,16 @@ llegaron a SAP.
 
 | Archivo            | Qué es                                            |
 |--------------------|---------------------------------------------------|
-| `Codigo.gs`        | Todo el servidor: lectura, cruces, Gmail, Calendar |
+| `Codigo.gs`        | El servidor: lectura, cruces, Gmail, Calendar      |
+| `Alertas.gs`       | Las alertas por correo. Aparte y opcional          |
 | `Index.html`       | El dashboard (HTML + CSS + JS en un archivo)       |
 | `appsscript.json`  | Manifiesto: zona horaria, scopes y Drive API v3    |
+
+`Alertas.gs` es un añadido, no una pieza del panel: si se borra del
+proyecto, el dashboard sigue igual y el menú sale sin sus ítems —
+`Codigo.gs` los agrega solo si la función existe. La dependencia va en
+un solo sentido: las alertas leen `getDashboardData()`, el panel no
+sabe que las alertas existen.
 
 El envío de correo necesita el scope `script.send_mail`, que ya está en
 el manifiesto: si se instala el aviso diario sobre una autorización
@@ -203,6 +210,23 @@ una conversación sino una fila que falta en el Plan o un alias que falta
 en Proveedores: eso se cuenta al pie del panel y se arregla en la hoja.
 
 ## Aviso diario de proveedores sin despachar
+
+Vive en `Alertas.gs`, separado del panel.
+
+### Quién lo ejecuta
+
+**Nadie tiene que abrir la web.** El disparador horario de Apps Script
+corre solo, con la autorización de quien lo instaló desde el menú,
+aunque no haya nadie conectado; el correo sale desde esa cuenta. El
+`executeAs: USER_DEPLOYING` del manifiesto es otra cosa: rige para
+quien abre el dashboard, no para el disparador.
+
+Se instala una vez. La cuenta que aprieta **Instalar aviso diario** es
+la que queda ejecutándolo y la que aparece como remitente, así que
+conviene instalarlo desde la cuenta corporativa que corresponde, no
+desde una personal.
+
+### Qué manda
 
 Un correo cada mañana a `francisco.correa@masisa.com` y
 `jaime.rojas@masisa.com` con los proveedores que tienen plan del mes y
