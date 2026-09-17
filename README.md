@@ -115,6 +115,15 @@ llegó, a la derecha lo que se adelantó, contra el plan prorrateado a
 los días hábiles corridos. Se muestran los diez más desviados en
 cualquiera de los dos sentidos, ordenados de la peor brecha a la mejor.
 
+Solo entran los proveedores **con plan este mes**. Uno con fila en la
+hoja `Plan` pero la celda del mes en blanco no tiene brecha que medir:
+como su plan a la fecha es cero, su ingreso entero salía como barra
+verde y parecía el más adelantado del mes, además de empujar fuera del
+top a las brechas de verdad. Se mira el plan del mes y no el
+prorrateado, porque el primer día hábil el prorrateo todavía es cero
+para todos y el filtro vaciaría el gráfico. Si alguno de los excluidos
+igual despachó, la nota del panel lo nombra: falta una fila en el Plan.
+
 El eje se arma sobre el rango real de los datos —no simétrico— porque a
 mitad de mes casi todos caen del mismo lado y media lámina en blanco no
 dice nada. La comparación no se pierde: la escala es lineal, así que un

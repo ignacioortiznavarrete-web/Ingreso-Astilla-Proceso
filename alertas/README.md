@@ -53,6 +53,9 @@ Cuatro decisiones, todas en `Config.gs`:
   silencio sin que hubiera pasado nada.
 - **Una fila por proveedor**, no por fila del Plan: la llamada es una
   sola aunque tenga tres subproductos comprometidos.
+- **Solo entran los que tienen plan este mes.** Una fila del Plan con
+  la celda del mes en blanco no compromete nada, así que ese proveedor
+  no aparece por mucho que lleve semanas sin despachar.
 - **Sábado y domingo no sale** (`SOLO_HABILES`), porque el número no
   cambia y el correo sería idéntico al del viernes.
 

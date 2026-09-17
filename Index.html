@@ -3038,7 +3038,8 @@
                 Cuánto le falta o le sobra a cada proveedor contra su
                 plan prorrateado a los días hábiles corridos, en TS. A
                 la izquierda lo que no llegó; a la derecha, lo que se
-                adelantó.
+                adelantó. Solo entran los que tienen plan este mes.
+                <span id="brechaSinPlan"></span>
               </p>
             </div>
             <div class="conteo" id="conteoBrecha">—</div>
@@ -6175,11 +6176,14 @@
         if (!nombre) { return; }
 
         if (!porProveedor[nombre]) {
-          porProveedor[nombre] = { proveedor: nombre, total: 0, plan: 0 };
+          porProveedor[nombre] = {
+            proveedor: nombre, total: 0, plan: 0, planMes: 0
+          };
         }
 
         porProveedor[nombre].total += Number(x.total) || 0;
         porProveedor[nombre].plan += Number(x.planToDate) || 0;
+        porProveedor[nombre].planMes += Number(x.monthlyPlan) || 0;
       });
 
       var todos = Object.keys(porProveedor).map(function(k) {
@@ -6189,9 +6193,22 @@
         x.cumplimiento = x.plan > 0 ? x.total / x.plan : null;
 
         return x;
-      }).filter(function(x) {
-        return x.plan > 0 || x.total > 0;
       });
+
+      // Sin plan del mes no hay brecha que medir. Antes pasaban, y
+      // como su plan a la fecha es cero, su ingreso entero salía
+      // como barra verde: parecían los más adelantados del mes
+      // cuando lo que pasa es que no tienen nada comprometido, y de
+      // paso empujaban fuera del top a las brechas de verdad.
+      //
+      // Se mira el plan del MES y no el prorrateado: el primer día
+      // hábil el prorrateo todavía es cero para todos, y ahí el
+      // filtro habría vaciado el gráfico entero.
+      var sinPlan = todos.filter(function(x) {
+        return !(x.planMes > 0);
+      });
+
+      todos = todos.filter(function(x) { return x.planMes > 0; });
 
       if (!todos.length) {
         caja.innerHTML = vacio(
@@ -6213,6 +6230,27 @@
 
       setText('conteoBrecha',
         datos.length + ' de ' + todos.length + ' proveedores');
+
+      // Dejar a alguien fuera en silencio se paga después: si tiene
+      // ingresos y no tiene plan, falta una fila en la hoja Plan y
+      // conviene saberlo.
+      var nota = document.getElementById('brechaSinPlan');
+
+      if (nota) {
+        var conIngreso = sinPlan.filter(function(x) { return x.total > 0; });
+
+        nota.innerHTML = conIngreso.length
+          ? ' Fuera de este gráfico: <b>' + conIngreso.length +
+            (conIngreso.length === 1
+              ? ' proveedor despachó</b> sin plan del mes en la hoja '
+              : ' proveedores despacharon</b> sin plan del mes en la hoja ') +
+            esc(DATA.source.planSheetName || 'Plan') + ' (' +
+            esc(conIngreso.map(function(x) {
+              return shortProvider(x.proveedor);
+            }).slice(0, 4).join(', ')) +
+            (conIngreso.length > 4 ? '…' : '') + ').'
+          : '';
+      }
 
       var brechas = datos.map(function(x) { return x.brecha; });
       var minB = Math.min(0, Math.min.apply(null, brechas));

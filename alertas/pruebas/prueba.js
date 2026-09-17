@@ -24,6 +24,9 @@ const hojas = {
     ['', 'GAMMA SA', 44, 1400, 1500, 1500],
     ['', 'DELTA SPA', 40, 700, 800, 800],
     ['', 'OMEGA SPA', 39, 500, 500, 500],
+    // Tiene plan en agosto y en octubre, pero no en septiembre: este
+    // mes no tiene nada comprometido y no debe salir en el correo.
+    ['', 'SIGMA SPA', 38, 600, '', 600],
     ['', 'TOTAL', '', 8200, 8800, 8900]
   ]),
 
@@ -52,7 +55,10 @@ const hojas = {
      '', '', '', '999', '', 'TS', 'P4', 'OMEGA SPA', 'TABLEROS'],
     // Cantidad cero: no es un despacho.
     ['', '', '3000039', 'ASTILLA PINO', new Date(Date.UTC(2026, 8, 15)),
-     '', '', '', '0', '', 'TS', 'P5', 'GAMMA SA', 'TABLEROS']
+     '', '', '', '0', '', 'TS', 'P5', 'GAMMA SA', 'TABLEROS'],
+    // SIGMA despachó hace mucho: si entrara, caería en el tramo alto.
+    ['', '', '3000039', 'ASTILLA PINO', new Date(Date.UTC(2026, 7, 20)),
+     '', '', '', '80', '', 'TS', 'P6', 'SIGMA SPA', 'TABLEROS']
   ]),
 
   // La planilla del reservador: fecha ISO en texto, nombre distinto
@@ -107,6 +113,13 @@ ok(omega.dias === null, 'la fila ERROR de la planilla no cuenta como despacho');
 ok(omega.ingresado === 0, 'el aserrín no es astilla de proceso');
 
 ok(aviso.mes === 'SEP-2026', 'toma la columna del mes en curso', aviso.mes);
+
+// Sin plan este mes no hay nada que reclamar, aunque lleve semanas
+// sin despachar: no está comprometido a nada.
+const sigma = aviso.proveedores.filter(p => p.proveedor === 'SIGMA SPA')[0];
+ok(!sigma, 'el que no tiene plan este mes no entra al correo',
+   sigma && JSON.stringify(sigma));
+ok(!/SIGMA/.test(JSON.stringify(porTramo)), 'ni aparece en ningún tramo');
 
 // --- 2. El correo ------------------------------------------------------
 ctx.enviarAhora();
