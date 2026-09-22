@@ -209,22 +209,48 @@ dice nada. La comparación no se pierde: la escala es lineal, así que un
 Depende del plan prorrateado, así que solo aparece con el mes vigente
 seleccionado; con cualquier otro rango dice por qué no está.
 
-### Lo que caduca
+### Feriados: se calculan, no se escriben
 
-Dos cosas del panel están escritas a mano y se acaban. Las dos avisan
-solas en la nota de arriba de Suministro cuando llega el momento:
+Eran una lista escrita a mano que terminaba el 25-12-2026. Una lista así
+no se acaba con un aviso: se acaba en silencio. Pasado el último año, el
+1 de enero y el 18 de septiembre pasan a contar como días hábiles, el
+plan a la fecha queda inflado, el mapeo `Dia N` de Proyección se corre y
+el correo cuenta mal los días de silencio. Nadie se entera hasta que los
+números están mal hace semanas.
+
+Ahora `CONFIG.FERIADOS` los calcula para el año en curso y dos a cada
+lado, cada vez que se abre el panel. No hay nada que renovar.
+
+| Feriado | De dónde sale |
+|---|---|
+| Viernes y Sábado Santo | Domingo de Pascua, algoritmo gregoriano anónimo |
+| Pueblos Indígenas | Solsticio de junio (Ley 21.357), fórmula de Meeus en hora de Chile |
+| 29 de junio y 12 de octubre | Ley 19.973: al lunes de su semana si caen martes a jueves, al lunes siguiente si caen viernes |
+| 31 de octubre | Ley 20.299: al viernes anterior si cae martes, al siguiente si cae miércoles |
+| Los nueve de fecha fija | Tal cual |
+
+Al contrastar el cálculo contra la lista vieja apareció, de paso, que el
+Viernes Santo de 2024 estaba escrito como 19-04 —que es el de 2025— y el
+de verdad, 29-03, faltaba.
+
+**Lo único que sigue a mano** es `FERIADOS_EXTRA`: el feriado que declara
+una ley puntual y ninguna regla predice, como el lunes 21-09-2026. Son
+uno cada varios años y olvidarlo cuesta un día, no la lista entera.
+
+`alertas/Feriados.gs` es una copia del mismo módulo —son dos proyectos de
+Apps Script distintos, no comparten código—. `alertas/pruebas/feriados.js`
+corre las dos copias contra el calendario real de 2024, 2025 y 2026 y
+exige que den lo mismo, así que si una se toca sin la otra, la prueba lo
+dice.
+
+### Lo que sí caduca
 
 | Qué | Cuándo | Qué pasa si nadie lo toca |
 |---|---|---|
-| `CONFIG.FERIADOS` | Llega hasta **2026-12-25** | Desde 2027 el 1 de enero y el 18 de septiembre cuentan como días hábiles: el plan a la fecha queda inflado, el mapeo `Dia N` se corre y el correo cuenta mal los días de silencio |
 | Columnas de `Proyeccion` | Cada mes de menos de 23 días hábiles | Los camiones escritos en las columnas que sobran se descartan |
 
-El aviso de los feriados se dispara cuando el último año cargado queda
-por detrás del mes vigente, no por una fecha fija: si se agregan los de
-2027, desaparece solo.
-
-**Ojo:** `alertas/Config.gs` tiene su propia copia de la lista de
-feriados. Hay que actualizar las dos.
+Avisa solo en la nota de arriba de Suministro: dice cuántos camiones
+quedaron fuera y en qué columnas están.
 
 ### Cuánta historia se ve
 

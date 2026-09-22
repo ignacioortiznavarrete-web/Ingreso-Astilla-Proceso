@@ -74,17 +74,14 @@ const CONFIG = Object.freeze({
   // 0=domingo ... 6=sábado. Igual que en el dashboard.
   WORKDAYS: Object.freeze([1, 2, 3, 4, 5]),
 
-  FERIADOS: Object.freeze([
-    '2025-01-01', '2025-04-18', '2025-04-19', '2025-05-01',
-    '2025-05-21', '2025-06-20', '2025-06-29', '2025-07-16',
-    '2025-08-15', '2025-09-18', '2025-09-19', '2025-10-12',
-    '2025-10-31', '2025-11-01', '2025-12-08', '2025-12-25',
-
-    '2026-01-01', '2026-04-03', '2026-04-04', '2026-05-01',
-    '2026-05-21', '2026-06-29', '2026-07-16', '2026-08-15',
-    '2026-09-18', '2026-09-19', '2026-09-21', '2026-10-12',
-    '2026-10-31', '2026-11-01', '2026-12-08', '2026-12-25'
-  ]),
+  // Feriados: calculados, no escritos. Una lista a mano se acaba en
+  // silencio y a partir de ahí el 18 de septiembre cuenta como día
+  // hábil. La misma función que usa el panel, en Feriados.gs.
+  //
+  // Va como getter para no depender del orden en que Apps Script
+  // carga los archivos: este corre antes que Feriados.gs y llamar la
+  // función acá mismo reventaría al abrir el proyecto.
+  get FERIADOS() { return feriadosDelPanel_(); },
 
   // Solo estos materiales son astilla de proceso. Igual que en el
   // dashboard: si aparece uno nuevo, hay que agregarlo en los dos.

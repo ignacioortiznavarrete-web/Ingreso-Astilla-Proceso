@@ -17,8 +17,9 @@ corporativa que corresponde, no desde una personal.
 ## Instalar
 
 1. [script.google.com](https://script.google.com) → **Nuevo proyecto**.
-2. Pegar los tres archivos como archivos separados del proyecto:
-   `Config.gs`, `Lectura.gs`, `Aviso.gs`.
+2. Pegar los cuatro archivos como archivos separados del proyecto:
+   `Config.gs`, `Feriados.gs`, `Lectura.gs`, `Aviso.gs`. El orden en que
+   queden no importa: nada se calcula al cargar.
 3. En el ícono de engranaje del editor, marcar «Mostrar el archivo de
    manifiesto» y reemplazar `appsscript.json` por el de esta carpeta.
    (Alternativa: dejar el manifiesto como viene; los permisos se piden
@@ -86,15 +87,25 @@ sumar cada día sin contar dos veces— que aquí no se pregunta. Es menos
 código y una cosa menos que se puede desincronizar.
 
 Lo que **sí** está duplicado del dashboard son constantes y funciones
-puras: códigos de material, feriados, días hábiles y la normalización
-de nombres de proveedor. Están todas juntas en `Config.gs` y
-`comparable_()` para que se vean de una mirada. Si alguna cambia en el
-panel, hay que cambiarla también acá.
+puras: códigos de material, días hábiles y la normalización de nombres
+de proveedor. Están todas juntas en `Config.gs` y `comparable_()` para
+que se vean de una mirada. Si alguna cambia en el panel, hay que
+cambiarla también acá.
+
+Los feriados también son copia, pero de esos se encarga una prueba.
+`Feriados.gs` los calcula —Pascua, solsticio de junio y los traslados
+de las leyes 19.973 y 20.299— en vez de tenerlos escritos, así que no
+se acaban nunca. `pruebas/feriados.js` corre esta copia y la del panel
+contra el calendario real y falla si se separan. Lo único a mano es
+`FERIADOS_EXTRA`, para el feriado que declara una ley puntual.
+
+`Feriados.gs` no depende de ningún otro archivo: se puede copiar solo.
 
 ## Pruebas
 
 ```
 node pruebas/prueba.js
+node pruebas/feriados.js
 ```
 
 Corre los `.gs` en node con hojas falsas que imitan la forma real
@@ -102,3 +113,11 @@ Corre los `.gs` en node con hojas falsas que imitan la forma real
 arrastrado, filas `TOTAL`, filas con `Estado: ERROR`, materiales que
 no son astilla). Cubre el cruce por alias, los tres tramos, el salto
 del sábado, el caso sin atrasados y el Plan sin columna del mes.
+`Config.gs` se carga **antes** que `Feriados.gs` a propósito: es el
+orden que reventaría si alguien volviera a calcular los feriados al
+cargar el archivo en vez de pedirlos cuando se usan.
+
+`feriados.js` compara los feriados calculados —los de acá y los del
+panel— contra el calendario oficial de 2024, 2025 y 2026, revisa los
+traslados por ley uno por uno y comprueba que con un «hoy» de 2099 la
+lista siga cubriendo el año en curso y los dos siguientes.

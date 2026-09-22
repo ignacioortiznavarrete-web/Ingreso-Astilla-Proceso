@@ -35,6 +35,187 @@
  *   3009003 -> ASTILLA EUCALYPTUS NITENS
  */
 
+/* =====================================================================
+ * FERIADOS DE CHILE, CALCULADOS
+ *
+ * Antes eran una lista escrita a mano que llegaba hasta el 25-12-2026.
+ * Una lista así no se acaba con un aviso: se acaba en silencio, y a
+ * partir de ahí el 18 de septiembre cuenta como día hábil, el plan a
+ * la fecha queda inflado y nadie se entera. Peor: al contrastar la
+ * lista contra el cálculo apareció que el Viernes Santo de 2024 estaba
+ * escrito como 19-04 —que es el de 2025— y el de verdad, 29-03,
+ * faltaba.
+ *
+ * Lo que sí queda a mano es FERIADOS_EXTRA: los que agrega una ley
+ * puntual y ninguna regla predice, como el lunes 21-09-2026. Son uno
+ * cada varios años y su ausencia cuesta un día, no la lista entera.
+ * ===================================================================== */
+
+const FERIADOS_EXTRA = Object.freeze([
+  // Venía en la lista escrita a mano: el lunes posterior al 18 y 19,
+  // que ese año caen viernes y sábado. Ninguna regla lo predice, así
+  // que se conserva tal cual. Si resultara no ser feriado, se borra
+  // la línea y listo.
+  '2026-09-21'
+]);
+
+/** Domingo de Pascua (algoritmo gregoriano anónimo). */
+function pascuaDe_(anio) {
+  const a = anio % 19;
+  const b = Math.floor(anio / 100);
+  const c = anio % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+
+  return new Date(Date.UTC(anio, mes - 1, dia));
+}
+
+/**
+ * Solsticio de junio en hora de Chile: el Día Nacional de los Pueblos
+ * Indígenas (Ley 21.357) cae ahí, y no es un 20 ni un 21 fijo.
+ *
+ * Fórmula de Meeus. Junio siempre es invierno acá, así que el huso es
+ * UTC-4 sin excepción de horario de verano.
+ */
+function solsticioJunio_(anio) {
+  const Y = (anio - 2000) / 1000;
+
+  let JDE = 2451716.56767 + 365241.62603 * Y + 0.00325 * Y * Y +
+    0.00888 * Math.pow(Y, 3) - 0.00030 * Math.pow(Y, 4);
+
+  const T = (JDE - 2451545.0) / 36525;
+  const W = 35999.373 * T - 2.47;
+  const rad = Math.PI / 180;
+  const lambda = 1 + 0.0334 * Math.cos(W * rad) +
+    0.0007 * Math.cos(2 * W * rad);
+
+  const TERMINOS = [
+    [485, 324.96, 1934.136], [203, 337.23, 32964.467],
+    [199, 342.08, 20.186], [182, 27.85, 445267.112],
+    [156, 73.14, 45036.886], [136, 171.52, 22518.443],
+    [77, 222.54, 65928.934], [74, 296.72, 3034.906],
+    [70, 243.58, 9037.513], [58, 119.81, 33718.147],
+    [52, 297.17, 150.678], [50, 21.02, 2281.226],
+    [45, 247.54, 29929.562], [44, 325.15, 31555.956],
+    [29, 60.93, 4443.417], [18, 155.12, 67555.328],
+    [17, 288.79, 4562.452], [16, 198.04, 62894.029],
+    [14, 199.76, 31436.921], [12, 95.39, 14577.848],
+    [12, 287.11, 31931.756], [12, 320.81, 34777.259],
+    [9, 227.73, 1222.114], [8, 15.45, 16859.074]
+  ];
+
+  let S = 0;
+
+  TERMINOS.forEach(function(t) {
+    S += t[0] * Math.cos((t[1] + t[2] * T) * rad);
+  });
+
+  JDE += (0.00001 * S) / lambda;
+
+  return new Date((JDE - 2440587.5) * 86400000 - 4 * 3600000);
+}
+
+function masDias_(fecha, n) {
+  return new Date(fecha.getTime() + n * 86400000);
+}
+
+function claveDeFecha_(fecha) {
+  return buildDateKey_(
+    fecha.getUTCFullYear(),
+    fecha.getUTCMonth() + 1,
+    fecha.getUTCDate()
+  );
+}
+
+/**
+ * Ley 19.973: el 29 de junio y el 12 de octubre se corren al lunes de
+ * su misma semana si caen martes, miércoles o jueves, y al lunes
+ * siguiente si caen viernes.
+ */
+function aLunes_(fecha) {
+  const dow = fecha.getUTCDay();
+
+  if (dow >= 2 && dow <= 4) { return masDias_(fecha, -(dow - 1)); }
+  if (dow === 5) { return masDias_(fecha, 3); }
+
+  return fecha;
+}
+
+/**
+ * Ley 20.299: el Día de las Iglesias Evangélicas se corre al viernes
+ * anterior si el 31 de octubre cae martes, y al siguiente si cae
+ * miércoles.
+ */
+function aViernes_(fecha) {
+  const dow = fecha.getUTCDay();
+
+  if (dow === 2) { return masDias_(fecha, -4); }
+  if (dow === 3) { return masDias_(fecha, 2); }
+
+  return fecha;
+}
+
+/** Los feriados nacionales de un año. */
+function feriadosDe_(anio) {
+  const pascua = pascuaDe_(anio);
+
+  return [
+    buildDateKey_(anio, 1, 1),                        // Año Nuevo
+    claveDeFecha_(masDias_(pascua, -2)),              // Viernes Santo
+    claveDeFecha_(masDias_(pascua, -1)),              // Sábado Santo
+    buildDateKey_(anio, 5, 1),                        // Día del Trabajo
+    buildDateKey_(anio, 5, 21),                       // Glorias Navales
+    claveDeFecha_(solsticioJunio_(anio)),             // Pueblos Indígenas
+    claveDeFecha_(aLunes_(new Date(Date.UTC(anio, 5, 29)))),
+    buildDateKey_(anio, 7, 16),                       // Virgen del Carmen
+    buildDateKey_(anio, 8, 15),                       // Asunción
+    buildDateKey_(anio, 9, 18),                       // Independencia
+    buildDateKey_(anio, 9, 19),                       // Glorias del Ejército
+    claveDeFecha_(aLunes_(new Date(Date.UTC(anio, 9, 12)))),
+    claveDeFecha_(aViernes_(new Date(Date.UTC(anio, 9, 31)))),
+    buildDateKey_(anio, 11, 1),                       // Todos los Santos
+    buildDateKey_(anio, 12, 8),                       // Inmaculada
+    buildDateKey_(anio, 12, 25)                       // Navidad
+  ];
+}
+
+let FERIADOS_PANEL = null;
+
+/**
+ * La ventana de años que el panel puede necesitar. La historia llega
+ * como mucho al 1 de enero del año en curso y el plan mira hasta fin
+ * del mes vigente, así que con dos años a cada lado sobra.
+ *
+ * Se calcula la primera vez que alguien pregunta y queda guardado. No
+ * se calcula al cargar el archivo a propósito: Apps Script evalúa los
+ * .gs en el orden del proyecto, y quien pide los feriados puede estar
+ * en un archivo que corre antes que este.
+ */
+function feriadosDelPanel_() {
+  if (FERIADOS_PANEL) { return FERIADOS_PANEL; }
+
+  const anio = new Date().getUTCFullYear();
+  const vistos = {};
+
+  for (let a = anio - 2; a <= anio + 2; a++) {
+    feriadosDe_(a).forEach(function(f) { vistos[f] = true; });
+  }
+
+  FERIADOS_EXTRA.forEach(function(f) { vistos[f] = true; });
+
+  FERIADOS_PANEL = Object.freeze(Object.keys(vistos).sort());
+  return FERIADOS_PANEL;
+}
+
 const CONFIG = Object.freeze({
   SPREADSHEET_ID: '1PNQToRtF7g-obmmOHuoonNGN5-VhhTYnW6SEhK36EOk',
   SHEET_INGRESOS: 'Ingresos',
@@ -100,26 +281,11 @@ const CONFIG = Object.freeze({
   // 0=domingo ... 6=sábado. Agrega el 6 si trabajan sábados.
   WORKDAYS: Object.freeze([1, 2, 3, 4, 5]),
 
-  // Feriados excluidos del prorrateo, formato 'yyyy-MM-dd'.
-  // Lista tomada del dashboard MASISA GIS de este mismo repositorio
-  // (apps-script/Code.gs). Sin esto, el 18 de septiembre y el 1 de
-  // mayo cuentan como días hábiles y el plan a la fecha queda inflado.
-  FERIADOS: Object.freeze([
-    '2024-01-01', '2024-04-19', '2024-05-01', '2024-05-21',
-    '2024-06-20', '2024-06-29', '2024-07-16', '2024-08-15',
-    '2024-09-18', '2024-09-19', '2024-10-12', '2024-10-31',
-    '2024-11-01', '2024-12-08', '2024-12-25',
-
-    '2025-01-01', '2025-04-18', '2025-04-19', '2025-05-01',
-    '2025-05-21', '2025-06-20', '2025-06-29', '2025-07-16',
-    '2025-08-15', '2025-09-18', '2025-09-19', '2025-10-12',
-    '2025-10-31', '2025-11-01', '2025-12-08', '2025-12-25',
-
-    '2026-01-01', '2026-04-03', '2026-04-04', '2026-05-01',
-    '2026-05-21', '2026-06-29', '2026-07-16', '2026-08-15',
-    '2026-09-18', '2026-09-19', '2026-09-21', '2026-10-12',
-    '2026-10-31', '2026-11-01', '2026-12-08', '2026-12-25'
-  ]),
+  // Feriados excluidos del prorrateo. Ya no se escriben: se calculan
+  // para el año en curso y dos a cada lado. Lo único a mano es
+  // FERIADOS_EXTRA, arriba. Se pide, no se guarda: así el cálculo
+  // ocurre recién cuando alguien lo usa.
+  get FERIADOS() { return feriadosDelPanel_(); },
 
   GMAIL_LABEL: '',
   // ÚNICA fuente de correo válida: solo el mensaje enviado por esta
@@ -424,17 +590,6 @@ function getDashboardData() {
     month: month,
     workdays: workdays,
     holidays: CONFIG.FERIADOS.slice(),
-    // La lista de feriados está escrita a mano y se acaba. Cuando el
-    // mes vigente pasa del último año cargado, el 1 de enero y el 18
-    // de septiembre empiezan a contar como días hábiles y el plan a
-    // la fecha queda inflado sin que nadie lo note.
-    feriadosHasta: CONFIG.FERIADOS.length
-      ? CONFIG.FERIADOS[CONFIG.FERIADOS.length - 1].slice(0, 4)
-      : '',
-    feriadosVencidos: CONFIG.FERIADOS.length
-      ? CONFIG.FERIADOS[CONFIG.FERIADOS.length - 1].slice(0, 4) <
-        String(month.year)
-      : true,
     subproductos: SUBPRODUCTOS_OBJETIVO.slice(),
     materialMap: CONFIG.MATERIAL_MAP,
     source: {

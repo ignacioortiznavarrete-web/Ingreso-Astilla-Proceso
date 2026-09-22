@@ -3972,17 +3972,6 @@
           ' de la planilla: ' + esc(huecos.join(', ')) + '.';
       }
 
-      // La lista de feriados está escrita a mano en CONFIG y se
-      // acaba. Sin ella el 18 de septiembre cuenta como día hábil y
-      // todo lo que se prorratea queda mal, en silencio.
-      if (source.feriadosVencidos) {
-        nota += ' <b>Los feriados cargados llegan hasta ' +
-          esc(source.feriadosHasta) + '</b>: desde ' +
-          esc(String(DATA.month.year)) + ' cuentan como días hábiles y ' +
-          'el plan a la fecha queda inflado. Hay que agregarlos en ' +
-          'CONFIG.FERIADOS.';
-      }
-
       // Camiones escritos en columnas de la hoja Proyección que este
       // mes no tienen día hábil. Se descartan, así que se dicen.
       var pr = DATA.proyeccion || {};
