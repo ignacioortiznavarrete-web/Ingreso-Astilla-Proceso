@@ -3036,9 +3036,8 @@
               <p class="panel-nota">
                 Un día hábil por columna. Lo que entra sábado, domingo
                 o feriado se suma al día hábil anterior, que es cuando
-                se despachó de verdad. La línea pizarra es el plan
-                diario.
-                <span id="diasNota"></span>
+                se despachó de verdad, sin columna propia para no
+                confundir. La línea pizarra es el plan diario.
               </p>
             </div>
             <div class="conteo" id="conteoDias">—</div>
@@ -6456,10 +6455,7 @@
 
     function grafDias() {
       var caja = document.getElementById('grafDias');
-      var nota = document.getElementById('diasNota');
       var cubos = cubosDiarios();
-
-      if (nota) { nota.innerHTML = ''; }
 
       if (cubos.error) {
         caja.innerHTML = vacio(cubos.error);
@@ -6469,31 +6465,7 @@
 
       var lista = cubos.dias;
 
-      var conArrastre = lista.filter(function(d) {
-        return d.arrastrados.length;
-      });
-
-      setText('conteoDias',
-        lista.length + ' días hábiles' +
-        (conArrastre.length
-          ? ' · ' + conArrastre.length + ' con arrastre'
-          : ''));
-
-      if (nota && conArrastre.length) {
-        var cuantos = conArrastre.reduce(function(t, d) {
-          return t + d.arrastrados.length;
-        }, 0);
-
-        nota.innerHTML = ' Se arrastraron <b>' + cuantos +
-          (cuantos === 1 ? ' día no hábil</b>' : ' días no hábiles</b>') +
-          ' al hábil anterior: ' +
-          esc(conArrastre.map(function(d) {
-            return d.arrastrados.map(function(f) {
-              return formatDateKey(f);
-            }).join(', ') + ' → ' + formatDateKey(d.fecha);
-          }).slice(0, 4).join('; ')) +
-          (conArrastre.length > 4 ? '…' : '') + '.';
-      }
+      setText('conteoDias', lista.length + ' días hábiles');
 
       var tope = Math.max(
         Math.max.apply(null, lista.map(function(d) { return d.total; })),
@@ -6555,16 +6527,14 @@
             : rotulo(cx, yTope - 7, cifras[i], 'rotulo-verde'));
         }
 
-        // El día del mes, y un punto bajo los que traen arrastre.
+        // Solo el día del mes. El arrastre del fin de semana no se
+        // marca: para la operación el camión del sábado ES del
+        // viernes, y una señal por columna hace preguntar qué pasó
+        // ahí cuando no pasó nada. Queda dicho en la nota del panel,
+        // una vez, y en el globo del día que lo trae.
         partes.push('<text x="' + cx + '" y="' + (M.t + h + 17) +
           '" text-anchor="middle" font-size="9.5">' +
           esc(d.fecha.slice(8)) + '</text>');
-
-        if (d.arrastrados.length) {
-          partes.push('<text x="' + cx + '" y="' + (M.t + h + 29) +
-            '" text-anchor="middle" font-size="9" ' +
-            'fill="var(--madera)">+' + d.arrastrados.length + '</text>');
-        }
       });
 
       if (lista.length && lista[0].plan > 0) {

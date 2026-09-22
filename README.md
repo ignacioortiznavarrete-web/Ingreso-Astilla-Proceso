@@ -121,14 +121,19 @@ responde «qué día se cayó»; el semanal, «cómo viene la semana». Los dos
 juntan las tres cosas de esa conversación: cuánto tocaba, cuánto entró
 y cuánto viene comprometido.
 
-**Lo que entra un día no hábil se suma al día hábil anterior.** Un
-sábado no tiene columna propia, y el camión que llegó ese sábado se
-despachó, en la práctica, en la semana del viernes. Vale igual para un
-feriado en que igual llegó un camión. Antes ese volumen no se perdía
-del total del panel, pero no aparecía en estos gráficos: los dos
-sumaban solo días hábiles y lo del fin de semana quedaba fuera. El
-gráfico diario marca con un `+1` en ámbar los días que traen arrastre
-y la nota dice cuáles.
+**Lo que entra un día no hábil se suma al día hábil anterior, y no se
+muestra aparte.** Un sábado no tiene columna propia: el camión que
+llegó ese sábado se despachó, en la práctica, en la semana del
+viernes. Vale igual para un feriado en que igual llegó un camión.
+Antes ese volumen no se perdía del total del panel, pero no aparecía
+en estos gráficos: los dos sumaban solo días hábiles y lo del fin de
+semana quedaba fuera.
+
+El arrastre **no se marca por columna**. Para la operación el camión
+del sábado ES del viernes, y una señal en esa columna hace preguntar
+qué pasó ahí cuando no pasó nada. La regla se dice una vez en la nota
+del panel, y el globo del día que lo trae nombra la fecha, por si
+alguien va a buscarla.
 
 La hoja **Proyeccion** tiene esta forma:
 
