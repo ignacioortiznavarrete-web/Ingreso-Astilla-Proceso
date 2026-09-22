@@ -57,8 +57,9 @@ manifiesto y sus propios permisos.
 
 ## El panel
 
-Cuatro vistas: **Suministro** (la regla del mes, KPIs, gráficos, tablas
+Cinco vistas: **Suministro** (la regla del mes, KPIs, gráficos, tablas
 y plan de acción), **Comparación** (el año partido por mes),
+**Homologación** (nombres de la planilla que no cruzan con SAP),
 **Mapeos** (aserraderos en el mapa y armado de rutas) y **Apuntes**
 (pauta de la reunión semanal y su registro).
 
@@ -237,6 +238,43 @@ sobre meses cerrados, y la columna de tendencia compara los **dos
 últimos meses cerrados**, no el mes a medias contra el anterior. Sin
 eso, cada proveedor aparecía cayendo un 20% el día 10 del mes.
 
+### Homologación: un proveedor, un nombre
+
+SAP escribe cada proveedor de **una** sola forma. La planilla del
+reservador lo escribe de muchas: `PROMASA S.A.`, `Promasa`,
+`PROMASA SPA`. Cuando un nombre de planilla no cruza, el panel no lo
+corrige: lo deja pasar con el nombre que traía, y ahí aparece un
+proveedor nuevo que en realidad ya existía. **Eso es la duplicidad.**
+
+La vista separa dos casos, que no son lo mismo:
+
+| Caso | Qué pasó | Por qué importa |
+|---|---|---|
+| **Sin par en SAP** | No cruzó con nada y entró con su propio nombre | Cada uno **es** un proveedor repetido en el panel |
+| **Cruzado por parecido** | Cruzó por similitud, no porque alguien lo escribiera | Funciona hasta que el parecido se equivoca, y ahí el volumen se le carga a otro |
+
+Los que cruzan exacto o ya están homologados a mano no aparecen: están
+resueltos y solo llenarían la pantalla.
+
+Cada fila trae el volumen, los camiones, los días y la última fecha
+—para saber cuál corregir primero— y un selector con **los candidatos
+de SAP ordenados por parecido** y, debajo, la lista completa. La lista
+completa no sobra: cuando el nombre no se parece a nada (`LLASA` →
+`LAMINADORA LOS ANGELES`) el parecido no propone nada, y es justo
+cuando hace falta escribirlo.
+
+Asignar escribe la equivalencia en la hoja `Proveedores` y recarga. Se
+escriben las **dos** celdas en la misma fila —proveedor SAP y alias— en
+vez de apoyarse en el arrastre hacia abajo: una fila que depende de la
+de arriba se rompe sola cuando alguien ordena o inserta. Recargar no es
+pereza: el cruce se hace en el servidor al leer las hojas, así que
+tocar la tabla en el navegador mostraría un panel que no corresponde a
+ningún dato.
+
+Arriba se avisa de lo que hay que arreglar en la hoja a mano: alias
+repetidos apuntando a dos SAP distintos (mientras estén así no cruzan)
+y alias escritos sin proveedor SAP a la izquierda.
+
 ### Filtrar y ordenar
 
 Cada tabla lleva su propia tira de mandos: búsqueda, las facetas que esa
@@ -302,6 +340,7 @@ clasp push
 | Diagnosticar cruce Ingresos vs planilla| Qué materiales y proveedores no están cruzando  |
 | Validar hoja Plan                      | Solo lee y valida; no modifica formato          |
 | Ubicar en el mapa                      | Geocodifica los aserraderos de la hoja Mapeos   |
+| Rellenar proveedores sugeridos         | Vuelca los nombres sin par al final de la hoja  |
 
 ## Origen de la planilla
 

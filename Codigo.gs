@@ -475,6 +475,11 @@ function getDashboardData() {
       materialesSinReconocer: ingresos.materialesSinReconocer,
       homologacion: {
         hoja: CONFIG.SHEET_PROVEEDORES,
+        revision: buildHomologacionPendiente_(
+          rows,
+          ingresos.proveedores,
+          homologacion
+        ),
         existe: !homologacion.missingSheet,
         alias: homologacion.alias,
         proveedores: homologacion.canonicos.length,
@@ -1933,6 +1938,218 @@ function instalarProveedores() {
     'en la primera fila del grupo. Una fila en blanco separa un grupo ' +
     'del siguiente.'
   );
+}
+
+/* =====================================================================
+ * HOMOLOGACIÓN · NOMBRES DE LA PLANILLA QUE NO SON LOS DE SAP
+ *
+ * SAP escribe cada proveedor de UNA sola forma. El reservador lo
+ * escribe de muchas: "PROMASA S.A.", "Promasa", "PROMASA SPA".
+ * Cuando uno de esos nombres no cruza, el panel no lo corrige: lo
+ * deja pasar con el nombre de la planilla, y ahí aparece un proveedor
+ * nuevo que en realidad ya existía. Eso es la duplicidad.
+ *
+ * Esto arma la lista de los que hay que revisar, con los candidatos
+ * de SAP ordenados por parecido, para poder asignarlos desde el panel
+ * en vez de ir a escribir la hoja a mano.
+ * ===================================================================== */
+
+/**
+ * Los nombres de planilla que merecen una mirada, agrupados.
+ *
+ * Dos casos, y son distintos:
+ *
+ *   sinPar     no cruzó con nada y entró con su propio nombre. Cada
+ *              uno de estos ES un proveedor duplicado en el panel.
+ *   porParecido cruzó por similitud, no porque alguien lo escribiera.
+ *              Funciona, pero nadie lo confirmó: si el parecido se
+ *              equivocó, el volumen se le está cargando a otro.
+ *
+ * Los que cruzan exacto o están homologados a mano no salen: ya están
+ * resueltos y llenarían la pantalla de ruido.
+ */
+function buildHomologacionPendiente_(rows, proveedoresSap, homologacion) {
+  const grupos = {};
+
+  (rows || []).forEach(function(row) {
+    if (row.source !== 'PLANILLA') { return; }
+
+    const crudo = text_(row.proveedorRaw);
+    const metodo = row.matchMethod || '';
+
+    if (!crudo) { return; }
+
+    if (
+      metodo !== 'Solo en planilla' &&
+      metodo !== 'Coincidencia aproximada'
+    ) {
+      return;
+    }
+
+    const clave = normalizeKey_(crudo);
+
+    if (!grupos[clave]) {
+      grupos[clave] = {
+        alias: crudo,
+        metodo: metodo,
+        resuelto: text_(row.proveedor),
+        ts: 0,
+        camiones: 0,
+        fechas: {},
+        subproductos: {}
+      };
+    }
+
+    const g = grupos[clave];
+
+    g.ts += Number(row.ts) || 0;
+    g.camiones += Number(row.camiones) || 0;
+    g.fechas[row.fecha] = true;
+
+    if (row.subproducto) { g.subproductos[row.subproducto] = true; }
+  });
+
+  const lista = Object.keys(grupos).map(function(clave) {
+    const g = grupos[clave];
+    const fechas = Object.keys(g.fechas).sort();
+
+    return {
+      alias: g.alias,
+      metodo: g.metodo,
+      sinPar: g.metodo === 'Solo en planilla',
+      // Con qué se está cruzando hoy. En los sin par es su propio
+      // nombre, que es justamente el problema.
+      resuelto: g.resuelto,
+      ts: round_(g.ts, 2),
+      camiones: g.camiones,
+      dias: fechas.length,
+      primera: fechas[0] || '',
+      ultima: fechas[fechas.length - 1] || '',
+      subproductos: Object.keys(g.subproductos).sort(),
+      candidatos: candidatosSap_(g.alias, proveedoresSap)
+    };
+  });
+
+  // Primero los que no cruzan, y dentro de cada grupo el que más
+  // volumen mueve: ese es el que más distorsiona el panel.
+  lista.sort(function(a, b) {
+    if (a.sinPar !== b.sinPar) { return a.sinPar ? -1 : 1; }
+
+    return b.ts - a.ts;
+  });
+
+  return {
+    lista: lista,
+    sinPar: lista.filter(function(x) { return x.sinPar; }).length,
+    porParecido: lista.filter(function(x) { return !x.sinPar; }).length,
+    tsSinPar: round_(lista.reduce(function(t, x) {
+      return t + (x.sinPar ? x.ts : 0);
+    }, 0), 2),
+    proveedoresSap: (proveedoresSap || []).slice().sort(),
+    conflictos: homologacion.conflictos || [],
+    huerfanos: homologacion.pendientes || []
+  };
+}
+
+/** Los mejores candidatos de SAP para un nombre, con su parecido. */
+function candidatosSap_(nombre, proveedoresSap) {
+  const limpio = proveedorComparable_(nombre);
+
+  if (!limpio) { return []; }
+
+  return (proveedoresSap || []).map(function(sap) {
+    return {
+      proveedor: sap,
+      score: round_(
+        proveedorSimilitud_(limpio, proveedorComparable_(sap)),
+        3
+      )
+    };
+  }).filter(function(x) {
+    // Bajo 0,3 no es un candidato, es ruido: con veinte proveedores
+    // en SAP siempre hay alguno que comparte una letra.
+    return x.score >= 0.3;
+  }).sort(function(a, b) {
+    return b.score - a.score;
+  }).slice(0, 5);
+}
+
+/**
+ * Escribe una equivalencia en la hoja Proveedores.
+ *
+ * Se escriben las DOS celdas en la misma fila —SAP y alias— en vez de
+ * apoyarse en el arrastre hacia abajo: una fila que depende de la de
+ * arriba se rompe sola cuando alguien ordena o inserta.
+ *
+ * Devuelve la homologación recalculada para que el panel se refresque
+ * sin volver a leer toda la planilla.
+ */
+function asignarProveedor(alias, proveedorSap) {
+  const nombreAlias = text_(alias);
+  const nombreSap = text_(proveedorSap);
+
+  if (!nombreAlias || !nombreSap) {
+    throw new Error('Hacen falta el nombre de la planilla y el de SAP.');
+  }
+
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROVEEDORES);
+
+  if (!sheet) {
+    throw new Error(
+      'No existe la hoja "' + CONFIG.SHEET_PROVEEDORES +
+      '". Corre "Preparar hoja de proveedores".'
+    );
+  }
+
+  const columnas = columnasProveedores_(sheet);
+  const previo = leerProveedores_(spreadsheet);
+  const claveAlias = normalizeKey_(nombreAlias);
+  const yaApunta = previo.porAlias[claveAlias];
+
+  if (
+    yaApunta &&
+    normalizeKey_(yaApunta) !== normalizeKey_(nombreSap)
+  ) {
+    throw new Error(
+      '"' + nombreAlias + '" ya está escrito apuntando a "' + yaApunta +
+      '". Corrígelo en la hoja ' + CONFIG.SHEET_PROVEEDORES +
+      ' antes de reasignarlo.'
+    );
+  }
+
+  if (yaApunta) {
+    return {
+      escrito: false,
+      motivo: 'Ya estaba escrito así.',
+      alias: nombreAlias,
+      sap: nombreSap
+    };
+  }
+
+  const fila = sheet.getLastRow() + 1;
+
+  sheet.getRange(fila, columnas.sap).setValue(nombreSap);
+  sheet.getRange(fila, columnas.alias).setValue(nombreAlias);
+
+  if (columnas.origen) {
+    sheet.getRange(fila, columnas.origen).setValue('Panel');
+  }
+
+  if (columnas.actualizado) {
+    sheet.getRange(fila, columnas.actualizado).setValue(new Date());
+  }
+
+  if (columnas.actualizadoPor) {
+    sheet.getRange(fila, columnas.actualizadoPor).setValue(autorActual_());
+  }
+
+  return {
+    escrito: true,
+    alias: nombreAlias,
+    sap: nombreSap,
+    fila: fila
+  };
 }
 
 function resolveProveedor_(rawName, candidates, homologacion) {

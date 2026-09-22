@@ -1212,6 +1212,9 @@
 
     .val-riesgo { color: var(--ladrillo); }
     .val-verde { color: var(--verde); }
+    /* Madera es "no confirmado", igual que en los gráficos: algo que
+       funciona pero que nadie escribió. */
+    .val-madera { color: var(--madera); }
 
     /* ---------------------------------------------------------------
        PANELES
@@ -2540,6 +2543,22 @@
     .recado-bien { color: var(--verde); background: var(--verde-soft); }
     .recado-guia { color: var(--pizarra); background: var(--pizarra-soft); }
 
+    /* La celda de asignar: el selector manda y el botón no se
+       encoge, para que el nombre largo de un proveedor no lo aplaste
+       contra el borde. */
+    .homo-asignar {
+      display: flex; gap: var(--s2); align-items: center;
+      min-width: 320px;
+    }
+
+    .homo-asignar select { flex: 1 1 auto; min-width: 0; }
+    .homo-asignar .boton { flex: 0 0 auto; min-height: 32px; }
+
+    .homo-hoy {
+      margin-top: 2px;
+      font-size: var(--t-mini); color: var(--ink-3);
+    }
+
     .tablero {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
@@ -2791,6 +2810,17 @@
             <path d="M3 20h18"/>
           </svg>
           <span class="pestana-nombre">Comparación</span>
+        </button>
+        <button class="pestana" id="pesHomologacion" role="tab"
+                aria-selected="false" aria-controls="vistaHomologacion"
+                onclick="verVista('homologacion')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round"
+               stroke-linejoin="round">
+            <path d="M8 7h9M8 7 5.5 4.5M8 7l-2.5 2.5"/>
+            <path d="M16 17H7m9 0 2.5-2.5M16 17l2.5 2.5"/>
+          </svg>
+          <span class="pestana-nombre">Homologación</span>
         </button>
         <button class="pestana" id="pesMapeos" role="tab"
                 aria-selected="false" aria-controls="vistaMapeos"
@@ -3333,6 +3363,60 @@
       </div>
     </section>
 
+    <!-- ====================== HOMOLOGACIÓN ====================== -->
+    <section id="vistaHomologacion" role="tabpanel"
+             aria-labelledby="pesHomologacion" hidden>
+      <div class="portada">
+        <div>
+          <h2 class="titulo-vista">Un proveedor, un nombre</h2>
+          <p class="portada-nota">
+            SAP escribe cada proveedor de una sola forma; la planilla,
+            de muchas. Cuando un nombre no cruza, el panel lo deja
+            pasar tal cual y ese proveedor aparece dos veces. Acá se
+            asignan.
+          </p>
+        </div>
+
+        <div class="portada-cifras" id="homoCifras"></div>
+      </div>
+
+      <div class="pila">
+        <div class="aviso aviso-ojo" id="homoOjo"></div>
+        <div class="recado" id="homoRecado"></div>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
+              <h2>Sin par en SAP</h2>
+              <p class="panel-nota">
+                No cruzaron con nada y entraron con su propio nombre:
+                cada uno de estos es un proveedor repetido en el panel.
+                Elige a cuál de SAP corresponde y queda escrito en la
+                hoja Proveedores.
+              </p>
+            </div>
+            <div class="conteo" id="homoConteoSinPar">—</div>
+          </div>
+          <div id="homoSinPar"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
+              <h2>Cruzados por parecido</h2>
+              <p class="panel-nota">
+                Estos sí cruzan, pero por similitud y no porque alguien
+                lo escribiera. Funcionan hasta que el parecido se
+                equivoca. Confirmarlos los deja fijos.
+              </p>
+            </div>
+            <div class="conteo" id="homoConteoParecido">—</div>
+          </div>
+          <div id="homoParecido"></div>
+        </article>
+      </div>
+    </section>
+
     <!-- ========================= MAPEOS ========================= -->
     <section id="vistaMapeos" role="tabpanel" aria-labelledby="pesMapeos" hidden>
       <div class="portada portada-mapeos">
@@ -3702,6 +3786,9 @@
       comparacion: {
         seccion: 'vistaComparacion', pestana: 'pesComparacion'
       },
+      homologacion: {
+        seccion: 'vistaHomologacion', pestana: 'pesHomologacion'
+      },
       mapeos: { seccion: 'vistaMapeos', pestana: 'pesMapeos' },
       apuntes: { seccion: 'vistaApuntes', pestana: 'pesApuntes' }
     });
@@ -3732,6 +3819,8 @@
       if (cual === 'comparacion' && !COMP_PINTADA) {
         dibujarComparacion();
       }
+
+      if (cual === 'homologacion') { dibujarHomologacion(); }
 
       if (cual === 'mapeos') {
         if (!MAPEOS_PEDIDOS) { cargarMapeos(); }
@@ -3766,6 +3855,11 @@
             renderAll();
 
             if (VISTA === 'comparacion') { dibujarComparacion(); }
+
+            // Asignar un proveedor recarga estando en esta vista: sin
+            // esto la lista quedaría mostrando el nombre que se acaba
+            // de resolver.
+            if (VISTA === 'homologacion') { dibujarHomologacion(); }
           } catch (err) {
             showError(
               'Los datos llegaron, pero no se pudieron dibujar.\n\n' +
@@ -10412,6 +10506,248 @@
         '<td class="number">' + formatInteger(cargas) +
         '</td><td></td><td></td></tr>';
     }
+
+/* =====================================================================
+ * HOMOLOGACIÓN DE PROVEEDORES
+ *
+ * SAP escribe cada proveedor de una sola forma. La planilla, de
+ * muchas. Cuando un nombre de planilla no cruza, el panel lo deja
+ * pasar tal cual y aparece un proveedor nuevo que ya existía: eso es
+ * la duplicidad que esta vista viene a cerrar.
+ *
+ * La asignación escribe en la hoja Proveedores, que es la que manda
+ * sobre el parecido automático. Después de escribir hay que recargar:
+ * el cruce se hace en el servidor al leer, no acá.
+ * ===================================================================== */
+
+    var HOMO_OCUPADO = false;
+
+    function homoDatos() {
+      return ((DATA.source || {}).homologacion || {}).revision || {
+        lista: [], sinPar: 0, porParecido: 0, tsSinPar: 0,
+        proveedoresSap: [], conflictos: [], huerfanos: []
+      };
+    }
+
+    function dibujarHomologacion() {
+      var r = homoDatos();
+
+      homoCifras(r);
+      homoAvisos(r);
+      homoTabla('homoSinPar', 'homoConteoSinPar',
+        r.lista.filter(function(x) { return x.sinPar; }), true, r);
+      homoTabla('homoParecido', 'homoConteoParecido',
+        r.lista.filter(function(x) { return !x.sinPar; }), false, r);
+
+      CONTEXTO.homologacion = r.sinPar
+        ? r.sinPar + (r.sinPar === 1 ? ' nombre sin par' : ' nombres sin par')
+        : 'Todos los nombres cruzan';
+
+      if (VISTA === 'homologacion') {
+        setText('contexto', CONTEXTO.homologacion);
+      }
+    }
+
+    function homoCifras(r) {
+      var celdas = [
+        {
+          tag: 'Sin par en SAP', val: formatInteger(r.sinPar),
+          clase: r.sinPar ? 'val-riesgo' : 'val-verde',
+          pie: r.sinPar
+            ? 'Cada uno es un proveedor repetido'
+            : 'Ningún nombre entra por su cuenta'
+        },
+        {
+          tag: 'TS en nombres sin par', val: formatCorto(r.tsSinPar),
+          uni: unidad(),
+          pie: 'Volumen que hoy va a un proveedor que no existe'
+        },
+        {
+          tag: 'Cruzados por parecido', val: formatInteger(r.porParecido),
+          clase: r.porParecido ? 'val-madera' : 'val-verde',
+          pie: r.porParecido
+            ? 'Funcionan, pero nadie los confirmó'
+            : 'Nada depende del parecido'
+        }
+      ];
+
+      document.getElementById('homoCifras').innerHTML = celdas
+        .map(function(c) {
+          return '<div class="portada-cifra">' +
+            '<div class="portada-tag">' + esc(c.tag) + '</div>' +
+            '<div class="portada-val ' + (c.clase || '') + '">' +
+            esc(c.val) +
+            (c.uni ? '<small>' + esc(c.uni) + '</small>' : '') +
+            '</div>' +
+            '<div class="portada-pie">' + esc(c.pie) + '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    function homoAvisos(r) {
+      var caja = document.getElementById('homoOjo');
+      var ojo = [];
+
+      if (!((DATA.source || {}).homologacion || {}).existe) {
+        ojo.push(
+          'No existe la hoja <b>Proveedores</b>. Corre «Astilla ' +
+          'Dashboard › Preparar hoja de proveedores» antes de asignar.'
+        );
+      }
+
+      (r.conflictos || []).forEach(function(c) {
+        ojo.push('Conflicto en la hoja: <b>' + esc(c) + '</b>. ' +
+          'Mientras esté repetido, ese alias no cruza.');
+      });
+
+      if ((r.huerfanos || []).length) {
+        ojo.push('Hay <b>' + r.huerfanos.length + '</b> ' +
+          (r.huerfanos.length === 1 ? 'alias escrito' : 'alias escritos') +
+          ' sin proveedor SAP a la izquierda: ' +
+          esc(r.huerfanos.slice(0, 5).join(', ')) +
+          (r.huerfanos.length > 5 ? '…' : '') + '.');
+      }
+
+      caja.innerHTML = ojo.join(' ');
+      caja.classList.toggle('se-ve', ojo.length > 0);
+    }
+
+    /**
+     * Una tabla de nombres por revisar.
+     *
+     * El selector ofrece primero los candidatos con su parecido y
+     * después todo SAP: si el parecido no encontró nada —pasa cuando
+     * el nombre no se parece en nada, que es justo cuando hace falta
+     * escribirlo— igual se puede elegir a mano.
+     */
+    function homoTabla(cajaId, conteoId, filas, esSinPar, r) {
+      var caja = document.getElementById(cajaId);
+
+      setText(conteoId, filas.length
+        ? filas.length + (filas.length === 1 ? ' nombre' : ' nombres')
+        : 'ninguno');
+
+      if (!filas.length) {
+        caja.innerHTML = vacio(esSinPar
+          ? 'Ningún nombre de planilla entra sin cruzar. Nada que asignar.'
+          : 'Ningún nombre depende hoy del parecido automático.');
+        return;
+      }
+
+      var cuerpo = filas.map(function(f, i) {
+        var id = cajaId + '-' + i;
+
+        var opciones = ['<option value="">Elegir proveedor de SAP…</option>'];
+
+        if (f.candidatos.length) {
+          opciones.push('<optgroup label="Se parecen">');
+          f.candidatos.forEach(function(c) {
+            opciones.push('<option value="' + esc(c.proveedor) + '">' +
+              esc(shortProvider(c.proveedor)) + ' · ' +
+              formatPercent(c.score) + '</option>');
+          });
+          opciones.push('</optgroup>');
+        }
+
+        opciones.push('<optgroup label="Todos los de SAP">');
+        (r.proveedoresSap || []).forEach(function(sap) {
+          opciones.push('<option value="' + esc(sap) + '">' +
+            esc(shortProvider(sap)) + '</option>');
+        });
+        opciones.push('</optgroup>');
+
+        return '<tr>' +
+          '<td><strong>' + esc(f.alias) + '</strong>' +
+            (esSinPar ? '' :
+              '<div class="homo-hoy">hoy cruza con ' +
+              esc(shortProvider(f.resuelto)) + '</div>') +
+            '</td>' +
+          celdaN(formatQuantity(f.ts)) +
+          celdaN(formatInteger(f.camiones)) +
+          celdaN(formatInteger(f.dias)) +
+          '<td>' + esc(formatDateKey(f.ultima)) + '</td>' +
+          '<td class="homo-asignar">' +
+            '<select id="' + id + '" data-homo-select="' + esc(f.alias) +
+              '">' + opciones.join('') + '</select>' +
+            '<button class="boton" type="button" data-homo-asignar="' +
+              esc(f.alias) + '" data-homo-campo="' + id + '">Asignar</button>' +
+          '</td>' +
+          '</tr>';
+      }).join('');
+
+      caja.innerHTML =
+        '<div class="tabla-marco tabla-fija"><table><thead><tr>' +
+        '<th>Nombre en la planilla</th>' +
+        '<th class="number">TS</th>' +
+        '<th class="number">Camiones</th>' +
+        '<th class="number">Días</th>' +
+        '<th>Último</th>' +
+        '<th>Asignar a SAP</th>' +
+        '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
+    }
+
+    function homoRecado(tipo, texto) {
+      var caja = document.getElementById('homoRecado');
+
+      caja.className = 'recado recado-' + tipo + ' se-ve';
+      caja.innerHTML = texto;
+    }
+
+    /**
+     * Escribe la equivalencia y recarga.
+     *
+     * Recargar no es pereza: el cruce se hace en el servidor al leer
+     * las hojas, así que tocar la tabla acá mostraría un panel que no
+     * corresponde a ningún dato.
+     */
+    function asignarHomologacion(alias, campoId) {
+      if (HOMO_OCUPADO) { return; }
+
+      var campo = document.getElementById(campoId);
+      var sap = campo ? campo.value : '';
+
+      if (!sap) {
+        homoRecado('mal', 'Elige primero el proveedor de SAP.');
+        if (campo) { campo.focus(); }
+        return;
+      }
+
+      HOMO_OCUPADO = true;
+      setLoading(true, 'Escribiendo la equivalencia');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          HOMO_OCUPADO = false;
+          homoRecado('bien',
+            '<b>' + esc(res.alias) + '</b> quedó asignado a <b>' +
+            esc(res.sap) + '</b>' +
+            (res.escrito ? '' : ' (ya estaba escrito)') +
+            '. Recargando para rehacer el cruce…');
+
+          cargarTodo();
+        })
+        .withFailureHandler(function(err) {
+          HOMO_OCUPADO = false;
+          setLoading(false);
+          homoRecado('mal', esc(mensaje(err)));
+        })
+        .asignarProveedor(alias, sap);
+    }
+
+    // Delegado: la tabla se redibuja entera en cada carga, así que un
+    // manejador por botón habría que volver a colgarlo cada vez.
+    document.addEventListener('click', function(ev) {
+      var boton = ev.target.closest
+        ? ev.target.closest('[data-homo-asignar]')
+        : null;
+
+      if (!boton) { return; }
+
+      asignarHomologacion(
+        boton.getAttribute('data-homo-asignar'),
+        boton.getAttribute('data-homo-campo')
+      );
+    });
 
 /* =====================================================================
  * COMPARACIÓN ENTRE MESES
