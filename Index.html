@@ -3092,6 +3092,23 @@
         <article class="panel">
           <div class="panel-cab">
             <div>
+              <h2>Cómo cerraría el mes</h2>
+              <p class="panel-nota">
+                Lo que ya entró más lo que los proveedores comprometieron
+                en la hoja Proyección para los días que faltan. Es un
+                cierre comprometido, no una extrapolación: un día pasado
+                sin despacho no se proyecta, su compromiso ya venció.
+              </p>
+            </div>
+            <div class="conteo" id="conteoCierre">—</div>
+          </div>
+          <section class="lectura lectura-cierre" id="cierreCifras"></section>
+          <p class="panel-nota" id="cierreNota"></p>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
               <h2>Día a día hábil: plan, ingreso y proyección</h2>
               <p class="panel-nota">
                 Un día hábil por columna. Lo que entra sábado, domingo
@@ -5251,7 +5268,11 @@
                                 : 'Bajo el ritmo del plan')
         },
         {
-          tag: 'Proyección de cierre', val: formatQuantity(m.projection),
+          // Se llamaba "Proyección de cierre" y no proyecta nada de la
+          // hoja Proyección: estira el ritmo del mes. Con el cierre
+          // comprometido al lado, dos tarjetas con el mismo nombre y
+          // distinto número se leen como un error.
+          tag: 'Cierre al ritmo actual', val: formatQuantity(m.projection),
           uni: unidad(),
           clase: m.planValid && m.projection < m.planPeriod ? 'val-riesgo' : '',
           pie: m.planValid
@@ -5661,6 +5682,7 @@
       grafPrecio();
       grafPareto();
       grafBrecha();
+      dibujarCierre();
       grafDias();
       grafSemanas();
     }
@@ -6599,6 +6621,149 @@
       });
 
       return { dias: dias, habiles: habiles, hasta: hasta, proy: proy };
+    }
+
+    /* --- Cómo cerraría el mes ----------------------------------------
+
+       El panel ya decía dónde vamos y a qué ritmo. Lo que faltaba es
+       con cuánto terminamos si los días que quedan traen lo que los
+       proveedores firmaron.
+
+       Son dos cierres distintos y conviene no confundirlos:
+
+         al ritmo actual   estira lo que va del mes hasta el último día.
+                           No sabe nada de compromisos: si el mes viene
+                           flojo porque faltó una semana, lo proyecta
+                           flojo para siempre.
+         con proyección    suma a lo entrado los camiones comprometidos
+                           día por día. Es el que sirve para llamar por
+                           teléfono, porque cada TS tiene un proveedor
+                           y una fecha detrás.
+
+       Los días salen de cubosDiarios(), el mismo reparto que dibujan
+       los dos gráficos de abajo: así la cifra y la barra no pueden
+       decir cosas distintas. */
+
+    function dibujarCierre() {
+      var caja = document.getElementById('cierreCifras');
+      var nota = document.getElementById('cierreNota');
+      var m = CURRENT_METRICS;
+      var cubos = cubosDiarios();
+
+      nota.textContent = '';
+
+      if (cubos.error) {
+        caja.innerHTML = '';
+        nota.textContent = cubos.error;
+        setText('conteoCierre', '—');
+        return;
+      }
+
+      var entrado = 0;
+      var comprometido = 0;
+      var camiones = 0;
+      var diasConCompromiso = 0;
+      var porVenir = 0;
+
+      cubos.dias.forEach(function(d) {
+        entrado += d.entrado;
+        comprometido += d.proyectado;
+        camiones += d.camiones;
+
+        if (d.proyectado > 0) { diasConCompromiso++; }
+        if (!d.pasado) { porVenir++; }
+      });
+
+      var cierre = entrado + comprometido;
+      var plan = m.planValid ? (m.monthlyPlan || 0) : 0;
+      var brecha = plan > 0 ? cierre - plan : null;
+
+      // Los días que quedan sin un solo camión comprometido: son los
+      // que hay que ir a llenar, y la cifra de cierre los cuenta como
+      // cero.
+      var sinCompromiso = porVenir - diasConCompromiso;
+
+      setText('conteoCierre',
+        cubos.dias.length + ' días hábiles · ' + porVenir + ' por venir');
+
+      var celdas = [
+        {
+          tag: 'Ingresado a la fecha',
+          val: formatQuantity(entrado), uni: unidad(),
+          pie: (cubos.dias.length - porVenir) + ' de ' + cubos.dias.length +
+            ' días hábiles'
+        },
+        {
+          tag: 'Comprometido por venir',
+          val: formatQuantity(comprometido), uni: unidad(),
+          clase: comprometido > 0 ? 'val-madera' : '',
+          pie: comprometido > 0
+            ? formatInteger(camiones) + ' camiones en ' + diasConCompromiso +
+              (diasConCompromiso === 1 ? ' día' : ' días')
+            : (porVenir
+                ? 'Sin camiones escritos para los días que faltan'
+                : 'El mes ya no tiene días por venir')
+        },
+        {
+          tag: 'Cierre con proyección',
+          val: formatQuantity(cierre), uni: unidad(),
+          clase: plan > 0 && cierre < plan ? 'val-riesgo' : 'val-verde',
+          pie: (plan > 0
+                 ? formatPercent(cierre / plan) + ' del plan'
+                 : planDisabledReason()) +
+            (m.projection
+              ? ' · al ritmo actual, ' + formatQuantity(m.projection)
+              : '')
+        },
+        {
+          tag: 'Brecha al cierre',
+          val: brecha === null ? '—' : formatSigned(brecha),
+          uni: brecha === null ? '' : unidad(),
+          clase: brecha !== null && brecha < 0 ? 'val-riesgo' : 'val-verde',
+          pie: plan > 0
+            ? 'Plan del mes ' + formatQuantity(plan) + ' ' + unidad()
+            : planDisabledReason()
+        }
+      ];
+
+      caja.innerHTML = celdas.map(function(c) {
+        return '<div class="cifra">' +
+          '<div class="cifra-tag">' + esc(c.tag) + '</div>' +
+          '<div class="cifra-val ' + (c.clase || '') + '">' + esc(c.val) +
+            (c.uni ? '<small>' + esc(c.uni) + '</small>' : '') +
+          '</div>' +
+          '<div class="cifra-pie">' + esc(c.pie) + '</div>' +
+          '</div>';
+      }).join('');
+
+      var avisos = [];
+
+      if (sinCompromiso > 0) {
+        avisos.push('Quedan <b>' + sinCompromiso +
+          (sinCompromiso === 1 ? ' día hábil' : ' días hábiles') +
+          '</b> sin un solo camión escrito en Proyección: el cierre los ' +
+          'cuenta como cero.');
+      }
+
+      if (brecha !== null && brecha < 0) {
+        avisos.push('Para llegar al plan faltan <b>' +
+          formatQuantity(Math.abs(brecha)) + ' ' + unidad() +
+          '</b> por comprometer' +
+          (porVenir
+            ? ', repartidos en los ' + porVenir + ' días que quedan.'
+            : ': el mes ya no tiene días hábiles.'));
+      }
+
+      var sc = (cubos.proy.sinCruce || []).length;
+
+      if (sc) {
+        avisos.push('Hay <b>' + sc +
+          (sc === 1 ? ' proveedor' : ' proveedores') +
+          '</b> en Proyección que no cruzan con SAP: su compromiso suma ' +
+          'acá, pero no se puede comparar contra su plan.');
+      }
+
+      nota.innerHTML = avisos.join(' ');
     }
 
     /* --- Día a día hábil ---------------------------------------------

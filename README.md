@@ -115,6 +115,52 @@ En el acumulado no se rotula cada día sino las tres cifras que se
 buscan: dónde va el real, dónde termina el plan y dónde termina la
 proyección.
 
+### Cómo cerraría el mes
+
+Cuatro cifras que juntan las tres cosas de la conversación —plan,
+ingreso y proyección— en la única pregunta que se hace a mitad de mes:
+**con cuánto terminamos**.
+
+| Cifra | Qué es |
+|---|---|
+| Ingresado a la fecha | Real + estimado de los días corridos |
+| Comprometido por venir | Los camiones de `Proyeccion` para los días que faltan, en TS |
+| Cierre con proyección | La suma de los dos, contra el plan del mes |
+| Brecha al cierre | Cuánto sobra o falta al terminar así |
+
+Hay **dos cierres** en el panel y no son lo mismo:
+
+- **Al ritmo actual** (en la lectura de arriba) estira lo que va del mes
+  hasta el último día. No sabe nada de compromisos: si el mes viene
+  flojo porque faltó una semana, lo proyecta flojo para siempre.
+- **Con proyección** suma a lo entrado los camiones comprometidos día
+  por día. Es el que sirve para llamar por teléfono, porque cada TS
+  tiene un proveedor y una fecha detrás.
+
+Se ven los dos juntos: el comprometido es la cifra grande y el del ritmo
+va en su pie, para poder leer la distancia entre lo que prometieron y lo
+que vienen haciendo. Por eso la tarjeta vieja pasó a llamarse «Cierre al
+ritmo actual»: se llamaba «Proyección de cierre» y no proyecta nada de
+la hoja `Proyeccion`.
+
+Los días salen de `cubosDiarios()`, el mismo reparto que dibujan los dos
+gráficos de abajo, así que la cifra y la barra no pueden decir cosas
+distintas. De ahí salen también las dos reglas que evitan inflar el
+cierre:
+
+- **Un día ya despachado no vuelve a sumar su compromiso.** Manda lo que
+  entró; la proyección solo rellena el día del que no se sabe nada.
+- **Un día pasado sin despacho cuenta cero, no se proyecta.** Su
+  compromiso ya venció.
+
+Debajo, tres avisos cuando corresponde: cuántos días hábiles quedan sin
+un solo camión escrito (el cierre los cuenta como cero), cuánto falta
+por comprometer para llegar al plan, y cuántos proveedores de
+`Proyeccion` no cruzan con SAP.
+
+Solo aparece con el mes vigente seleccionado; con otro rango dice por
+qué no está.
+
 ### Día a día y semana a semana: plan, ingreso y proyección
 
 Dos gráficos sobre el mismo dato, a dos acercamientos. El diario
