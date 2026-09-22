@@ -3388,10 +3388,11 @@
         <div>
           <h2 class="titulo-vista">Un proveedor, un nombre</h2>
           <p class="portada-nota">
-            SAP escribe cada proveedor de una sola forma; la planilla,
-            de muchas. Cuando un nombre no cruza, el panel lo deja
-            pasar tal cual y ese proveedor aparece dos veces. Acá se
-            asignan.
+            SAP escribe cada proveedor de una sola forma; la planilla y
+            la hoja Proyección, de muchas. Cuando un nombre no cruza, el
+            panel lo deja pasar tal cual y ese proveedor aparece dos
+            veces. Acá se asignan, y una asignación arregla las dos
+            hojas a la vez.
           </p>
         </div>
 
@@ -3409,8 +3410,10 @@
               <p class="panel-nota">
                 No cruzaron con nada y entraron con su propio nombre:
                 cada uno de estos es un proveedor repetido en el panel.
-                Elige a cuál de SAP corresponde y queda escrito en la
-                hoja Proveedores.
+                Los que vienen de Proyección además arrastran camiones
+                comprometidos que no se pueden comparar contra ningún
+                plan. Elige a cuál de SAP corresponde y queda escrito en
+                la hoja Proveedores.
               </p>
             </div>
             <div class="conteo" id="homoConteoSinPar">—</div>
@@ -3982,6 +3985,30 @@
           'en ' + esc((pr.columnasSobrantes || []).join(', ')) +
           ', y este mes solo tiene <b>' + pr.diasHabiles +
           ' días hábiles</b>: esas columnas no entran a ninguna fecha.';
+      }
+
+      // Nombres escritos en Proyección que no caen sobre ningún
+      // proveedor de SAP. Sus camiones sí cuentan en el total del día
+      // —lo comprometido es lo comprometido—, pero no hay contra qué
+      // compararlos, así que se nombran.
+      var sinCruce = pr.sinCruce || [];
+
+      if (sinCruce.length) {
+        var camSin = sinCruce.reduce(function(s, x) {
+          return s + (Number(x.camiones) || 0);
+        }, 0);
+
+        nota += ' En Proyección hay <b>' + formatInteger(camSin) +
+          ' camiones</b> a nombre de ' + sinCruce.length +
+          (sinCruce.length === 1 ? ' proveedor que no cruza'
+                                 : ' proveedores que no cruzan') +
+          ' con SAP (' +
+          esc(sinCruce.slice(0, 4).map(function(x) {
+            return x.alias;
+          }).join(', ')) +
+          (sinCruce.length > 4 ? '…' : '') +
+          '): suman al día, pero no se pueden comparar contra su plan. ' +
+          'Se asignan en <b>Homologación</b>.';
       }
 
       nota +=
@@ -10833,6 +10860,7 @@
     function homoDatos() {
       return ((DATA.source || {}).homologacion || {}).revision || {
         lista: [], sinPar: 0, porParecido: 0, tsSinPar: 0,
+        camionesSinParProy: 0, enProyeccion: 0,
         proveedoresSap: [], conflictos: [], huerfanos: []
       };
     }
@@ -10868,7 +10896,11 @@
         {
           tag: 'TS en nombres sin par', val: formatCorto(r.tsSinPar),
           uni: unidad(),
-          pie: 'Volumen que hoy va a un proveedor que no existe'
+          pie: r.camionesSinParProy
+            ? 'Va a un proveedor que no existe · y ' +
+              formatInteger(r.camionesSinParProy) +
+              ' camiones en Proyección'
+            : 'Volumen que hoy va a un proveedor que no existe'
         },
         {
           tag: 'Cruzados por parecido', val: formatInteger(r.porParecido),
@@ -10937,7 +10969,7 @@
 
       if (!filas.length) {
         caja.innerHTML = vacio(esSinPar
-          ? 'Ningún nombre de planilla entra sin cruzar. Nada que asignar.'
+          ? 'Ningún nombre entra sin cruzar. Nada que asignar.'
           : 'Ningún nombre depende hoy del parecido automático.');
         return;
       }
@@ -10964,15 +10996,32 @@
         });
         opciones.push('</optgroup>');
 
+        // De dónde viene el nombre. Importa: uno que solo está en
+        // Proyección no tiene TS entregadas ni última fecha, y sin
+        // decirlo la fila parece vacía.
+        var pie = [];
+
+        if (!esSinPar) {
+          pie.push('hoy cruza con ' + esc(shortProvider(f.resuelto)));
+        }
+
+        if (f.origen && f.origen !== 'Planilla') {
+          pie.push('escrito en ' + esc(f.origen));
+        }
+
         return '<tr>' +
           '<td><strong>' + esc(f.alias) + '</strong>' +
-            (esSinPar ? '' :
-              '<div class="homo-hoy">hoy cruza con ' +
-              esc(shortProvider(f.resuelto)) + '</div>') +
+            (pie.length
+              ? '<div class="homo-hoy">' + pie.join(' · ') + '</div>'
+              : '') +
             '</td>' +
-          celdaN(formatQuantity(f.ts)) +
-          celdaN(formatInteger(f.camiones)) +
-          celdaN(formatInteger(f.dias)) +
+          // Un nombre que solo está en Proyección no entregó nada:
+          // un 0 ahí se lee como «entregó cero», que no es lo mismo
+          // que «todavía no le toca».
+          celdaN(f.ts ? formatQuantity(f.ts) : '—') +
+          celdaN(f.camiones ? formatInteger(f.camiones) : '—') +
+          celdaN(f.camionesProy ? formatInteger(f.camionesProy) : '—') +
+          celdaN(f.dias ? formatInteger(f.dias) : '—') +
           '<td>' + esc(formatDateKey(f.ultima)) + '</td>' +
           '<td class="homo-asignar">' +
             '<select id="' + id + '" data-homo-select="' + esc(f.alias) +
@@ -10985,9 +11034,10 @@
 
       caja.innerHTML =
         '<div class="tabla-marco tabla-fija"><table><thead><tr>' +
-        '<th>Nombre en la planilla</th>' +
+        '<th>Nombre escrito</th>' +
         '<th class="number">TS</th>' +
         '<th class="number">Camiones</th>' +
+        '<th class="number">Comprometidos</th>' +
         '<th class="number">Días</th>' +
         '<th>Último</th>' +
         '<th>Asignar a SAP</th>' +

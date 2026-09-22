@@ -59,7 +59,8 @@ manifiesto y sus propios permisos.
 
 Cinco vistas: **Suministro** (la regla del mes, KPIs, gráficos, tablas
 y plan de acción), **Comparación** (el año partido por mes),
-**Homologación** (nombres de la planilla que no cruzan con SAP),
+**Homologación** (nombres de la planilla y de Proyección que no
+cruzan con SAP),
 **Mapeos** (aserraderos en el mapa y armado de rutas) y **Apuntes**
 (pauta de la reunión semanal y su registro).
 
@@ -162,6 +163,16 @@ Tres cosas que conviene saber:
   escriba ahí **no entra**, así que el panel lo dice con el número de
   camiones y las columnas involucradas. 23 es el máximo posible, así
   que nunca faltan columnas; sobran.
+- **El proveedor de la columna B pasa por el mismo cruce que la
+  planilla.** Esa hoja la escribe la misma mano, y se nota: `Madeex`,
+  `Guivar`, `La Orilla`, `Foresol` y `FORESOL` en filas distintas. Sin
+  cruzarlos, un camión proyectado y uno recibido caen sobre dos
+  proveedores distintos. Con el cruce —la hoja `Proveedores` primero, el
+  parecido después— **34 de los 46 nombres escritos hoy** llegan a su
+  proveedor de SAP. Los 12 que no salen en la pestaña Homologación, con
+  sus camiones comprometidos, y en la nota de Suministro. Sus camiones
+  **sí** cuentan en el total del día: lo comprometido es lo
+  comprometido; lo que no se puede es compararlos contra su plan.
 - **Los camiones se convierten con el factor del material de la columna
   A**, no con un promedio: un camión de nitens no pesa lo que uno de
   pino con corteza.
@@ -314,9 +325,14 @@ eso, cada proveedor aparecía cayendo un 20% el día 10 del mes.
 
 SAP escribe cada proveedor de **una** sola forma. La planilla del
 reservador lo escribe de muchas: `PROMASA S.A.`, `Promasa`,
-`PROMASA SPA`. Cuando un nombre de planilla no cruza, el panel no lo
-corrige: lo deja pasar con el nombre que traía, y ahí aparece un
-proveedor nuevo que en realidad ya existía. **Eso es la duplicidad.**
+`PROMASA SPA`. Cuando un nombre no cruza, el panel no lo corrige: lo
+deja pasar con el nombre que traía, y ahí aparece un proveedor nuevo
+que en realidad ya existía. **Eso es la duplicidad.**
+
+Entran **dos** hojas, porque las escribe la misma mano y fallan igual:
+`InformeAstilla` (la planilla del reservador) y `Proyeccion`. Cada fila
+dice de cuál viene, y una sola asignación arregla las dos: el cruce es
+el mismo.
 
 La vista separa dos casos, que no son lo mismo:
 
@@ -328,9 +344,14 @@ La vista separa dos casos, que no son lo mismo:
 Los que cruzan exacto o ya están homologados a mano no aparecen: están
 resueltos y solo llenarían la pantalla.
 
-Cada fila trae el volumen, los camiones, los días y la última fecha
-—para saber cuál corregir primero— y un selector con **los candidatos
-de SAP ordenados por parecido** y, debajo, la lista completa. La lista
+Cada fila trae el volumen entregado, los camiones, los **camiones
+comprometidos** en Proyección, los días y la última fecha —para saber
+cuál corregir primero— y un selector con **los candidatos de SAP
+ordenados por parecido** y, debajo, la lista completa. Lo entregado y
+lo comprometido van en columnas distintas: son TS de distinta
+naturaleza y sumarlas en una cifra diría algo que no es. Un nombre que
+solo está en Proyección todavía no entregó nada, así que ahí va un
+guion y no un cero. La lista
 completa no sobra: cuando el nombre no se parece a nada (`LLASA` →
 `LAMINADORA LOS ANGELES`) el parecido no propone nada, y es justo
 cuando hace falta escribirlo.

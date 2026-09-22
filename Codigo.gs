@@ -567,7 +567,9 @@ function getDashboardData() {
   const proyeccion = readProyeccion_(
     spreadsheet,
     month,
-    workdays.workdayKeys
+    workdays.workdayKeys,
+    ingresos.proveedores,
+    homologacion
   );
 
   const pricing = applyPlanPricing_(
@@ -644,7 +646,8 @@ function getDashboardData() {
         revision: buildHomologacionPendiente_(
           rows,
           ingresos.proveedores,
-          homologacion
+          homologacion,
+          proyeccion
         ),
         existe: !homologacion.missingSheet,
         alias: homologacion.alias,
@@ -2121,7 +2124,14 @@ function instalarProveedores() {
  * ===================================================================== */
 
 /**
- * Los nombres de planilla que merecen una mirada, agrupados.
+ * Los nombres escritos a mano que merecen una mirada, agrupados.
+ *
+ * Vienen de las DOS hojas que escribe la misma mano: la planilla del
+ * reservador y Proyeccion. Fallan igual y se arreglan igual, así que
+ * van a una sola lista: una asignación sirve para las dos. Cada grupo
+ * dice de dónde sale, y lo entregado (ts, camiones) va aparte de lo
+ * comprometido (tsProy, camionesProy) porque son TS de distinta
+ * naturaleza.
  *
  * Dos casos, y son distintos:
  *
@@ -2134,8 +2144,34 @@ function instalarProveedores() {
  * Los que cruzan exacto o están homologados a mano no salen: ya están
  * resueltos y llenarían la pantalla de ruido.
  */
-function buildHomologacionPendiente_(rows, proveedoresSap, homologacion) {
+function buildHomologacionPendiente_(
+  rows,
+  proveedoresSap,
+  homologacion,
+  proyeccion
+) {
   const grupos = {};
+
+  function grupo(crudo, metodo, resuelto) {
+    const clave = normalizeKey_(crudo);
+
+    if (!grupos[clave]) {
+      grupos[clave] = {
+        alias: crudo,
+        metodo: metodo,
+        resuelto: resuelto,
+        ts: 0,
+        camiones: 0,
+        tsProy: 0,
+        camionesProy: 0,
+        fechas: {},
+        subproductos: {},
+        origenes: {}
+      };
+    }
+
+    return grupos[clave];
+  }
 
   (rows || []).forEach(function(row) {
     if (row.source !== 'PLANILLA') { return; }
@@ -2152,27 +2188,41 @@ function buildHomologacionPendiente_(rows, proveedoresSap, homologacion) {
       return;
     }
 
-    const clave = normalizeKey_(crudo);
-
-    if (!grupos[clave]) {
-      grupos[clave] = {
-        alias: crudo,
-        metodo: metodo,
-        resuelto: text_(row.proveedor),
-        ts: 0,
-        camiones: 0,
-        fechas: {},
-        subproductos: {}
-      };
-    }
-
-    const g = grupos[clave];
+    const g = grupo(crudo, metodo, text_(row.proveedor));
 
     g.ts += Number(row.ts) || 0;
     g.camiones += Number(row.camiones) || 0;
     g.fechas[row.fecha] = true;
+    g.origenes.Planilla = true;
 
     if (row.subproducto) { g.subproductos[row.subproducto] = true; }
+  });
+
+  // La hoja Proyección la escribe la misma mano que la planilla y se
+  // le pasa por el mismo cruce, así que sus nombres sueltos son el
+  // mismo problema: un camión comprometido que no se le puede cargar a
+  // ningún proveedor no se puede comparar contra su plan. Entran a la
+  // misma lista, y asignarlos una vez arregla las dos hojas.
+  ((proyeccion || {}).porProveedor || []).forEach(function(item) {
+    const crudo = text_(item.proveedorRaw);
+    const metodo = item.matchMethod || '';
+
+    if (!crudo) { return; }
+
+    if (
+      metodo !== 'Solo en planilla' &&
+      metodo !== 'Coincidencia aproximada'
+    ) {
+      return;
+    }
+
+    const g = grupo(crudo, metodo, text_(item.proveedor));
+
+    g.tsProy += Number(item.ts) || 0;
+    g.camionesProy += Number(item.camiones) || 0;
+    g.origenes['Proyección'] = true;
+
+    if (item.subproducto) { g.subproductos[item.subproducto] = true; }
   });
 
   const lista = Object.keys(grupos).map(function(clave) {
@@ -2188,6 +2238,12 @@ function buildHomologacionPendiente_(rows, proveedoresSap, homologacion) {
       resuelto: g.resuelto,
       ts: round_(g.ts, 2),
       camiones: g.camiones,
+      // Lo comprometido en la hoja Proyección con ese mismo nombre.
+      // Va aparte de lo entregado: son TS de distinta naturaleza y
+      // sumarlas en una sola cifra diría algo que no es.
+      tsProy: round_(g.tsProy, 2),
+      camionesProy: g.camionesProy,
+      origen: Object.keys(g.origenes).sort().join(' y ') || 'Planilla',
       dias: fechas.length,
       primera: fechas[0] || '',
       ultima: fechas[fechas.length - 1] || '',
@@ -2197,11 +2253,12 @@ function buildHomologacionPendiente_(rows, proveedoresSap, homologacion) {
   });
 
   // Primero los que no cruzan, y dentro de cada grupo el que más
-  // volumen mueve: ese es el que más distorsiona el panel.
+  // volumen mueve —entregado o comprometido—: ese es el que más
+  // distorsiona el panel.
   lista.sort(function(a, b) {
     if (a.sinPar !== b.sinPar) { return a.sinPar ? -1 : 1; }
 
-    return b.ts - a.ts;
+    return (b.ts + b.tsProy) - (a.ts + a.tsProy);
   });
 
   return {
@@ -2211,6 +2268,14 @@ function buildHomologacionPendiente_(rows, proveedoresSap, homologacion) {
     tsSinPar: round_(lista.reduce(function(t, x) {
       return t + (x.sinPar ? x.ts : 0);
     }, 0), 2),
+    // Camiones comprometidos en Proyección que hoy no caen sobre
+    // ningún proveedor de SAP.
+    camionesSinParProy: lista.reduce(function(t, x) {
+      return t + (x.sinPar ? x.camionesProy : 0);
+    }, 0),
+    enProyeccion: lista.filter(function(x) {
+      return x.origen.indexOf('Proyección') !== -1;
+    }).length,
     proveedoresSap: (proveedoresSap || []).slice().sort(),
     conflictos: homologacion.conflictos || [],
     huerfanos: homologacion.pendientes || []
@@ -2930,10 +2995,17 @@ function camionesDeCelda_(crudo, mostrado) {
  * Devuelve porFecha —lo que el gráfico semanal necesita— y también el
  * detalle por proveedor, para poder decir quién compone cada semana.
  */
-function readProyeccion_(spreadsheet, month, workdayKeys) {
+function readProyeccion_(
+  spreadsheet,
+  month,
+  workdayKeys,
+  proveedoresSap,
+  homologacion
+) {
   const vacio = {
     porFecha: {},
     porProveedor: [],
+    sinCruce: [],
     total: 0,
     dias: 0,
     columnas: 0,
@@ -3011,13 +3083,24 @@ function readProyeccion_(spreadsheet, month, workdayKeys) {
       material = resolvePlanSubproducto_(celdaMaterial);
     }
 
-    const proveedor = text_(
+    const proveedorRaw = text_(
       displayed[r][1] !== '' ? displayed[r][1] : values[r][1]
     );
 
-    if (!material || !proveedor || isTotalText_(proveedor)) {
+    if (!material || !proveedorRaw || isTotalText_(proveedorRaw)) {
       continue;
     }
+
+    // Esta hoja la escribe la misma mano que la planilla: "Madeex",
+    // "Guivar", "La Orilla". Cruza por el mismo camino —la hoja
+    // Proveedores primero, el parecido después— para que un camión
+    // proyectado y uno recibido caigan sobre el mismo proveedor.
+    const cruce = resolveProveedor_(
+      proveedorRaw,
+      proveedoresSap,
+      homologacion
+    );
+    const proveedor = cruce.proveedor;
 
     const factor = factorDe_(material);
 
@@ -3047,6 +3130,8 @@ function readProyeccion_(spreadsheet, month, workdayKeys) {
       if (!porProveedor[clv]) {
         porProveedor[clv] = {
           proveedor: proveedor,
+          proveedorRaw: proveedorRaw,
+          matchMethod: cruce.method,
           subproducto: material,
           ts: 0,
           camiones: 0
@@ -3070,11 +3155,39 @@ function readProyeccion_(spreadsheet, month, workdayKeys) {
     });
   }
 
+  const lista = Object.keys(porProveedor).map(function(k) {
+    return porProveedor[k];
+  }).sort(function(a, b) { return b.ts - a.ts; });
+
+  // Los que no cruzaron con nadie: sus camiones sí entran al total del
+  // día —lo comprometido es lo comprometido— pero no se le pueden
+  // cargar a ningún proveedor, así que no hay con qué compararlos
+  // contra su plan. Se agrupan por nombre escrito para poder decirlo.
+  const sinCruce = {};
+
+  lista.forEach(function(item) {
+    if (item.matchMethod !== 'Solo en planilla') { return; }
+
+    const clave = normalizeKey_(item.proveedorRaw);
+
+    if (!sinCruce[clave]) {
+      sinCruce[clave] = { alias: item.proveedorRaw, ts: 0, camiones: 0 };
+    }
+
+    sinCruce[clave].ts += item.ts;
+    sinCruce[clave].camiones += item.camiones;
+  });
+
   return {
     porFecha: porFecha,
-    porProveedor: Object.keys(porProveedor).map(function(k) {
-      return porProveedor[k];
-    }).sort(function(a, b) { return b.ts - a.ts; }),
+    porProveedor: lista,
+    sinCruce: Object.keys(sinCruce).map(function(k) {
+      return {
+        alias: sinCruce[k].alias,
+        ts: round_(sinCruce[k].ts, 2),
+        camiones: sinCruce[k].camiones
+      };
+    }).sort(function(a, b) { return b.camiones - a.camiones; }),
     total: round_(total, 2),
     dias: Object.keys(porFecha).length,
     columnas: columnas,
