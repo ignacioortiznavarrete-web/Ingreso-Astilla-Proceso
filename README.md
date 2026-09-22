@@ -129,6 +129,12 @@ Antes ese volumen no se perdía del total del panel, pero no aparecía
 en estos gráficos: los dos sumaban solo días hábiles y lo del fin de
 semana quedaba fuera.
 
+La regla vale para **todos** los gráficos por día del panel, incluido
+«Ingreso diario por fuente», que la tenía distinta: mostraba el sábado
+con columna propia mientras los otros dos lo sumaban al viernes, y el
+mismo mes se veía de dos formas según dónde se mirara. El mapeo fecha
+→ día hábil se arma una vez por carga y lo usan todos.
+
 El arrastre **no se marca por columna**. Para la operación el camión
 del sábado ES del viernes, y una señal en esa columna hace preguntar
 qué pasó ahí cuando no pasó nada. La regla se dice una vez en la nota

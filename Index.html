@@ -3020,8 +3020,10 @@
             <div>
               <h2>Ingreso diario por fuente</h2>
               <p class="panel-nota">
-                Verde: confirmado en Ingresos. Rayado madera: estimado por
-                camiones. La línea punteada es el plan diario.
+                Verde: confirmado en Ingresos. Rayado madera: estimado
+                por camiones. La línea punteada es el plan diario. Lo
+                que entra sábado, domingo o feriado se suma al día
+                hábil anterior.
               </p>
             </div>
             <div class="conteo" id="conteoDiario">—</div>
@@ -5862,21 +5864,93 @@
       });
     }
 
+    /* --- El fin de semana se carga al viernes -------------------------
+       Un sábado no tiene columna propia en ningún gráfico: el camión
+       que llegó ese sábado se despachó, en la práctica, en la semana
+       del viernes. Antes cada gráfico resolvía esto por su cuenta —o
+       no lo resolvía— y el mismo mes se veía distinto según dónde se
+       mirara.
+
+       El mapeo se arma una vez por carga desde workdayKeys, que cubre
+       toda la ventana de historia, así que sirve igual para el rango
+       «Mes» que para «Año». */
+
+    var HABILES = { sello: '', mapa: null };
+
+    function mapaHabiles() {
+      var sello = (DATA || {}).generatedAt || '';
+
+      if (HABILES.sello === sello && HABILES.mapa) { return HABILES.mapa; }
+
+      var claves = ((DATA.workdays || {}).workdayKeys || []);
+      var mapa = {};
+
+      if (claves.length) {
+        var esHabil = {};
+
+        claves.forEach(function(k) { esHabil[k] = true; });
+
+        // Se recorre desde el inicio de la historia, no desde el
+        // primer hábil: un feriado de enero también necesita saber a
+        // qué día se carga.
+        var cursor = (DATA.source || {}).historyStart || claves[0];
+        var fin = (DATA.month || {}).endKey || claves[claves.length - 1];
+        var ultimo = '';
+
+        while (cursor <= fin) {
+          if (esHabil[cursor]) { ultimo = cursor; }
+
+          // Antes del primer hábil no hay a quién cargarle: queda ''.
+          mapa[cursor] = ultimo;
+          cursor = sumarDias(cursor, 1);
+        }
+      }
+
+      HABILES = { sello: sello, mapa: mapa };
+
+      return mapa;
+    }
+
+    /**
+     * El día hábil al que se le carga una fecha. Si cae antes del
+     * primer hábil de la historia se devuelve tal cual: esconderla
+     * sería perderla.
+     */
+    function alDiaHabil(fecha) {
+      return mapaHabiles()[fecha] || fecha;
+    }
+
+    /** 'yyyy-MM-dd' más n días. */
+    function sumarDias(fecha, n) {
+      var p = String(fecha).split('-');
+      var d = new Date(Date.UTC(
+        Number(p[0]), Number(p[1]) - 1, Number(p[2])
+      ));
+
+      d.setUTCDate(d.getUTCDate() + n);
+
+      return d.toISOString().slice(0, 10);
+    }
+
     function grafDiario() {
       var caja = document.getElementById('grafDiario');
       var agrupado = {};
 
       CURRENT_ROWS.forEach(function(f) {
-        if (!agrupado[f.fecha]) {
-          agrupado[f.fecha] = { real: 0, est: 0, camiones: 0 };
+        var dia = alDiaHabil(f.fecha);
+
+        if (!agrupado[dia]) {
+          agrupado[dia] = { real: 0, est: 0, camiones: 0, arrastra: false };
         }
 
         if (f.source === 'PLANILLA') {
-          agrupado[f.fecha].est += Number(f.ts) || 0;
-          agrupado[f.fecha].camiones += Number(f.camiones) || 0;
+          agrupado[dia].est += Number(f.ts) || 0;
+          agrupado[dia].camiones += Number(f.camiones) || 0;
         } else {
-          agrupado[f.fecha].real += Number(f.ts) || 0;
+          agrupado[dia].real += Number(f.ts) || 0;
         }
+
+        if (dia !== f.fecha) { agrupado[dia].arrastra = true; }
       });
 
       var fechas = Object.keys(agrupado).sort();
@@ -6339,38 +6413,19 @@
         return { error: 'Sin días hábiles en el mes.' };
       }
 
-      // A qué día hábil se le carga cada fecha. Un sábado no tiene
-      // columna propia: lo que entra ese día se le suma al viernes,
-      // que es el día hábil que lo precede. Sin esto ese volumen
-      // desaparecía del gráfico —no se perdía en el total del panel,
-      // pero acá no se veía—, y lo mismo pasaba con un feriado en que
-      // igual llegó un camión.
-      var habilDe = {};
-      var ultimoHabil = '';
-      var cursor = DATA.month.startKey;
-
-      habiles.forEach(function(k) { habilDe[k] = k; });
-
-      // Se recorre el mes entero, no solo los hábiles.
-      while (cursor <= DATA.month.endKey) {
-        if (habilDe[cursor] === cursor) {
-          ultimoHabil = cursor;
-        } else if (ultimoHabil) {
-          habilDe[cursor] = ultimoHabil;
-        }
-
-        cursor = sumarDias(cursor, 1);
-      }
-
       var porFecha = {};
       var arrastrados = {};
+      var mapa = mapaHabiles();
 
       CURRENT_ROWS.forEach(function(f) {
-        var destino = habilDe[f.fecha];
+        var destino = mapa[f.fecha];
 
-        // Un día del mes anterior al primer hábil no tiene a quién
-        // cargarse: queda fuera, como antes.
-        if (!destino) { return; }
+        // Fuera del mes, o antes del primer hábil de la historia: no
+        // tiene columna en este gráfico.
+        if (!destino || destino < DATA.month.startKey ||
+            destino > DATA.month.endKey) {
+          return;
+        }
 
         if (!porFecha[destino]) {
           porFecha[destino] = { real: 0, est: 0 };
@@ -6435,18 +6490,6 @@
       });
 
       return { dias: dias, habiles: habiles, hasta: hasta, proy: proy };
-    }
-
-    /** 'yyyy-MM-dd' más n días. */
-    function sumarDias(fecha, n) {
-      var p = String(fecha).split('-');
-      var d = new Date(Date.UTC(
-        Number(p[0]), Number(p[1]) - 1, Number(p[2])
-      ));
-
-      d.setUTCDate(d.getUTCDate() + n);
-
-      return d.toISOString().slice(0, 10);
     }
 
     /* --- Día a día hábil ---------------------------------------------
