@@ -71,6 +71,14 @@ que no llega no distingue entre «todo al día» y «el script falló».
 | `InformeAstilla` | Último despacho según la planilla del reservador |
 | `Proveedores` | Alias, para cruzar nombres entre las tres |
 
+El cruce de nombres es el mismo del panel y tiene tres pasos: la hoja
+`Proveedores` manda y no tiene umbral; si no hay alias escrito, decide
+el **parecido** contra los nombres reales de SAP; si tampoco, el nombre
+queda como viene. El paso del parecido no estaba, y por eso el correo
+daba por callados a los proveedores que la planilla escribe distinto
+—`FATIMA` por `FORESTAL FATIMA LTDA.`— y que el panel sí cruza. Medido
+sobre la planilla real: cinco de ochenta y tres nombres.
+
 **No** usa la fusión día por día que hace el panel. Para «cuándo
 despachó por última vez» basta la fecha más alta de las dos fuentes,
 venga de donde venga; la regla de fusión resuelve otra cosa —cuánto

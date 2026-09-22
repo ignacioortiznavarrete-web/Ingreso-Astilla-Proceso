@@ -18,9 +18,17 @@
 
 function construirAviso_() {
   const planilla = abrirPlanilla_();
-  const alias = leerAlias_(planilla);
-  const plan = leerPlanDelMes_(planilla, alias);
-  const despachos = leerUltimosDespachos_(planilla, alias);
+
+  // Los tres lectores tienen que cruzar por la MISMA clave, así que
+  // el contexto —alias escritos y nombres reales de SAP— se arma una
+  // vez y se les pasa a todos.
+  const ctx = {
+    alias: leerAlias_(planilla),
+    sap: leerNombresSap_(planilla)
+  };
+
+  const plan = leerPlanDelMes_(planilla, ctx);
+  const despachos = leerUltimosDespachos_(planilla, ctx);
   const hoy = hoyClave_();
 
   const proveedores = Object.keys(plan.porProveedor).map(function(clave) {

@@ -114,11 +114,21 @@ En el acumulado no se rotula cada día sino las tres cifras que se
 buscan: dónde va el real, dónde termina el plan y dónde termina la
 proyección.
 
-### Semana a semana: plan, ingreso y proyección
+### Día a día y semana a semana: plan, ingreso y proyección
 
-El panel mira el mes; la operación se conversa por semana. Este gráfico
-junta las tres cosas de esa conversación: cuánto tocaba, cuánto entró y
-cuánto viene comprometido.
+Dos gráficos sobre el mismo dato, a dos acercamientos. El diario
+responde «qué día se cayó»; el semanal, «cómo viene la semana». Los dos
+juntan las tres cosas de esa conversación: cuánto tocaba, cuánto entró
+y cuánto viene comprometido.
+
+**Lo que entra un día no hábil se suma al día hábil anterior.** Un
+sábado no tiene columna propia, y el camión que llegó ese sábado se
+despachó, en la práctica, en la semana del viernes. Vale igual para un
+feriado en que igual llegó un camión. Antes ese volumen no se perdía
+del total del panel, pero no aparecía en estos gráficos: los dos
+sumaban solo días hábiles y lo del fin de semana quedaba fuera. El
+gráfico diario marca con un `+1` en ámbar los días que traen arrastre
+y la nota dice cuáles.
 
 La hoja **Proyeccion** tiene esta forma:
 

@@ -63,6 +63,94 @@ function comparable_(value) {
     .trim();
 }
 
+/**
+ * La otra normalización, la del cruce operativo del panel.
+ *
+ * comparable_ solo saca la forma jurídica, y con eso "FATIMA" no
+ * llega nunca a "FORESTAL FATIMA LTDA.". Esta descarta además las
+ * palabras que no distinguen a nadie —FORESTAL, ASERRADERO,
+ * INDUSTRIA— que es lo que hace que esos dos nombres sean el mismo.
+ *
+ * Son dos y no una a propósito: son las mismas dos que usa el panel,
+ * y si acá se usara una sola, el correo cruzaría distinto que la
+ * pantalla.
+ */
+function comparableOperativo_(value) {
+  const vacias = {
+    SA: true, SPA: true, LTDA: true, LIMITADA: true,
+    EIRL: true, CIA: true, COMPANIA: true,
+    S: true, A: true, I: true, R: true, L: true,
+    FORESTAL: true, FORESTALES: true, ASERRADERO: true,
+    ASERRADEROS: true, INDUSTRIA: true, INDUSTRIAL: true,
+    INDUSTRIAS: true, MADERERA: true, MADERERAS: true,
+    SOCIEDAD: true, SOC: true, COMERCIAL: true, SERVICIOS: true,
+    INVERSIONES: true, INMOBILIARIA: true, Y: true, DE: true,
+    DEL: true, LA: true, LOS: true, LAS: true, EL: true
+  };
+
+  return normalizeKey_(value)
+    .replace(/\bBIOBIO\b/g, 'BIO BIO')
+    .split(' ')
+    .filter(function(t) { return t && !vacias[t]; })
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokensUnicos_(texto) {
+  const vistos = {};
+  const salida = [];
+
+  String(texto || '').split(' ').forEach(function(t) {
+    if (t && !vistos[t]) { vistos[t] = true; salida.push(t); }
+  });
+
+  return salida;
+}
+
+function distancia_(a, b) {
+  const fila = [];
+
+  for (let j = 0; j <= b.length; j++) { fila[j] = j; }
+
+  for (let i = 1; i <= a.length; i++) {
+    let previo = fila[0];
+
+    fila[0] = i;
+
+    for (let j = 1; j <= b.length; j++) {
+      const temp = fila[j];
+
+      fila[j] = Math.min(
+        fila[j] + 1,
+        fila[j - 1] + 1,
+        previo + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1)
+      );
+
+      previo = temp;
+    }
+  }
+
+  return fila[b.length];
+}
+
+/** Mismo parecido que usa el panel: mitad palabras, mitad letras. */
+function parecido_(a, b) {
+  if (!a || !b) { return 0; }
+  if (a === b) { return 1; }
+
+  const ta = tokensUnicos_(a);
+  const tb = tokensUnicos_(b);
+
+  const comunes = ta.filter(function(t) { return tb.indexOf(t) !== -1; }).length;
+  const union = tokensUnicos_(ta.concat(tb).join(' ')).length;
+  const jaccard = union ? comunes / union : 0;
+
+  const letras = 1 - distancia_(a, b) / Math.max(a.length, b.length);
+
+  return Math.max(0, jaccard * 0.6 + letras * 0.4);
+}
+
 /** 'yyyy-MM-dd' desde una celda que puede venir Date o texto. */
 function fechaClave_(crudo, mostrado) {
   if (crudo instanceof Date && !isNaN(crudo.getTime())) {
@@ -227,7 +315,7 @@ function leerAlias_(planilla) {
  * igual que en el dashboard: por encabezado, aceptando Date, 'yyyy-MM'
  * y 'SEP-2026'.
  */
-function leerPlanDelMes_(planilla, alias) {
+function leerPlanDelMes_(planilla, ctx) {
   const hoja = planilla.getSheetByName(CONFIG.SHEET_PLAN);
   const vacio = { porProveedor: {}, columna: -1, etiqueta: '' };
 
@@ -313,7 +401,7 @@ function leerPlanDelMes_(planilla, alias) {
 
     if (!ts) { continue; }
 
-    const clave = canonico_(proveedor, alias);
+    const clave = canonico_(proveedor, ctx);
 
     if (!porProveedor[clave]) {
       porProveedor[clave] = {
@@ -372,11 +460,83 @@ function aNumero_(valor) {
   return isFinite(n) ? n : 0;
 }
 
-/** El nombre canónico de SAP si la hoja Proveedores lo homologa. */
-function canonico_(nombre, alias) {
-  const clave = comparable_(nombre);
+/**
+ * El proveedor de SAP al que corresponde un nombre, en la misma
+ * cadena que usa el panel:
+ *
+ *   1. La hoja Proveedores, sin umbral. "LLASA" no se parece a
+ *      "LAMINADORA LOS ANGELES" por ninguna medida, así que si el
+ *      parecido decidiera acá, escribirlo no serviría de nada.
+ *   2. El parecido contra los nombres reales de SAP.
+ *   3. El nombre tal cual: no cruza con nadie.
+ *
+ * Sin el paso 2 el correo daba por callados a los proveedores que la
+ * planilla escribe distinto —"FATIMA" por "FORESTAL FATIMA LTDA."— y
+ * que el panel sí cruza. Medido sobre la planilla real: cinco.
+ */
+function canonico_(nombre, ctx) {
+  const alias = (ctx && ctx.alias) || {};
+  const aMano = alias[comparable_(nombre)];
 
-  return alias[clave] ? comparable_(alias[clave]) : clave;
+  if (aMano) { return comparableOperativo_(aMano); }
+
+  const limpio = comparableOperativo_(nombre);
+
+  if (!limpio) { return ''; }
+
+  let mejor = null;
+
+  ((ctx && ctx.sap) || []).forEach(function(sap) {
+    const score = parecido_(limpio, comparableOperativo_(sap));
+
+    if (!mejor || score > mejor.score) {
+      mejor = { sap: sap, score: score };
+    }
+  });
+
+  if (mejor && mejor.score >= CONFIG.UMBRAL_PARECIDO) {
+    return comparableOperativo_(mejor.sap);
+  }
+
+  return limpio;
+}
+
+/**
+ * Los nombres de proveedor que existen en SAP. Se lee solo esa
+ * columna: la hoja Ingresos completa se vuelve a leer después, y
+ * traerla dos veces entera por esto no tiene sentido.
+ */
+function leerNombresSap_(planilla) {
+  const hoja = planilla.getSheetByName(CONFIG.SHEET_INGRESOS);
+
+  if (!hoja || hoja.getLastRow() < 2) { return []; }
+
+  const encabezados = mapaEncabezados_(
+    hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0]
+  );
+
+  let col = CONFIG.INGRESOS_COLUMNS.DESCRIPCION_PROVEEDOR;
+
+  ['descripcion proveedor', 'des proveedor', 'nombre proveedor'].forEach(
+    function(n) {
+      if (encabezados[n] !== undefined) { col = encabezados[n]; }
+    }
+  );
+
+  const valores = hoja
+    .getRange(2, col + 1, hoja.getLastRow() - 1, 1)
+    .getValues();
+
+  const vistos = {};
+  const salida = [];
+
+  valores.forEach(function(fila) {
+    const n = text_(fila[0]);
+
+    if (n && !vistos[n]) { vistos[n] = true; salida.push(n); }
+  });
+
+  return salida;
 }
 
 /**
@@ -386,7 +546,7 @@ function canonico_(nombre, alias) {
  * la fecha más alta de Ingresos o de la planilla ES el último
  * despacho conocido, venga de donde venga.
  */
-function leerUltimosDespachos_(planilla, alias) {
+function leerUltimosDespachos_(planilla, ctx) {
   const desde = desdeClave_();
   const mes = mesActual_();
   const porProveedor = {};
@@ -455,7 +615,7 @@ function leerUltimosDespachos_(planilla, alias) {
 
       if (!proveedor) { continue; }
 
-      anotar(canonico_(proveedor, alias), fecha, ts, 'SAP');
+      anotar(canonico_(proveedor, ctx), fecha, ts, 'SAP');
     }
   }
 
@@ -495,7 +655,7 @@ function leerUltimosDespachos_(planilla, alias) {
 
         if (ts <= 0) { continue; }
 
-        anotar(canonico_(proveedor, alias), fecha, ts, 'PLANILLA');
+        anotar(canonico_(proveedor, ctx), fecha, ts, 'PLANILLA');
       }
     }
   }

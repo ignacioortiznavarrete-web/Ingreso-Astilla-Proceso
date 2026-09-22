@@ -3032,6 +3032,23 @@
         <article class="panel">
           <div class="panel-cab">
             <div>
+              <h2>Día a día hábil: plan, ingreso y proyección</h2>
+              <p class="panel-nota">
+                Un día hábil por columna. Lo que entra sábado, domingo
+                o feriado se suma al día hábil anterior, que es cuando
+                se despachó de verdad. La línea pizarra es el plan
+                diario.
+                <span id="diasNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="conteoDias">—</div>
+          </div>
+          <div id="grafDias"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
               <h2>Semana a semana: plan, ingreso y proyección</h2>
               <p class="panel-nota">
                 Cada semana hábil del mes. Lo que ya pasó se lee con lo
@@ -5534,6 +5551,7 @@
       grafPrecio();
       grafPareto();
       grafBrecha();
+      grafDias();
       grafSemanas();
     }
 
@@ -6292,62 +6310,349 @@
       return d.toISOString().slice(0, 10);
     }
 
-    function grafSemanas() {
-      var caja = document.getElementById('grafSemanas');
-      var nota = document.getElementById('semanasNota');
+    /**
+     * Un cubo por día hábil del mes: plan, lo que entró y lo que se
+     * proyecta. Lo usan el gráfico diario y el semanal, que son el
+     * mismo dato a dos acercamientos.
+     *
+     * Devuelve null cuando no hay contra qué comparar, con el motivo
+     * escrito, para que cada gráfico lo diga a su manera.
+     */
+    function cubosDiarios() {
       var m = CURRENT_METRICS;
       var proy = DATA.proyeccion || { porFecha: {}, missingSheet: true };
 
-      if (nota) { nota.innerHTML = ''; }
-
       if (!m.period.inCurrentMonth) {
-        caja.innerHTML = vacio(
-          'La proyección es del mes vigente: elige el rango «Mes».'
-        );
-        setText('conteoSemanas', '—');
-        return;
+        return {
+          error: 'La proyección es del mes vigente: elige el rango «Mes».'
+        };
       }
 
-      // Los días hábiles del mes, que son los que el plan reparte y
-      // los que la hoja Proyección numera. workdayKeys cubre toda la
-      // ventana de historia, así que se acota al mes.
+      // Los días hábiles del mes: los que el plan reparte y los que la
+      // hoja Proyección numera. workdayKeys cubre toda la ventana de
+      // historia, así que se acota al mes.
       var habiles = ((DATA.workdays || {}).workdayKeys || [])
         .filter(function(k) {
           return k >= DATA.month.startKey && k <= DATA.month.endKey;
         });
 
       if (!habiles.length) {
-        caja.innerHTML = vacio('Sin días hábiles en el mes.');
-        setText('conteoSemanas', '—');
-        return;
+        return { error: 'Sin días hábiles en el mes.' };
+      }
+
+      // A qué día hábil se le carga cada fecha. Un sábado no tiene
+      // columna propia: lo que entra ese día se le suma al viernes,
+      // que es el día hábil que lo precede. Sin esto ese volumen
+      // desaparecía del gráfico —no se perdía en el total del panel,
+      // pero acá no se veía—, y lo mismo pasaba con un feriado en que
+      // igual llegó un camión.
+      var habilDe = {};
+      var ultimoHabil = '';
+      var cursor = DATA.month.startKey;
+
+      habiles.forEach(function(k) { habilDe[k] = k; });
+
+      // Se recorre el mes entero, no solo los hábiles.
+      while (cursor <= DATA.month.endKey) {
+        if (habilDe[cursor] === cursor) {
+          ultimoHabil = cursor;
+        } else if (ultimoHabil) {
+          habilDe[cursor] = ultimoHabil;
+        }
+
+        cursor = sumarDias(cursor, 1);
       }
 
       var porFecha = {};
+      var arrastrados = {};
 
       CURRENT_ROWS.forEach(function(f) {
-        if (!porFecha[f.fecha]) { porFecha[f.fecha] = { real: 0, est: 0 }; }
+        var destino = habilDe[f.fecha];
+
+        // Un día del mes anterior al primer hábil no tiene a quién
+        // cargarse: queda fuera, como antes.
+        if (!destino) { return; }
+
+        if (!porFecha[destino]) {
+          porFecha[destino] = { real: 0, est: 0 };
+        }
 
         if (f.source === 'PLANILLA') {
-          porFecha[f.fecha].est += Number(f.ts) || 0;
+          porFecha[destino].est += Number(f.ts) || 0;
         } else {
-          porFecha[f.fecha].real += Number(f.ts) || 0;
+          porFecha[destino].real += Number(f.ts) || 0;
+        }
+
+        if (destino !== f.fecha) {
+          if (!arrastrados[destino]) { arrastrados[destino] = {}; }
+          arrastrados[destino][f.fecha] = true;
         }
       });
 
       var hasta = m.period.referenceDate ||
         (DATA.workdays || {}).todayKey || '';
 
-      // El plan del mes repartido entre sus días hábiles: es el mismo
-      // prorrateo que usa el resto del panel, agrupado por semana.
+      // El plan del mes repartido entre sus días hábiles: el mismo
+      // prorrateo que usa el resto del panel.
       var planPorHabil = m.planValid && habiles.length
         ? (m.monthlyPlan || 0) / habiles.length
         : 0;
 
+      var dias = habiles.map(function(k) {
+        var dia = porFecha[k] || { real: 0, est: 0 };
+
+        var cubo = {
+          fecha: k,
+          real: dia.real,
+          est: dia.est,
+          proyectado: 0,
+          camiones: 0,
+          plan: planPorHabil,
+          pasado: !hasta || k <= hasta,
+          arrastrados: Object.keys(arrastrados[k] || {}).sort()
+        };
+
+        // Misma precedencia que el resto del panel: SAP manda, la
+        // planilla tapa el hueco, y la proyección solo rellena el día
+        // del que todavía no se sabe nada. Sumarlas contaría dos veces
+        // el camión que la planilla ya reportó y la proyección
+        // prometía.
+        //
+        // Un día pasado sin nada es un día sin despacho, no un día por
+        // proyectar: su proyección ya venció.
+        if (!cubo.real && !cubo.est && !cubo.pasado) {
+          var pr = (proy.porFecha || {})[k];
+
+          if (pr) {
+            cubo.proyectado = Number(pr.ts) || 0;
+            cubo.camiones = Number(pr.camiones) || 0;
+          }
+        }
+
+        cubo.entrado = cubo.real + cubo.est;
+        cubo.total = cubo.entrado + cubo.proyectado;
+
+        return cubo;
+      });
+
+      return { dias: dias, habiles: habiles, hasta: hasta, proy: proy };
+    }
+
+    /** 'yyyy-MM-dd' más n días. */
+    function sumarDias(fecha, n) {
+      var p = String(fecha).split('-');
+      var d = new Date(Date.UTC(
+        Number(p[0]), Number(p[1]) - 1, Number(p[2])
+      ));
+
+      d.setUTCDate(d.getUTCDate() + n);
+
+      return d.toISOString().slice(0, 10);
+    }
+
+    /* --- Día a día hábil ---------------------------------------------
+       El mismo dato que el semanal, sin agrupar. Sirve para otra
+       pregunta: no "cómo viene la semana" sino "qué día se cayó". */
+
+    function grafDias() {
+      var caja = document.getElementById('grafDias');
+      var nota = document.getElementById('diasNota');
+      var cubos = cubosDiarios();
+
+      if (nota) { nota.innerHTML = ''; }
+
+      if (cubos.error) {
+        caja.innerHTML = vacio(cubos.error);
+        setText('conteoDias', '—');
+        return;
+      }
+
+      var lista = cubos.dias;
+
+      var conArrastre = lista.filter(function(d) {
+        return d.arrastrados.length;
+      });
+
+      setText('conteoDias',
+        lista.length + ' días hábiles' +
+        (conArrastre.length
+          ? ' · ' + conArrastre.length + ' con arrastre'
+          : ''));
+
+      if (nota && conArrastre.length) {
+        var cuantos = conArrastre.reduce(function(t, d) {
+          return t + d.arrastrados.length;
+        }, 0);
+
+        nota.innerHTML = ' Se arrastraron <b>' + cuantos +
+          (cuantos === 1 ? ' día no hábil</b>' : ' días no hábiles</b>') +
+          ' al hábil anterior: ' +
+          esc(conArrastre.map(function(d) {
+            return d.arrastrados.map(function(f) {
+              return formatDateKey(f);
+            }).join(', ') + ' → ' + formatDateKey(d.fecha);
+          }).slice(0, 4).join('; ')) +
+          (conArrastre.length > 4 ? '…' : '') + '.';
+      }
+
+      var tope = Math.max(
+        Math.max.apply(null, lista.map(function(d) { return d.total; })),
+        lista.length ? lista[0].plan : 0,
+        1
+      );
+
+      var W = Math.max(360, caja.clientWidth || 900);
+      var H = 300;
+      var M = { t: 24, r: 14, b: 40, l: 56 };
+      var w = W - M.l - M.r;
+      var h = H - M.t - M.b;
+      var paso = w / lista.length;
+      var ancho = Math.max(4, Math.min(30, paso - 8));
+
+      var y = function(v) { return M.t + h - (v / tope) * h; };
+      var partes = [ejeY(M, w, h, tope)];
+
+      partes.push(
+        '<pattern id="rayadoDia" width="6" height="6" ' +
+        'patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
+        '<rect width="6" height="6" fill="var(--pizarra-soft)"/>' +
+        '<rect width="3" height="6" fill="var(--pizarra)"/></pattern>'
+      );
+
+      var comoDia = formatoSerie(tope);
+      var cifras = lista.map(function(d) { return comoDia(d.total); });
+      var rotular = cabenRotulos(cifras, paso);
+      var rotulos = [];
+
+      lista.forEach(function(d, i) {
+        var cx = M.l + paso * i + paso / 2;
+        var base = M.t + h;
+
+        function bloque(alto, desde, relleno) {
+          if (alto <= 0) { return; }
+
+          partes.push('<rect class="barra-svg" data-i="' + i + '" x="' +
+            (cx - ancho / 2) + '" y="' + (desde - alto) + '" width="' +
+            ancho + '" height="' + Math.max(1, alto) + '" fill="' +
+            relleno + '" rx="1.5"/>');
+        }
+
+        var hReal = (d.real / tope) * h;
+        var hEst = (d.est / tope) * h;
+        var hProy = (d.proyectado / tope) * h;
+
+        bloque(hReal, base, 'var(--verde)');
+        bloque(hEst, base - hReal, 'url(#rayado)');
+        bloque(hProy, base - hReal - hEst, 'url(#rayadoDia)');
+
+        if (rotular && d.total > 0) {
+          var yTope = y(d.total);
+          var arribaClaro = d.proyectado > 0 || d.est > 0;
+
+          rotulos.push(yTope + 24 < base
+            ? rotulo(cx, yTope + 16, cifras[i],
+                arribaClaro ? '' : 'rotulo-dentro')
+            : rotulo(cx, yTope - 7, cifras[i], 'rotulo-verde'));
+        }
+
+        // El día del mes, y un punto bajo los que traen arrastre.
+        partes.push('<text x="' + cx + '" y="' + (M.t + h + 17) +
+          '" text-anchor="middle" font-size="9.5">' +
+          esc(d.fecha.slice(8)) + '</text>');
+
+        if (d.arrastrados.length) {
+          partes.push('<text x="' + cx + '" y="' + (M.t + h + 29) +
+            '" text-anchor="middle" font-size="9" ' +
+            'fill="var(--madera)">+' + d.arrastrados.length + '</text>');
+        }
+      });
+
+      if (lista.length && lista[0].plan > 0) {
+        var yPlan = y(lista[0].plan);
+
+        partes.push('<line class="traza-plan" x1="' + M.l + '" y1="' +
+          yPlan + '" x2="' + (M.l + w) + '" y2="' + yPlan + '"/>');
+        partes.push(rotulo(M.l + w, yPlan - 6,
+          'plan diario ' + comoDia(lista[0].plan), 'rotulo-pizarra', 'end'));
+      }
+
+      partes = partes.concat(rotulos);
+
+      partes.push('<line class="eje" x1="' + M.l + '" y1="' + (M.t + h) +
+        '" x2="' + (M.l + w) + '" y2="' + (M.t + h) + '"/>');
+
+      caja.innerHTML = '<svg class="grafico" viewBox="0 0 ' + W + ' ' + H +
+        '" height="' + H + '" role="img" ' +
+        'aria-label="Plan, ingreso y proyección por día hábil">' +
+        partes.join('') + bandas(lista.length, M, w, h, paso) + '</svg>';
+
+      montarGlobo(caja, {
+        contenido: function(i) {
+          var d = lista[i];
+          var filas = [];
+
+          if (d.real > 0) {
+            filas.push({ color: 'var(--verde)', etiqueta: 'Recibido (SAP)',
+              valor: formatTs(d.real) });
+          }
+
+          if (d.est > 0) {
+            filas.push({ color: 'var(--madera)',
+              etiqueta: 'Estimado (planilla)', valor: formatTs(d.est) });
+          }
+
+          if (d.proyectado > 0) {
+            filas.push({ color: 'var(--pizarra)', etiqueta: 'Proyectado',
+              valor: formatTs(d.proyectado) });
+          }
+
+          filas.push({ etiqueta: 'Total del día', valor: formatTs(d.total) });
+
+          if (d.plan > 0) {
+            filas.push({ color: 'var(--pizarra)', etiqueta: 'Plan diario',
+              valor: formatTs(d.plan) });
+            filas.push({ etiqueta: 'Desvío',
+              valor: signo(d.total - d.plan),
+              clase: claseDesvio(d.total - d.plan) });
+          }
+
+          return globoHTML({
+            titulo: formatDateKey(d.fecha),
+            subtitulo: d.camiones
+              ? formatInteger(d.camiones) + ' camiones comprometidos'
+              : null,
+            filas: filas,
+            pie: d.arrastrados.length
+              ? 'Incluye ' + d.arrastrados.map(function(f) {
+                  return formatDateKey(f);
+                }).join(' y ') + ', que no son días hábiles.'
+              : null
+          });
+        },
+        destacar: function(i) { encender(caja, i, true); },
+        apagar: function() { apagar(caja); }
+      });
+    }
+
+    function grafSemanas() {
+      var caja = document.getElementById('grafSemanas');
+      var nota = document.getElementById('semanasNota');
+      var m = CURRENT_METRICS;
+      var cubos = cubosDiarios();
+
+      if (nota) { nota.innerHTML = ''; }
+
+      if (cubos.error) {
+        caja.innerHTML = vacio(cubos.error);
+        setText('conteoSemanas', '—');
+        return;
+      }
+
+      var proy = cubos.proy;
       var semanas = {};
 
-      habiles.forEach(function(k) {
-        var lunes = lunesDe(k);
-
+      cubos.dias.forEach(function(d) {
+        var lunes = lunesDe(d.fecha);
 
         if (!semanas[lunes]) {
           semanas[lunes] = {
@@ -6357,37 +6662,15 @@
         }
 
         var sem = semanas[lunes];
-        var dia = porFecha[k] || { real: 0, est: 0 };
 
         sem.habiles++;
-        sem.plan += planPorHabil;
+        sem.plan += d.plan;
+        sem.real += d.real;
+        sem.est += d.est;
+        sem.proyectado += d.proyectado;
+        sem.camiones += d.camiones;
 
-        if (hasta && k > hasta) { sem.cerrada = false; }
-
-        // Misma precedencia que el resto del panel: SAP manda, la
-        // planilla tapa el hueco, y la proyección solo rellena el día
-        // del que todavía no se sabe nada. Sumarlas contaría dos veces
-        // el camión que la planilla ya reportó y la proyección
-        // prometía: el día 22 con planilla y proyección valdría el
-        // doble.
-        var entroAlgo = dia.real > 0 || dia.est > 0;
-
-        if (entroAlgo) {
-          sem.real += dia.real;
-          sem.est += dia.est;
-          return;
-        }
-
-        // Un día pasado sin nada es un día sin despacho, no un día por
-        // proyectar: su proyección ya venció.
-        if (!hasta || k <= hasta) { return; }
-
-        var pr = (proy.porFecha || {})[k];
-
-        if (pr) {
-          sem.proyectado += Number(pr.ts) || 0;
-          sem.camiones += Number(pr.camiones) || 0;
-        }
+        if (!d.pasado) { sem.cerrada = false; }
       });
 
       var lista = Object.keys(semanas).sort().map(function(k) {

@@ -24,6 +24,8 @@ const hojas = {
     ['', 'GAMMA SA', 44, 1400, 1500, 1500],
     ['', 'DELTA SPA', 40, 700, 800, 800],
     ['', 'OMEGA SPA', 39, 500, 500, 500],
+    // Solo cruza por parecido con lo que escribe la planilla.
+    ['', 'FORESTAL FATIMA LTDA.', 37, 400, 450, 450],
     // Tiene plan en agosto y en octubre, pero no en septiembre: este
     // mes no tiene nada comprometido y no debe salir en el correo.
     ['', 'SIGMA SPA', 38, 600, '', 600],
@@ -36,6 +38,7 @@ const hojas = {
     ['ALFA SPA', 'ALFA S.A.', 'manual'],
     ['', 'ALFA', 'manual'],
     ['GAMMA SA', 'GAMA S.A.', 'manual']
+    // OJO: FORESTAL FATIMA LTDA. NO tiene alias a propósito.
   ]),
 
   // Ingresos: fechas como Date, cantidad con coma decimal, y un
@@ -56,6 +59,10 @@ const hojas = {
     // Cantidad cero: no es un despacho.
     ['', '', '3000039', 'ASTILLA PINO', new Date(Date.UTC(2026, 8, 15)),
      '', '', '', '0', '', 'TS', 'P5', 'GAMMA SA', 'TABLEROS'],
+    // FATIMA existe en SAP con su nombre largo; la planilla la
+    // escribe "FATIMA" a secas.
+    ['', '', '3000039', 'ASTILLA PINO', new Date(Date.UTC(2026, 8, 1)),
+     '', '', '', '60', '', 'TS', 'P7', 'FORESTAL FATIMA LTDA.', 'TABLEROS'],
     // SIGMA despachó hace mucho: si entrara, caería en el tramo alto.
     ['', '', '3000039', 'ASTILLA PINO', new Date(Date.UTC(2026, 7, 20)),
      '', '', '', '80', '', 'TS', 'P6', 'SIGMA SPA', 'TABLEROS']
@@ -71,7 +78,11 @@ const hojas = {
     ['08-09-2026', '2026-09-08', 'AST PINO', 'ASTILLA PINO VERDE',
      'GAMA S.A.', 'TABLEROS', 4, 11, 44, '', '', '', '', '', 'OK', 'tabla'],
     ['17-09-2026', '2026-09-17', 'AST PINO', 'ASTILLA PINO VERDE',
-     'OMEGA SPA', 'TABLEROS', 3, 11, 33, '', '', '', '', '', 'ERROR: x', 'tabla']
+     'OMEGA SPA', 'TABLEROS', 3, 11, 33, '', '', '', '', '', 'ERROR: x', 'tabla'],
+    // "FATIMA" a secas: sin parecido operativo, el correo la daba por
+    // callada aunque acá dice que despachó ayer.
+    ['15-09-2026', '2026-09-15', 'AST PINO', 'ASTILLA PINO VERDE',
+     'FATIMA', 'TABLEROS', 2, 11, 22, '', '', '', '', '', 'OK', 'tabla']
   ])
 };
 
@@ -120,6 +131,18 @@ const sigma = aviso.proveedores.filter(p => p.proveedor === 'SIGMA SPA')[0];
 ok(!sigma, 'el que no tiene plan este mes no entra al correo',
    sigma && JSON.stringify(sigma));
 ok(!/SIGMA/.test(JSON.stringify(porTramo)), 'ni aparece en ningún tramo');
+
+// El caso que se vino a arreglar: la planilla escribe "FATIMA" y SAP
+// "FORESTAL FATIMA LTDA.". Sin parecido operativo no cruzaban y el
+// correo la acusaba de llevar días sin despachar.
+const fatima = aviso.proveedores.filter(p => /FATIMA/.test(p.proveedor))[0];
+ok(fatima && fatima.ultimo === '2026-09-15' && fatima.fuente === 'PLANILLA',
+   'la planilla que escribe el nombre corto cruza con el largo de SAP',
+   fatima && [fatima.ultimo, fatima.fuente]);
+ok(fatima && fatima.dias === 1, 'y su silencio se cuenta desde ese día',
+   fatima && fatima.dias);
+ok(!/FATIMA/.test(JSON.stringify(porTramo)),
+   'así que no sale en ninguna tabla de atraso');
 
 // --- 2. El correo ------------------------------------------------------
 ctx.enviarAhora();

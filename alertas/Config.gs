@@ -61,6 +61,11 @@ const CONFIG = Object.freeze({
   // correo saldría idéntico al del viernes. Se salta.
   SOLO_HABILES: true,
 
+  // Bajo esto, dos nombres no son el mismo proveedor. Es el mismo
+  // umbral que usa el panel: si se cambia acá y no allá, el correo
+  // empieza a decir algo distinto de lo que muestra la pantalla.
+  UMBRAL_PARECIDO: 0.72,
+
   // Cuántos meses atrás se lee para encontrar el último despacho. Un
   // proveedor que no despacha hace más que esto sale como «sin
   // ingresos», que para una alerta dice lo mismo.
