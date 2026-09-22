@@ -154,6 +154,14 @@ Tres cosas que conviene saber:
 - **`Dia N` es el N-ésimo día HÁBIL del mes en curso.** No hay fecha en
   ninguna celda de esa hoja, así que el anclaje vive en el código
   (`readProyeccion_`). Cambiarlo cambia a qué semana cae cada columna.
+  Esto se recalcula solo cada mes: no hay nada anclado a un mes
+  concreto.
+- **Un mes puede tener menos días hábiles que columnas.** La hoja tiene
+  23 y un mes va de 20 a 23 según feriados: en un mes de 20, las
+  columnas `Dia 21`–`Dia 23` no caen en ninguna fecha. Lo que se
+  escriba ahí **no entra**, así que el panel lo dice con el número de
+  camiones y las columnas involucradas. 23 es el máximo posible, así
+  que nunca faltan columnas; sobran.
 - **Los camiones se convierten con el factor del material de la columna
   A**, no con un promedio: un camión de nitens no pesa lo que uno de
   pino con corteza.
@@ -200,6 +208,23 @@ dice nada. La comparación no se pierde: la escala es lineal, así que un
 
 Depende del plan prorrateado, así que solo aparece con el mes vigente
 seleccionado; con cualquier otro rango dice por qué no está.
+
+### Lo que caduca
+
+Dos cosas del panel están escritas a mano y se acaban. Las dos avisan
+solas en la nota de arriba de Suministro cuando llega el momento:
+
+| Qué | Cuándo | Qué pasa si nadie lo toca |
+|---|---|---|
+| `CONFIG.FERIADOS` | Llega hasta **2026-12-25** | Desde 2027 el 1 de enero y el 18 de septiembre cuentan como días hábiles: el plan a la fecha queda inflado, el mapeo `Dia N` se corre y el correo cuenta mal los días de silencio |
+| Columnas de `Proyeccion` | Cada mes de menos de 23 días hábiles | Los camiones escritos en las columnas que sobran se descartan |
+
+El aviso de los feriados se dispara cuando el último año cargado queda
+por detrás del mes vigente, no por una fecha fija: si se agregan los de
+2027, desaparece solo.
+
+**Ojo:** `alertas/Config.gs` tiene su propia copia de la lista de
+feriados. Hay que actualizar las dos.
 
 ### Cuánta historia se ve
 

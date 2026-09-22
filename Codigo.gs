@@ -424,6 +424,17 @@ function getDashboardData() {
     month: month,
     workdays: workdays,
     holidays: CONFIG.FERIADOS.slice(),
+    // La lista de feriados está escrita a mano y se acaba. Cuando el
+    // mes vigente pasa del último año cargado, el 1 de enero y el 18
+    // de septiembre empiezan a contar como días hábiles y el plan a
+    // la fecha queda inflado sin que nadie lo note.
+    feriadosHasta: CONFIG.FERIADOS.length
+      ? CONFIG.FERIADOS[CONFIG.FERIADOS.length - 1].slice(0, 4)
+      : '',
+    feriadosVencidos: CONFIG.FERIADOS.length
+      ? CONFIG.FERIADOS[CONFIG.FERIADOS.length - 1].slice(0, 4) <
+        String(month.year)
+      : true,
     subproductos: SUBPRODUCTOS_OBJETIVO.slice(),
     materialMap: CONFIG.MATERIAL_MAP,
     source: {
@@ -2800,6 +2811,7 @@ function readProyeccion_(spreadsheet, month, workdayKeys) {
   // B, así que se usa para el mapeo y también se lee como dato.
   const cabecera = displayed[0] || [];
   const diaDeColumna = {};
+  const sobrantes = {};
   let columnas = 0;
 
   for (let c = 2; c < cabecera.length; c++) {
@@ -2811,6 +2823,12 @@ function readProyeccion_(spreadsheet, month, workdayKeys) {
 
     if (indice >= 0 && indice < habiles.length) {
       diaDeColumna[c] = habiles[indice];
+    } else if (indice >= 0) {
+      // La hoja tiene 23 columnas y un mes puede tener 20 días
+      // hábiles: "Dia 21" no cae en ninguna fecha. Se anota para
+      // poder avisar, porque escribir ahí y que se pierda en
+      // silencio es peor que no poder escribir.
+      sobrantes[c] = 'Dia ' + m[1];
     }
 
     columnas++;
@@ -2822,7 +2840,9 @@ function readProyeccion_(spreadsheet, month, workdayKeys) {
 
   const porFecha = {};
   const porProveedor = {};
+  const sobranteUsado = {};
   let total = 0;
+  let camionesSobrantes = 0;
   let material = '';
 
   for (let r = 0; r < values.length; r++) {
@@ -2882,6 +2902,17 @@ function readProyeccion_(spreadsheet, month, workdayKeys) {
       porProveedor[clv].camiones += camiones;
       total += ts;
     });
+
+    // Lo escrito en columnas que este mes no existen.
+    Object.keys(sobrantes).forEach(function(clave) {
+      const c = Number(clave);
+      const camiones = camionesDeCelda_(values[r][c], displayed[r][c]);
+
+      if (!camiones) { return; }
+
+      camionesSobrantes += camiones;
+      sobranteUsado[sobrantes[c]] = true;
+    });
   }
 
   return {
@@ -2892,6 +2923,11 @@ function readProyeccion_(spreadsheet, month, workdayKeys) {
     total: round_(total, 2),
     dias: Object.keys(porFecha).length,
     columnas: columnas,
+    // Camiones escritos en columnas que este mes no tienen día
+    // hábil. No entran a ninguna fecha, así que se dicen.
+    camionesSobrantes: camionesSobrantes,
+    columnasSobrantes: Object.keys(sobranteUsado).sort(),
+    diasHabiles: habiles.length,
     // La fila 1 hace de encabezado y de dato a la vez: su proveedor no
     // puede tener proyección sin pisar las etiquetas. Se avisa, porque
     // es una fila que se pierde en silencio.
