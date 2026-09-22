@@ -12,6 +12,8 @@ Google Apps Script sobre un spreadsheet. La unidad de trabajo es la
   tiene, con `camiones × factor del material`.
 - **Plan** (hoja) aporta precio unitario y volumen mensual comprometido
   por proveedor y material.
+- **Proyeccion** (hoja) son los camiones que cada proveedor se
+  compromete a mandar, por día hábil. Ver más abajo.
 - **Proveedores** (hoja) es la tabla de equivalencias de nombres. Manda
   sobre el parecido automático.
 - **Mapeos**, **Rutas** y **Apuntes** cubren la gestión de terreno y las
@@ -98,11 +100,56 @@ va rotulada, con tres reglas:
 - **Nunca sobre otra cosa.** Los rótulos se dibujan al final, con un
   halo del color del papel, para que una traza que pase por encima no
   los tache. Donde hay dos series —precio y volumen— se rotula una
-  sola.
+  sola. Dentro de una barra lisa van en color papel sin halo; sobre un
+  rayado conservan el halo, que es lo único que los recorta contra las
+  franjas.
+- **Las reglas van ancladas a `.grafico`.** `.grafico text` ya fija
+  `fill` y le gana en especificidad a una clase suelta: sin el ancla,
+  todos los rótulos salen gris `--ink-3` en vez de su color. Y
+  `.rotulo` ya existía como clase de versalitas, que además les metía
+  `letter-spacing` y mayúsculas a las cifras.
 
 En el acumulado no se rotula cada día sino las tres cifras que se
 buscan: dónde va el real, dónde termina el plan y dónde termina la
 proyección.
+
+### Semana a semana: plan, ingreso y proyección
+
+El panel mira el mes; la operación se conversa por semana. Este gráfico
+junta las tres cosas de esa conversación: cuánto tocaba, cuánto entró y
+cuánto viene comprometido.
+
+La hoja **Proyeccion** tiene esta forma:
+
+| Col | Qué |
+|---|---|
+| A | Material, en celdas combinadas (`Astilla Verde o 3000039`) |
+| B | Proveedor |
+| C… | `Dia 1`, `Dia 2`, … con **camiones**, no toneladas |
+
+Tres cosas que conviene saber:
+
+- **`Dia N` es el N-ésimo día HÁBIL del mes en curso.** No hay fecha en
+  ninguna celda de esa hoja, así que el anclaje vive en el código
+  (`readProyeccion_`). Cambiarlo cambia a qué semana cae cada columna.
+- **Los camiones se convierten con el factor del material de la columna
+  A**, no con un promedio: un camión de nitens no pesa lo que uno de
+  pino con corteza.
+- **La fila 1 de esa hoja lleva las etiquetas `Dia 1…` y a la vez un
+  proveedor**, así que ese proveedor no puede cargar camiones sin pisar
+  las etiquetas. El panel lo dice por su nombre; se arregla insertando
+  una fila de encabezado arriba.
+
+Cada barra es una semana (lunes a domingo) y significa siempre lo
+mismo: **lo que se espera terminar teniendo**. Para eso se decide día
+por día, con la misma precedencia que el resto del panel — SAP manda,
+la planilla tapa el hueco, la proyección rellena solo el día del que
+todavía no se sabe nada. Sumarlas contaría dos veces el camión que la
+planilla ya reportó y la proyección prometía. Un día pasado sin nada es
+un día sin despacho, no un día por proyectar: su proyección ya venció.
+
+El travesaño pizarra es el plan del mes repartido entre los días
+hábiles de esa semana.
 
 ### Brecha vs plan a la fecha
 

@@ -40,6 +40,7 @@ const CONFIG = Object.freeze({
   SHEET_INGRESOS: 'Ingresos',
   SHEET_INFORME: 'InformeAstilla',
   SHEET_PLAN: 'Plan',
+  SHEET_PROYECCION: 'Proyeccion',
   SHEET_MAPEOS: 'Mapeos',
   SHEET_PROVEEDORES: 'Proveedores',
   SHEET_RUTAS: 'Rutas',
@@ -395,6 +396,14 @@ function getDashboardData() {
     month.prefix
   );
 
+  // Camiones comprometidos por día hábil, convertidos a TS con el
+  // factor del material de la columna A.
+  const proyeccion = readProyeccion_(
+    spreadsheet,
+    month,
+    workdays.workdayKeys
+  );
+
   const pricing = applyPlanPricing_(
     baseRows,
     plan.details,
@@ -494,6 +503,7 @@ function getDashboardData() {
     plan: plan.rows,
     planDetails: plan.details,
     planMeses: planMeses,
+    proyeccion: proyeccion,
     pricing: pricing.stats,
     rows: rows
   };
@@ -2484,6 +2494,197 @@ function readPlanMeses_(spreadsheet, desde, hasta) {
   return {
     meses: columnas.map(function(item) { return item.prefijo; }).sort(),
     porMes: porMes
+  };
+}
+
+/* =====================================================================
+ * PROYECCIÓN SEMANAL
+ *
+ * La hoja "Proyeccion" es el compromiso de camiones que cada
+ * proveedor dice que va a mandar. Su forma:
+ *
+ *   A  material, en celdas combinadas ("Astilla Verde o 3000039")
+ *   B  proveedor
+ *   C… "Dia 1", "Dia 2", … con CAMIONES, no toneladas
+ *
+ * "Dia N" es el N-ésimo día HÁBIL del mes en curso: no hay fecha en
+ * ninguna celda, así que el anclaje vive acá. Cambiarlo cambia a qué
+ * semana cae cada columna.
+ *
+ * Los camiones se convierten con el factor del material de la columna
+ * A, que es el mismo criterio que usa el complemento de la planilla:
+ * un camión de nitens no pesa lo que uno de pino con corteza.
+ * ===================================================================== */
+
+/**
+ * Camiones de una celda de proyección, o 0 si no hay.
+ *
+ * Tiene que SER un número, no contener uno: parseOptionalNumber_
+ * borra las letras antes de convertir, así que le da 1 a "Dia 1" y
+ * las etiquetas de la fila 1 entraban como un camión cada una.
+ */
+function camionesDeCelda_(crudo, mostrado) {
+  if (typeof crudo === 'number') {
+    return isFinite(crudo) ? crudo : 0;
+  }
+
+  const texto = text_(mostrado !== '' && mostrado !== undefined
+    ? mostrado
+    : crudo);
+
+  if (!/^-?\d{1,3}(\.\d{3})*(,\d+)?$|^-?\d+([.,]\d+)?$/.test(texto)) {
+    return 0;
+  }
+
+  const n = parseOptionalNumber_(texto);
+
+  return n === null || !isFinite(n) ? 0 : n;
+}
+
+/**
+ * Proyección por día hábil, ya convertida a TS.
+ *
+ * Devuelve porFecha —lo que el gráfico semanal necesita— y también el
+ * detalle por proveedor, para poder decir quién compone cada semana.
+ */
+function readProyeccion_(spreadsheet, month, workdayKeys) {
+  const vacio = {
+    porFecha: {},
+    porProveedor: [],
+    total: 0,
+    dias: 0,
+    columnas: 0,
+    primeraFilaEsEncabezado: false,
+    missingSheet: true
+  };
+
+  const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROYECCION);
+
+  if (!sheet || sheet.getLastRow() < 1) {
+    return vacio;
+  }
+
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  const displayed = range.getDisplayValues();
+
+  if (!values.length) {
+    return vacio;
+  }
+
+  // Los días hábiles del mes en curso, en orden. "Dia 1" es el
+  // primero de esta lista.
+  const habiles = (workdayKeys || []).filter(function(key) {
+    return key >= month.startKey && key <= month.endKey;
+  });
+
+  // La fila 1 lleva las etiquetas "Dia N" en C en adelante. No hay
+  // fila de encabezado aparte: esa misma fila ya trae un proveedor en
+  // B, así que se usa para el mapeo y también se lee como dato.
+  const cabecera = displayed[0] || [];
+  const diaDeColumna = {};
+  let columnas = 0;
+
+  for (let c = 2; c < cabecera.length; c++) {
+    const m = normalizeKey_(cabecera[c]).match(/^DIA\s*(\d+)$/);
+
+    if (!m) { continue; }
+
+    const indice = Number(m[1]) - 1;
+
+    if (indice >= 0 && indice < habiles.length) {
+      diaDeColumna[c] = habiles[indice];
+    }
+
+    columnas++;
+  }
+
+  if (!columnas) {
+    return Object.assign({}, vacio, { missingSheet: false });
+  }
+
+  const porFecha = {};
+  const porProveedor = {};
+  let total = 0;
+  let material = '';
+
+  for (let r = 0; r < values.length; r++) {
+    // La columna A viene combinada por grupo de material: solo la
+    // primera fila del grupo trae el valor, igual que en la hoja Plan.
+    const celdaMaterial = text_(
+      displayed[r][0] !== '' ? displayed[r][0] : values[r][0]
+    );
+
+    if (celdaMaterial) {
+      material = resolvePlanSubproducto_(celdaMaterial);
+    }
+
+    const proveedor = text_(
+      displayed[r][1] !== '' ? displayed[r][1] : values[r][1]
+    );
+
+    if (!material || !proveedor || isTotalText_(proveedor)) {
+      continue;
+    }
+
+    const factor = factorDe_(material);
+
+    // La fila 1 es la que lleva las etiquetas "Dia N": ahí no hay
+    // camiones que leer, por mucho que esa misma fila traiga un
+    // proveedor en la columna B.
+    if (r === 0) { continue; }
+
+    Object.keys(diaDeColumna).forEach(function(clave) {
+      const c = Number(clave);
+      const camiones = camionesDeCelda_(values[r][c], displayed[r][c]);
+
+      if (!camiones) { return; }
+
+      const fecha = diaDeColumna[c];
+      const ts = camiones * factor;
+
+      if (!porFecha[fecha]) {
+        porFecha[fecha] = { ts: 0, camiones: 0 };
+      }
+
+      porFecha[fecha].ts += ts;
+      porFecha[fecha].camiones += camiones;
+
+      const clv = proveedor + '||' + material;
+
+      if (!porProveedor[clv]) {
+        porProveedor[clv] = {
+          proveedor: proveedor,
+          subproducto: material,
+          ts: 0,
+          camiones: 0
+        };
+      }
+
+      porProveedor[clv].ts += ts;
+      porProveedor[clv].camiones += camiones;
+      total += ts;
+    });
+  }
+
+  return {
+    porFecha: porFecha,
+    porProveedor: Object.keys(porProveedor).map(function(k) {
+      return porProveedor[k];
+    }).sort(function(a, b) { return b.ts - a.ts; }),
+    total: round_(total, 2),
+    dias: Object.keys(porFecha).length,
+    columnas: columnas,
+    // La fila 1 hace de encabezado y de dato a la vez: su proveedor no
+    // puede tener proyección sin pisar las etiquetas. Se avisa, porque
+    // es una fila que se pierde en silencio.
+    primeraFilaEsEncabezado: !!text_(
+      displayed[0][1] !== '' ? displayed[0][1] : values[0][1]
+    ),
+    filaEncabezado: text_(
+      displayed[0][1] !== '' ? displayed[0][1] : values[0][1]
+    ),
+    missingSheet: false
   };
 }
 

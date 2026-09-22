@@ -1367,33 +1367,42 @@
     .grafico.enfocando .barra-svg { opacity: .28; }
     .grafico.enfocando .barra-svg.viva { opacity: 1; }
 
-    .punta-serie {
+    /* Mismo motivo que los rótulos: sin .grafico delante, el fill de
+       «.grafico text» le gana y la punta de la serie sale gris. */
+    .grafico .punta-serie {
       font-family: var(--mono); font-size: var(--t-mini);
       font-weight: 500; fill: var(--verde);
+      letter-spacing: 0; text-transform: none;
     }
 
     /* Estos gráficos terminan pegados en una lámina, donde no hay
        cursor: una cifra que solo vive en el globo, ahí no existe. El
        halo del color del papel la deja legible aunque caiga sobre una
        rejilla o sobre otra barra. */
-    .rotulo {
+    /* Todo esto va anclado a .grafico por dos choques, no por gusto:
+       «.grafico text» ya fija fill y le gana en especificidad a una
+       clase suelta —los rótulos salían todos gris ink-3, sin su
+       color—, y «.rotulo» ya existía arriba como versalitas, que les
+       metía letter-spacing y mayúsculas a las cifras. */
+    .grafico .rotulo {
       font-family: var(--mono); font-size: 10px;
       font-weight: 500; fill: var(--ink-2);
+      letter-spacing: 0; text-transform: none;
       paint-order: stroke;
       stroke: var(--paper); stroke-width: 3px; stroke-linejoin: round;
     }
 
-    .rotulo-verde { fill: var(--verde); }
-    .rotulo-madera { fill: var(--madera); }
-    .rotulo-pizarra { fill: var(--pizarra); }
-    .rotulo-ladrillo { fill: var(--ladrillo); }
-    .rotulo-fuerte { font-weight: 600; }
+    .grafico .rotulo-verde { fill: var(--verde); }
+    .grafico .rotulo-madera { fill: var(--madera); }
+    .grafico .rotulo-pizarra { fill: var(--pizarra); }
+    .grafico .rotulo-ladrillo { fill: var(--ladrillo); }
+    .grafico .rotulo-fuerte { font-weight: 600; }
 
-    /* Dentro de la barra: sin halo, porque el fondo es la barra. El
-       color lo decide la barra, no el dato: sobre el verde va claro,
-       sobre el rayado madera —que es claro— va oscuro. */
-    .rotulo-dentro { fill: var(--paper); stroke: none; }
-    .rotulo-dentro-oscuro { fill: var(--ink); stroke: none; }
+    /* Dentro de la barra. Sobre un relleno liso y oscuro basta texto
+       claro y sin halo. Sobre un rayado no: la trama se le mete entre
+       las letras, así que ahí se conserva el halo del papel, que es lo
+       único que recorta el texto contra las franjas. */
+    .grafico .rotulo-dentro { fill: var(--paper); stroke: none; }
 
     /* --- globo de detalle ------------------------------------------- */
 
@@ -2988,6 +2997,24 @@
             <div class="conteo" id="conteoDiario">—</div>
           </div>
           <div id="grafDiario"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
+              <h2>Semana a semana: plan, ingreso y proyección</h2>
+              <p class="panel-nota">
+                Cada semana hábil del mes. Lo que ya pasó se lee con lo
+                que entró; lo que viene, con los camiones comprometidos
+                en la hoja Proyección, convertidos a TS con el factor de
+                su material. El travesaño pizarra es el plan de esa
+                semana.
+                <span id="semanasNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="conteoSemanas">—</div>
+          </div>
+          <div id="grafSemanas"></div>
         </article>
 
         <div class="par">
@@ -5413,6 +5440,7 @@
       grafPrecio();
       grafPareto();
       grafBrecha();
+      grafSemanas();
     }
 
     /* --- Rótulos de valor -------------------------------------------
@@ -6141,6 +6169,324 @@
         destacar: function(i) { encender(caja, i, true); },
         apagar: function() { apagar(caja); }
       });
+    }
+
+    /* --- Semana a semana ---------------------------------------------
+       El panel mira el mes; la operación se conversa por semana. Esta
+       vista junta las tres cosas que se comparan en esa conversación:
+       cuánto tocaba (plan), cuánto entró (real y estimado) y cuánto
+       viene comprometido (proyección).
+
+       La semana empieza el lunes. Las semanas cerradas muestran lo que
+       entró; la que corre muestra lo entrado más lo comprometido para
+       los días que le quedan; las que vienen, solo proyección. Así la
+       barra siempre significa "lo que se espera terminar teniendo",
+       que es lo que se quiere comparar contra el plan. */
+
+    /** Lunes de la semana de una fecha, como 'yyyy-MM-dd'. */
+    function lunesDe(fecha) {
+      var p = String(fecha).split('-');
+      var d = new Date(Date.UTC(
+        Number(p[0]), Number(p[1]) - 1, Number(p[2])
+      ));
+
+      // getUTCDay: 0 es domingo, así que el domingo retrocede seis.
+      var resta = (d.getUTCDay() + 6) % 7;
+
+      d.setUTCDate(d.getUTCDate() - resta);
+
+      return d.toISOString().slice(0, 10);
+    }
+
+    function grafSemanas() {
+      var caja = document.getElementById('grafSemanas');
+      var nota = document.getElementById('semanasNota');
+      var m = CURRENT_METRICS;
+      var proy = DATA.proyeccion || { porFecha: {}, missingSheet: true };
+
+      if (nota) { nota.innerHTML = ''; }
+
+      if (!m.period.inCurrentMonth) {
+        caja.innerHTML = vacio(
+          'La proyección es del mes vigente: elige el rango «Mes».'
+        );
+        setText('conteoSemanas', '—');
+        return;
+      }
+
+      // Los días hábiles del mes, que son los que el plan reparte y
+      // los que la hoja Proyección numera. workdayKeys cubre toda la
+      // ventana de historia, así que se acota al mes.
+      var habiles = ((DATA.workdays || {}).workdayKeys || [])
+        .filter(function(k) {
+          return k >= DATA.month.startKey && k <= DATA.month.endKey;
+        });
+
+      if (!habiles.length) {
+        caja.innerHTML = vacio('Sin días hábiles en el mes.');
+        setText('conteoSemanas', '—');
+        return;
+      }
+
+      var porFecha = {};
+
+      CURRENT_ROWS.forEach(function(f) {
+        if (!porFecha[f.fecha]) { porFecha[f.fecha] = { real: 0, est: 0 }; }
+
+        if (f.source === 'PLANILLA') {
+          porFecha[f.fecha].est += Number(f.ts) || 0;
+        } else {
+          porFecha[f.fecha].real += Number(f.ts) || 0;
+        }
+      });
+
+      var hasta = m.period.referenceDate ||
+        (DATA.workdays || {}).todayKey || '';
+
+      // El plan del mes repartido entre sus días hábiles: es el mismo
+      // prorrateo que usa el resto del panel, agrupado por semana.
+      var planPorHabil = m.planValid && habiles.length
+        ? (m.monthlyPlan || 0) / habiles.length
+        : 0;
+
+      var semanas = {};
+
+      habiles.forEach(function(k) {
+        var lunes = lunesDe(k);
+
+
+        if (!semanas[lunes]) {
+          semanas[lunes] = {
+            lunes: lunes, real: 0, est: 0, proyectado: 0,
+            plan: 0, habiles: 0, camiones: 0, cerrada: true, corre: false
+          };
+        }
+
+        var sem = semanas[lunes];
+        var dia = porFecha[k] || { real: 0, est: 0 };
+
+        sem.habiles++;
+        sem.plan += planPorHabil;
+
+        if (hasta && k > hasta) { sem.cerrada = false; }
+
+        // Misma precedencia que el resto del panel: SAP manda, la
+        // planilla tapa el hueco, y la proyección solo rellena el día
+        // del que todavía no se sabe nada. Sumarlas contaría dos veces
+        // el camión que la planilla ya reportó y la proyección
+        // prometía: el día 22 con planilla y proyección valdría el
+        // doble.
+        var entroAlgo = dia.real > 0 || dia.est > 0;
+
+        if (entroAlgo) {
+          sem.real += dia.real;
+          sem.est += dia.est;
+          return;
+        }
+
+        // Un día pasado sin nada es un día sin despacho, no un día por
+        // proyectar: su proyección ya venció.
+        if (!hasta || k <= hasta) { return; }
+
+        var pr = (proy.porFecha || {})[k];
+
+        if (pr) {
+          sem.proyectado += Number(pr.ts) || 0;
+          sem.camiones += Number(pr.camiones) || 0;
+        }
+      });
+
+      var lista = Object.keys(semanas).sort().map(function(k) {
+        var sem = semanas[k];
+
+        sem.entrado = sem.real + sem.est;
+        sem.total = sem.entrado + sem.proyectado;
+        sem.corre = !sem.cerrada && sem.entrado > 0;
+        sem.cumplimiento = sem.plan > 0 ? sem.total / sem.plan : null;
+
+        return sem;
+      });
+
+      var proyectadoEnUso = lista.reduce(function(t, x) {
+        return t + x.proyectado;
+      }, 0);
+
+      setText('conteoSemanas',
+        lista.length + (lista.length === 1 ? ' semana' : ' semanas') +
+        (proyectadoEnUso
+          ? ' · ' + formatCorto(proyectadoEnUso) + ' TS por llegar'
+          : ' · sin proyección por delante'));
+
+      if (nota) {
+        var avisos = [];
+
+        if (proy.missingSheet) {
+          avisos.push('No existe la hoja <b>Proyeccion</b>, así que ' +
+            'solo se ve el plan y lo que entró.');
+        } else if (!proy.total) {
+          avisos.push('La hoja <b>Proyeccion</b> está sin camiones ' +
+            'cargados para este mes.');
+        }
+
+        // La fila 1 de esa hoja lleva las etiquetas "Dia N" y a la vez
+        // un proveedor: sus celdas no pueden tener proyección.
+        if (proy.primeraFilaEsEncabezado && proy.filaEncabezado) {
+          avisos.push('En la hoja Proyección, <b>' +
+            esc(shortProvider(proy.filaEncabezado)) + '</b> comparte ' +
+            'fila con las etiquetas «Dia 1…», así que no puede ' +
+            'cargar camiones: conviene insertar una fila de ' +
+            'encabezado arriba.');
+        }
+
+        nota.innerHTML = avisos.length ? ' ' + avisos.join(' ') : '';
+      }
+
+      var tope = Math.max(
+        Math.max.apply(null, lista.map(function(x) { return x.total; })),
+        Math.max.apply(null, lista.map(function(x) { return x.plan; })),
+        1
+      );
+
+      var W = Math.max(360, caja.clientWidth || 900);
+      var H = 300;
+      var M = { t: 26, r: 14, b: 42, l: 60 };
+      var w = W - M.l - M.r;
+      var h = H - M.t - M.b;
+      var paso = w / lista.length;
+      var ancho = Math.max(10, Math.min(64, paso - 22));
+
+      var y = function(v) { return M.t + h - (v / tope) * h; };
+      var partes = [ejeY(M, w, h, tope)];
+
+      partes.push(
+        '<pattern id="rayadoProy" width="6" height="6" ' +
+        'patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
+        '<rect width="6" height="6" fill="var(--pizarra-soft)"/>' +
+        '<rect width="3" height="6" fill="var(--pizarra)"/></pattern>'
+      );
+
+      var comoSemana = formatoSerie(tope);
+      var cifras = lista.map(function(x) { return comoSemana(x.total); });
+      var rotular = cabenRotulos(cifras, paso);
+
+      lista.forEach(function(sem, i) {
+        var cx = M.l + paso * i + paso / 2;
+        var base = M.t + h;
+
+        function bloque(alto, desde, relleno) {
+          if (alto <= 0) { return; }
+
+          partes.push('<rect class="barra-svg" data-i="' + i + '" x="' +
+            (cx - ancho / 2) + '" y="' + (desde - alto) + '" width="' +
+            ancho + '" height="' + Math.max(1, alto) + '" fill="' +
+            relleno + '" rx="2"/>');
+        }
+
+        var hReal = (sem.real / tope) * h;
+        var hEst = (sem.est / tope) * h;
+        var hProy = (sem.proyectado / tope) * h;
+
+        bloque(hReal, base, 'var(--verde)');
+        bloque(hEst, base - hReal, 'url(#rayado)');
+        bloque(hProy, base - hReal - hEst, 'url(#rayadoProy)');
+
+        if (sem.plan > 0) {
+          partes.push('<line x1="' + (cx - ancho / 2 - 6) + '" x2="' +
+            (cx + ancho / 2 + 6) + '" y1="' + y(sem.plan) + '" y2="' +
+            y(sem.plan) + '" stroke="var(--pizarra)" stroke-width="2.5" ' +
+            'stroke-linecap="round"/>');
+        }
+
+        // Dentro de la columna y no encima: encima queda pegado al
+        // travesaño del plan y se lee como si fuera la cifra del plan.
+        // El color lo decide el bloque de arriba, que es el fondo que
+        // le toca: verde es oscuro, los dos rayados son claros.
+        if (rotular && sem.total > 0) {
+          var yTope = y(sem.total);
+          var arribaClaro = sem.proyectado > 0 || sem.est > 0;
+
+          if (yTope + 24 < base) {
+            partes.push(rotulo(cx, yTope + 16, cifras[i],
+              arribaClaro ? '' : 'rotulo-dentro'));
+          } else {
+            partes.push(rotulo(cx, yTope - 7, cifras[i], 'rotulo-verde'));
+          }
+        }
+
+        partes.push('<text x="' + cx + '" y="' + (M.t + h + 18) +
+          '" text-anchor="middle" font-size="10.5"' +
+          (sem.corre ? ' font-style="italic"' : '') + '>' +
+          esc(etiquetaSemana(sem.lunes)) + '</text>');
+
+        partes.push('<text x="' + cx + '" y="' + (M.t + h + 32) +
+          '" text-anchor="middle" font-size="9" fill="var(--ink-3)">' +
+          (sem.cerrada ? 'cerrada' : sem.corre ? 'en curso' : 'proyectada') +
+          '</text>');
+      });
+
+      partes.push('<line class="eje" x1="' + M.l + '" y1="' + (M.t + h) +
+        '" x2="' + (M.l + w) + '" y2="' + (M.t + h) + '"/>');
+
+      caja.innerHTML = '<svg class="grafico" viewBox="0 0 ' + W + ' ' + H +
+        '" height="' + H + '" role="img" ' +
+        'aria-label="Plan, ingreso y proyección por semana">' +
+        partes.join('') + bandas(lista.length, M, w, h, paso) + '</svg>';
+
+      montarGlobo(caja, {
+        contenido: function(i) {
+          var sem = lista[i];
+          var filas = [];
+
+          if (sem.real > 0) {
+            filas.push({ color: 'var(--verde)', etiqueta: 'Recibido (SAP)',
+              valor: formatTs(sem.real) });
+          }
+
+          if (sem.est > 0) {
+            filas.push({ color: 'var(--madera)',
+              etiqueta: 'Estimado (planilla)', valor: formatTs(sem.est) });
+          }
+
+          if (sem.proyectado > 0) {
+            filas.push({ color: 'var(--pizarra)', etiqueta: 'Proyectado',
+              valor: formatTs(sem.proyectado) });
+          }
+
+          filas.push({ etiqueta: 'Total de la semana',
+            valor: formatTs(sem.total) });
+
+          if (sem.plan > 0) {
+            filas.push({ color: 'var(--pizarra)', etiqueta: 'Plan de la semana',
+              valor: formatTs(sem.plan) });
+            filas.push({ etiqueta: 'Cumplimiento',
+              valor: formatPercent(sem.cumplimiento),
+              clase: claseDesvio(sem.total - sem.plan) });
+          }
+
+          return globoHTML({
+            titulo: etiquetaSemanaLarga(sem.lunes),
+            subtitulo: sem.habiles +
+              (sem.habiles === 1 ? ' día hábil' : ' días hábiles'),
+            filas: filas,
+            pie: sem.camiones
+              ? formatInteger(sem.camiones) + ' camiones comprometidos'
+              : (sem.cerrada ? 'Semana cerrada.' : null)
+          });
+        },
+        destacar: function(i) { encender(caja, i, true); },
+        apagar: function() { apagar(caja); }
+      });
+    }
+
+    /** 'Sem 14-09' — el lunes identifica la semana sin ambigüedad. */
+    function etiquetaSemana(lunes) {
+      var p = String(lunes).split('-');
+
+      return p.length === 3 ? p[2] + '-' + p[1] : lunes;
+    }
+
+    function etiquetaSemanaLarga(lunes) {
+      return 'Semana del ' + formatDateKey(lunes);
     }
 
     /* --- Brecha vs plan a la fecha -----------------------------------
@@ -10518,7 +10864,7 @@
 
           if (yTope + 24 < M.t + h) {
             partes.push(rotulo(cx, yTope + 16, cifrasMes[i],
-              c.est > 0 ? 'rotulo-dentro-oscuro' : 'rotulo-dentro'));
+              c.est > 0 ? '' : 'rotulo-dentro'));
           } else {
             partes.push(rotulo(cx, yTope - 7, cifrasMes[i], 'rotulo-verde'));
           }
