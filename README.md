@@ -380,6 +380,45 @@ El orden vive en el encabezado: un clic ordena por esa columna, otro da
 vuelta el sentido. Los valores vacíos van siempre al final, porque «sin
 precio» no es un precio de cero.
 
+### Marcar filas y sumarlas
+
+Una tabla contesta «cuánto lleva cada uno» y, en el pie, «cuánto llevan
+todos». Faltaba el medio: cuánto llevan **estos cinco**. Eso se hacía
+copiando a una calculadora, y al copiar se pierde el decimal y nadie lo
+revisa.
+
+Un clic en una fila la marca. Abajo del TOTAL aparece otra línea con la
+suma de lo marcado, alineada con sus columnas, para leerla o pegarla
+como una fila más. `Esc` quita todas las marcas; el botón de abajo,
+solo las de esa tabla.
+
+La marca sobrevive a ordenar y a filtrar: si un filtro esconde una fila
+marcada, la línea lo dice (`2 fuera del filtro`) en vez de sumarla a
+escondidas. Funciona en todas las tablas del panel, incluidas las de
+Comparación y Homologación.
+
+**No todo se suma, y esa es la parte que importa.** Cada columna declara
+en su encabezado cómo se resume:
+
+| Cómo | Qué hace | Dónde |
+|---|---|---|
+| suma | Lo normal | Cantidades, camiones, costos, participaciones |
+| `razon:a/b` | Cociente de las sumas | `Cumpl.` es `sum(total)/sum(plan)`, **no** el promedio de los cumplimientos |
+| `pond:campo` | Promedio ponderado | `Precio/TS` se pondera por volumen |
+| `no` | Un guion | Un acumulado, un puesto, una variación, proveedores por mes |
+
+La diferencia no es cosmética. Tres proveedores al 50%, 100% y 150% de
+su plan no cumplen «100% promedio»: cumplen lo que digan sus toneladas.
+Y sumar `Acum.` —que ya es una suma— daría un número que no significa
+nada. Por eso una columna de números que no se suma muestra un guion y
+no queda en blanco: en blanco es «acá no va nada», el guion es «esto no
+se suma».
+
+Los valores se leen de la pantalla, no de los datos, así que lo que se
+suma es exactamente lo que se ve. Una celda con formato propio —la
+duración de una ruta, `1 h 20 min`— lleva el número crudo en
+`data-valor` y conserva su formato en el total.
+
 ### Plan de acción
 
 Agrupado por **caso**, no por proveedor: el guion de una conversación es

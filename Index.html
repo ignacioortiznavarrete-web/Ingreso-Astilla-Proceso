@@ -2196,6 +2196,55 @@
       white-space: nowrap;
     }
 
+    /* Filas marcadas para sumar.
+
+       Van en gris y no en uno de los cuatro colores del sistema a
+       propósito: verde, madera, pizarra y ladrillo significan algo del
+       dato, y marcar una fila no dice nada del dato —dice qué está
+       mirando quien mira—. Si la marca fuera verde, una fila marcada
+       parecería real y una sin marcar, estimada. */
+    tbody tr.fila-marcada td,
+    tbody tr.fila-marcada:hover td { background: var(--surface-2); }
+
+    tbody tr.fila-marcada td:first-child {
+      box-shadow: inset 3px 0 0 var(--ink-2), 1px 0 0 var(--rule-soft);
+    }
+
+    /* Solo donde se puede marcar: una tabla sin data-tabla sigue
+       siendo de lectura. */
+    table[data-tabla] tbody tr { cursor: pointer; }
+
+    tfoot tr.fila-suma td {
+      background: var(--surface-2);
+      border-top: 1px dashed var(--rule);
+    }
+
+    .sel-pie {
+      display: flex; align-items: center; gap: var(--s3);
+      flex-wrap: wrap;
+      margin-top: var(--s2);
+      font-size: var(--t-mini); color: var(--ink-3);
+    }
+
+    .sel-pie b { color: var(--ink); font-weight: 600; }
+
+    .sel-pie button {
+      padding: 2px 9px;
+      font: inherit; color: var(--ink-2);
+      background: none;
+      border: 1px solid var(--rule); border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .sel-pie button:hover { color: var(--ink); border-color: var(--ink-3); }
+
+    /* Al imprimir, la suma de lo marcado es justamente lo que se
+       quiere mostrar; el aviso de "haz clic", no. */
+    @media print {
+      .sel-pie.sel-vacio { display: none; }
+      .sel-pie button { display: none; }
+    }
+
     /* Primera columna fija en las tablas anchas. La sombra al costado
        dice que hay más tabla a la derecha; sin ella el corte parece un
        borde y no un desplazamiento.
@@ -3145,9 +3194,11 @@
                 <th class="number" data-orden="estimate">Estimado</th>
                 <th class="number" data-orden="total">Total</th>
                 <th class="number" data-orden="deviation">Desvío</th>
-                <th class="number" data-orden="compliance">Cumpl.</th>
+                <th class="number" data-orden="compliance"
+                    data-suma="razon:total/planToDate">Cumpl.</th>
                 <th class="number" data-orden="projection">Proyección</th>
-                <th class="number" data-orden="projectedCompliance">Cumpl. proy.</th>
+                <th class="number" data-orden="projectedCompliance"
+                    data-suma="razon:projection/planPeriod">Cumpl. proy.</th>
               </tr></thead>
               <tbody id="productBody"></tbody>
               <tfoot id="productFoot"></tfoot>
@@ -3176,7 +3227,8 @@
                 <th data-orden="proveedor">Proveedor operativo</th>
                 <th data-orden="proveedorPlan">Proveedor en Plan</th>
                 <th data-orden="subproducto">Subproducto</th>
-                <th class="number" data-orden="precio">Precio/TS</th>
+                <th class="number" data-orden="precio"
+                    data-suma="pond:total">Precio/TS</th>
                 <th class="number" data-orden="monthlyPlan">Plan mes</th>
                 <th class="number" data-orden="planToDate">Plan a fecha</th>
                 <th class="number" data-orden="real">Real</th>
@@ -3209,18 +3261,21 @@
           <div class="tabla-marco tabla-fija-2">
             <table data-tabla="proveedor">
               <thead><tr>
-                <th data-orden="rank">#</th>
+                <th data-orden="rank" data-suma="no">#</th>
                 <th data-orden="proveedor">Proveedor</th>
                 <th class="number" data-orden="total">Total</th>
                 <th class="number" data-orden="real">Real</th>
                 <th class="number" data-orden="estimate">Estimado</th>
                 <th class="number" data-orden="share">Part.</th>
-                <th class="number" data-orden="cumulativeShare">Acum.</th>
+                <th class="number" data-orden="cumulativeShare"
+                    data-suma="no">Acum.</th>
                 <th class="number" data-orden="recent7">Últ. 7d</th>
                 <th data-orden="trend">Tendencia</th>
-                <th class="number" data-orden="days">Días</th>
-                <th class="number" data-orden="average">Prom./día</th>
-                <th class="number" data-orden="weightedPrice">Precio pond.</th>
+                <th class="number" data-orden="days" data-suma="no">Días</th>
+                <th class="number" data-orden="average"
+                    data-suma="razon:total/days">Prom./día</th>
+                <th class="number" data-orden="weightedPrice"
+                    data-suma="pond:total">Precio pond.</th>
                 <th class="number" data-orden="cost">Costo val.</th>
                 <th data-orden="last">Último</th>
                 <th>Subproductos</th>
@@ -3289,7 +3344,8 @@
                 <th data-orden="predio">Predio</th>
                 <th class="number" data-orden="camiones">Camiones</th>
                 <th class="number" data-orden="ts">TS</th>
-                <th class="number" data-orden="precioUnitario">Precio/TS</th>
+                <th class="number" data-orden="precioUnitario"
+                    data-suma="pond:ts">Precio/TS</th>
                 <th class="number" data-orden="costoEstimado">Costo val.</th>
                 <th>Match precio</th>
               </tr></thead>
@@ -3536,7 +3592,8 @@
                 <th data-orden="hora">Salida</th>
                 <th class="number" data-orden="paradas">Paradas</th>
                 <th class="number" data-orden="km">Km aprox.</th>
-                <th class="number" data-orden="minutosTotal">Duración</th>
+                <th class="number" data-orden="minutosTotal"
+                    data-formato="duracion">Duración</th>
                 <th data-orden="horaTermino">Término</th>
                 <th data-orden="eventoId">Calendario</th>
                 <th></th>
@@ -4221,6 +4278,10 @@
       dibujarGraficos();
       marcarRango();
       observarPaneles();
+      // Las tablas de Comparación y Mapeos se arman al entrar a su
+      // pestaña, así que esto se repite: vigilarTablas solo engancha
+      // las que todavía nadie mira.
+      vigilarTablas();
     }
 
 /* =====================================================================
@@ -7922,6 +7983,7 @@
 
     function montarMandos() {
       montarEncabezadosOrden();
+      montarSeleccion();
 
       document.addEventListener('input', function(ev) {
         const entrada = ev.target.closest
@@ -9713,6 +9775,407 @@
       }).join('');
     }
 
+/* =====================================================================
+ * SUMAR LO MARCADO
+ *
+ * Una tabla contesta «cuánto lleva cada uno» y «cuánto llevan todos».
+ * Lo que faltaba es el medio: cuánto llevan ESTOS cinco. Hasta ahora
+ * eso se hacía copiando a una calculadora, y al copiar se pierde el
+ * decimal y nadie revisa.
+ *
+ * Marcar una fila es hacerle clic. Abajo aparece una línea con la suma
+ * de cada columna, alineada con su columna, para que se pueda leer y
+ * pegar como una fila más.
+ *
+ * No todo se suma, y esa es la parte que importa:
+ *
+ *   suma   lo normal: cantidades, camiones, costos, participaciones.
+ *   razon  un porcentaje que es un cociente. La compra de cinco
+ *          proveedores cumple sum(total)/sum(plan), NO el promedio de
+ *          sus cumplimientos. Se declara con data-suma="razon:a/b".
+ *   pond   un precio unitario. El de una selección es el promedio
+ *          ponderado por volumen, no el promedio a secas. Se declara
+ *          con data-suma="pond:campo".
+ *   no     lo que no significa nada sumado: un acumulado, un puesto,
+ *          una variación, un recuento de proveedores por mes.
+ *
+ * Los valores se leen de la pantalla, no de los datos: así funciona
+ * igual en las tablas que se arman en el navegador y en las que vienen
+ * del servidor, y lo que se suma es exactamente lo que se ve. Una
+ * celda con formato propio —una duración, por ejemplo— puede llevar
+ * data-valor con el número crudo.
+ * ===================================================================== */
+
+    var MARCADAS = {};
+
+    /** Lee un número escrito a la chilena: 19.325,4 · 98,5% · 3,4k */
+    function numeroDeCelda(td) {
+      if (!td) { return null; }
+
+      var crudo = td.getAttribute('data-valor');
+
+      if (crudo !== null && crudo !== '' && isFinite(Number(crudo))) {
+        return Number(crudo);
+      }
+
+      var s = String(td.textContent || '').replace(/\s| /g, '');
+
+      if (!s || s === '—' || s === '-') { return null; }
+
+      var escala = /k$/.test(s) ? 1000 : (/M$/.test(s) ? 1000000 : 1);
+      var porcentaje = s.indexOf('%') !== -1;
+
+      s = s.replace(/[%+]/g, '').replace(/[kM]$/, '')
+        .replace(/\./g, '').replace(',', '.');
+
+      if (!/^-?\d+(\.\d+)?$/.test(s)) { return null; }
+
+      var n = Number(s) * escala;
+
+      return porcentaje ? n / 100 : n;
+    }
+
+    /**
+     * Cómo se resume cada columna, leído de su encabezado. Devuelve una
+     * entrada por columna; null en las que no son números.
+     */
+    function columnasSumables(tabla) {
+      var ths = tabla.querySelectorAll('thead th');
+      var indicePorCampo = {};
+      var cols = [];
+      var i;
+
+      for (i = 0; i < ths.length; i++) {
+        var campo = ths[i].getAttribute('data-orden');
+        if (campo) { indicePorCampo[campo] = i; }
+      }
+
+      for (i = 0; i < ths.length; i++) {
+        var th = ths[i];
+        var modo = th.getAttribute('data-suma') || '';
+
+        // Una columna de texto se deja en blanco; una de números que
+        // no se suma lleva un guion. Son cosas distintas: en blanco es
+        // «acá no va nada», el guion es «esto no se suma».
+        if (!th.classList.contains('number')) {
+          cols.push(null);
+          continue;
+        }
+
+        if (modo === 'no') {
+          cols.push({ i: i, modo: 'no' });
+          continue;
+        }
+
+        var col = {
+          i: i,
+          modo: 'suma',
+          formato: th.getAttribute('data-formato') || ''
+        };
+
+        if (modo.indexOf('pond:') === 0) {
+          col.modo = 'pond';
+          col.peso = indicePorCampo[modo.slice(5)];
+        } else if (modo.indexOf('razon:') === 0) {
+          var partes = modo.slice(6).split('/');
+          col.modo = 'razon';
+          col.arriba = indicePorCampo[partes[0]];
+          col.abajo = indicePorCampo[partes[1]];
+        }
+
+        // Una columna que dice ponderar por algo que la tabla no tiene
+        // es un error de marcado: mejor no mostrar nada que mostrar un
+        // promedio a secas donde debía ir uno ponderado.
+        if (col.modo === 'pond' && col.peso === undefined) { col.modo = 'no'; }
+
+        if (
+          col.modo === 'razon' &&
+          (col.arriba === undefined || col.abajo === undefined)
+        ) {
+          col.modo = 'no';
+        }
+
+        cols.push(col);
+      }
+
+      return cols;
+    }
+
+    /** El valor y el formato de una columna para las filas marcadas. */
+    function resumirColumna(col, filas) {
+      var suma = 0;
+      var peso = 0;
+      var arriba = 0;
+      var abajo = 0;
+      var hay = false;
+      var porcentaje = false;
+      var decimales = 0;
+
+      filas.forEach(function(tr) {
+        var td = tr.children[col.i];
+        var v = numeroDeCelda(td);
+
+        if (td && String(td.textContent).indexOf('%') !== -1) {
+          porcentaje = true;
+        }
+
+        var m = td && String(td.textContent).match(/,(\d+)/);
+
+        if (m && m[1].length > decimales) { decimales = m[1].length; }
+
+        if (col.modo === 'suma') {
+          if (v === null) { return; }
+          hay = true;
+          suma += v;
+          return;
+        }
+
+        if (col.modo === 'pond') {
+          var p = numeroDeCelda(tr.children[col.peso]);
+
+          if (v === null || p === null || p <= 0) { return; }
+
+          hay = true;
+          suma += v * p;
+          peso += p;
+          return;
+        }
+
+        var a = numeroDeCelda(tr.children[col.arriba]);
+        var b = numeroDeCelda(tr.children[col.abajo]);
+
+        if (a === null || b === null) { return; }
+
+        hay = true;
+        arriba += a;
+        abajo += b;
+      });
+
+      if (!hay) { return '—'; }
+
+      var valor;
+
+      if (col.modo === 'suma') { valor = suma; }
+      else if (col.modo === 'pond') { valor = peso > 0 ? suma / peso : null; }
+      else { valor = abajo > 0 ? arriba / abajo : null; }
+
+      if (valor === null) { return '—'; }
+
+      // Una columna con formato propio lo conserva: 185 abajo de tres
+      // celdas que dicen "1 h 20 min" no se lee como un total.
+      if (col.formato === 'duracion') { return duracionLegible(valor); }
+
+      if (porcentaje) { return formatPercent(valor); }
+
+      return decimales >= 2 ? formatPrice(valor) : formatQuantity(valor);
+    }
+
+    /** Identidad de una fila, para no perder la marca al reordenar. */
+    function claveDeFila(tr) {
+      var partes = [];
+
+      for (var i = 0; i < tr.children.length; i++) {
+        if (!tr.children[i].classList.contains('number')) {
+          partes.push(String(tr.children[i].textContent || '').trim());
+        }
+      }
+
+      return partes.join('|');
+    }
+
+    function marcadasDe(clave) {
+      if (!MARCADAS[clave]) { MARCADAS[clave] = {}; }
+      return MARCADAS[clave];
+    }
+
+    /** Vuelve a pintar la marca y la suma de una tabla. */
+    function refrescarSuma(tabla) {
+      var clave = tabla.getAttribute('data-tabla');
+      var elegidas = marcadasDe(clave);
+      var cuerpo = tabla.tBodies[0];
+
+      if (!cuerpo) { return; }
+
+      var filas = [];
+
+      Array.prototype.forEach.call(cuerpo.rows, function(tr) {
+        if (tr.classList.contains('fila-vacia')) { return; }
+
+        var marcada = !!elegidas[claveDeFila(tr)];
+
+        tr.classList.toggle('fila-marcada', marcada);
+        tr.setAttribute('aria-selected', marcada ? 'true' : 'false');
+
+        if (marcada) { filas.push(tr); }
+      });
+
+      // Una marca puede quedar apuntando a una fila que un filtro ya no
+      // muestra. No se borra: si el filtro vuelve, la marca sigue ahí.
+      pintarSumaEnPie(tabla, filas);
+      pintarPieSeleccion(tabla, filas.length, Object.keys(elegidas).length);
+    }
+
+    function pintarSumaEnPie(tabla, filas) {
+      var pie = tabla.tFoot;
+      var vieja = tabla.querySelector('tr.fila-suma');
+
+      if (vieja) { vieja.parentNode.removeChild(vieja); }
+
+      if (!filas.length) {
+        if (pie) { apilarPie(pie); }
+        return;
+      }
+
+      if (!pie) { pie = tabla.createTFoot(); }
+
+      var cols = columnasSumables(tabla);
+      var ths = tabla.querySelectorAll('thead th');
+      var celdas = '';
+
+      for (var i = 0; i < ths.length; i++) {
+        if (i === 0) {
+          celdas += '<td>' + filas.length +
+            (filas.length === 1 ? ' MARCADA' : ' MARCADAS') + '</td>';
+          continue;
+        }
+
+        if (!cols[i]) { celdas += '<td></td>'; continue; }
+
+        celdas += '<td class="number">' +
+          (cols[i].modo === 'no'
+            ? '—'
+            : esc(resumirColumna(cols[i], filas))) +
+          '</td>';
+      }
+
+      var fila = document.createElement('tr');
+
+      fila.className = 'fila-suma';
+      fila.innerHTML = celdas;
+      pie.appendChild(fila);
+      apilarPie(pie);
+    }
+
+    /**
+     * Las celdas del pie van pegadas abajo. Con una sola fila basta
+     * bottom:0; con dos, las dos quedan en el mismo sitio y el TOTAL
+     * desaparece debajo de la suma. Cada fila se sube lo que midan las
+     * que van después.
+     */
+    function apilarPie(pie) {
+      var filas = pie.rows;
+
+      for (var i = 0; i < filas.length; i++) {
+        var abajo = 0;
+
+        for (var k = i + 1; k < filas.length; k++) {
+          abajo += filas[k].offsetHeight;
+        }
+
+        for (var c = 0; c < filas[i].cells.length; c++) {
+          filas[i].cells[c].style.bottom = abajo + 'px';
+        }
+      }
+    }
+
+    /** La línea de abajo: dice que se puede marcar, o qué hay marcado. */
+    function pintarPieSeleccion(tabla, visibles, total) {
+      var marco = tabla.closest('.tabla-marco');
+
+      if (!marco) { return; }
+
+      var pie = marco.nextElementSibling;
+
+      if (!pie || !pie.classList.contains('sel-pie')) {
+        pie = document.createElement('div');
+        pie.className = 'sel-pie';
+        marco.parentNode.insertBefore(pie, marco.nextSibling);
+      }
+
+      var clave = tabla.getAttribute('data-tabla');
+
+      if (!total) {
+        pie.className = 'sel-pie sel-vacio';
+        pie.innerHTML = 'Marca filas con un clic para sumarlas.';
+        return;
+      }
+
+      pie.className = 'sel-pie';
+      pie.innerHTML = '<span><b>' + total + '</b> ' +
+        (total === 1 ? 'fila marcada' : 'filas marcadas') +
+        (total > visibles
+          ? ' · <b>' + (total - visibles) + '</b> fuera del filtro'
+          : '') +
+        '</span>' +
+        '<button type="button" data-sel-limpiar="' + esc(clave) + '">' +
+        'Quitar la marca</button>';
+    }
+
+    /**
+     * Se engancha una vez y vale para siempre: las tablas se redibujan
+     * enteras al filtrar u ordenar, así que escuchar cada fila obligaría
+     * a reenganchar en cada dibujo. Un observador por cuerpo de tabla
+     * repone la marca y rehace la suma sin que los dibujantes tengan
+     * que saber que esto existe.
+     */
+    function montarSeleccion() {
+      document.addEventListener('click', function(ev) {
+        var limpiar = ev.target.closest('[data-sel-limpiar]');
+
+        if (limpiar) {
+          MARCADAS[limpiar.getAttribute('data-sel-limpiar')] = {};
+          document.querySelectorAll('table[data-tabla]')
+            .forEach(refrescarSuma);
+          return;
+        }
+
+        var tr = ev.target.closest('table[data-tabla] tbody tr');
+
+        if (!tr || tr.classList.contains('fila-vacia')) { return; }
+
+        // Dentro de una fila puede haber controles: un selector, un
+        // botón. Ahí el clic es del control, no de la fila.
+        if (ev.target.closest('button, select, input, a, textarea')) {
+          return;
+        }
+
+        var tabla = tr.closest('table[data-tabla]');
+        var elegidas = marcadasDe(tabla.getAttribute('data-tabla'));
+        var clave = claveDeFila(tr);
+
+        if (elegidas[clave]) { delete elegidas[clave]; }
+        else { elegidas[clave] = true; }
+
+        refrescarSuma(tabla);
+      });
+
+      document.addEventListener('keydown', function(ev) {
+        if (ev.key !== 'Escape') { return; }
+
+        MARCADAS = {};
+        document.querySelectorAll('table[data-tabla]').forEach(refrescarSuma);
+      });
+    }
+
+    var VIGILADAS = new WeakSet();
+
+    /** Pone a mirar los cuerpos de tabla que todavía nadie mira. */
+    function vigilarTablas() {
+      document.querySelectorAll('table[data-tabla]').forEach(function(tabla) {
+        var cuerpo = tabla.tBodies[0];
+
+        if (!cuerpo || VIGILADAS.has(cuerpo)) { return; }
+
+        VIGILADAS.add(cuerpo);
+
+        new MutationObserver(function() {
+          refrescarSuma(tabla);
+        }).observe(cuerpo, { childList: true });
+
+        refrescarSuma(tabla);
+      });
+    }
+
     function totalizar(filas, campos) {
       var salida = {};
 
@@ -10165,7 +10628,8 @@
           '<td class="num">' + esc(r.hora) + '</td>' +
           '<td class="number">' + r.paradas.length + '</td>' +
           '<td class="number">' + formatQuantity(r.km) + '</td>' +
-          '<td class="number">' + duracionLegible(r.minutosTotal) + '</td>' +
+          '<td class="number" data-valor="' + (r.minutosTotal || 0) + '">' +
+            duracionLegible(r.minutosTotal) + '</td>' +
           '<td class="num">' + esc(r.horaTermino || '—') + '</td>' +
           '<td><span class="sello-fuente ' +
             (agendada ? 'es-real' : 'es-flojo') + '">' +
@@ -10874,6 +11338,7 @@
         r.lista.filter(function(x) { return x.sinPar; }), true, r);
       homoTabla('homoParecido', 'homoConteoParecido',
         r.lista.filter(function(x) { return !x.sinPar; }), false, r);
+      vigilarTablas();
 
       CONTEXTO.homologacion = r.sinPar
         ? r.sinPar + (r.sinPar === 1 ? ' nombre sin par' : ' nombres sin par')
@@ -11033,7 +11498,8 @@
       }).join('');
 
       caja.innerHTML =
-        '<div class="tabla-marco tabla-fija"><table><thead><tr>' +
+        '<div class="tabla-marco tabla-fija">' +
+        '<table data-tabla="' + esc(cajaId) + '"><thead><tr>' +
         '<th>Nombre escrito</th>' +
         '<th class="number">TS</th>' +
         '<th class="number">Camiones</th>' +
@@ -11673,7 +12139,7 @@
             (c.enCurso ? ' ·' : '') + '</th>';
         }).join('') +
         '<th class="number" data-orden="total">Total</th>' +
-        '<th class="number" data-orden="variacion">' +
+        '<th class="number" data-orden="variacion" data-suma="no">' +
         (COMP.par
           ? esc(etiquetaMes(COMP.par[1].prefijo)) + ' vs ' +
             esc(etiquetaMes(COMP.par[0].prefijo))
@@ -11736,6 +12202,7 @@
       // botones. El manejador de clic ya es global, así que basta esto.
       montarEncabezadosOrden();
       marcarOrden('matriz');
+      vigilarTablas();
     }
 
     /* --- Resumen por mes -------------------------------------------- */
@@ -11797,11 +12264,17 @@
         '<th class="number" data-orden="real">Real</th>' +
         '<th class="number" data-orden="est">Estimado</th>' +
         '<th class="number" data-orden="total">Total</th>' +
-        '<th class="number" data-orden="variacion">vs mes ant.</th>' +
+        '<th class="number" data-orden="variacion" data-suma="no">' +
+          'vs mes ant.</th>' +
         '<th class="number" data-orden="plan">Plan del mes</th>' +
-        '<th class="number" data-orden="cumplimiento">Cumpl.</th>' +
-        '<th class="number" data-orden="nProveedores">Proveedores</th>' +
-        '<th class="number" data-orden="precio">Precio pond.</th>' +
+        '<th class="number" data-orden="cumplimiento" ' +
+          'data-suma="razon:total/plan">Cumpl.</th>' +
+        // Sumar los proveedores de varios meses contaría dos veces al
+        // que despachó en los dos.
+        '<th class="number" data-orden="nProveedores" data-suma="no">' +
+          'Proveedores</th>' +
+        '<th class="number" data-orden="precio" data-suma="pond:total">' +
+          'Precio pond.</th>' +
         '<th class="number" data-orden="costo">Costo val.</th>' +
         '</tr></thead><tbody>' + cuerpo + '</tbody><tfoot><tr>' +
         '<td>TOTAL</td>' +
@@ -11819,6 +12292,7 @@
 
       montarEncabezadosOrden();
       marcarOrden('meses');
+      vigilarTablas();
     }
 
     /* --- Mezcla por mes --------------------------------------------- */
