@@ -240,13 +240,25 @@ lado, cada vez que se abre el panel. No hay nada que renovar.
 | 31 de octubre | Ley 20.299: al viernes anterior si cae martes, al siguiente si cae miércoles |
 | Los nueve de fecha fija | Tal cual |
 
-Al contrastar el cálculo contra la lista vieja apareció, de paso, que el
-Viernes Santo de 2024 estaba escrito como 19-04 —que es el de 2025— y el
-de verdad, 29-03, faltaba.
+Al contrastar el cálculo contra la lista vieja aparecieron **dos** errores
+que llevaban tiempo ahí:
 
-**Lo único que sigue a mano** es `FERIADOS_EXTRA`: el feriado que declara
-una ley puntual y ninguna regla predice, como el lunes 21-09-2026. Son
-uno cada varios años y olvidarlo cuesta un día, no la lista entera.
+- El Viernes Santo de 2024 estaba escrito como 19-04 —que es el de 2025—
+  y el de verdad, 29-03, faltaba.
+- El lunes **21-09-2026** estaba marcado como feriado y no lo es. La Ley
+  20.215 corre el día solo cuando el 18 cae martes o el 19 cae viernes, y
+  en 2026 caen viernes y sábado. Con él adentro ese lunes no era hábil, y
+  el arrastre al hábil anterior lo mandaba al **jueves 17** —al otro lado
+  del 18, 19 y 20—: dos días de despacho aparecían como uno solo. Además
+  septiembre contaba 20 días hábiles en vez de 21, así que el plan a la
+  fecha y el mapeo `Dia N` de Proyección también salían corridos.
+
+**Lo único que sigue a mano** es `FERIADOS_EXTRA`, hoy vacío. Ahí va
+**solo** el feriado que declara una ley para un año concreto y que ninguna
+regla predice; no va un día que la planta no trabaja —para eso está
+`WORKDAYS`—. Escribir de menos cuesta un día; escribir de más junta dos
+días en uno, que es peor porque no se nota. La prueba exige que nada de
+`FERIADOS_EXTRA` repita algo que la regla ya calcula.
 
 `alertas/Feriados.gs` es una copia del mismo módulo —son dos proyectos de
 Apps Script distintos, no comparten código—. `alertas/pruebas/feriados.js`

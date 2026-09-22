@@ -97,7 +97,8 @@ Los feriados también son copia, pero de esos se encarga una prueba.
 de las leyes 19.973 y 20.299— en vez de tenerlos escritos, así que no
 se acaban nunca. `pruebas/feriados.js` corre esta copia y la del panel
 contra el calendario real y falla si se separan. Lo único a mano es
-`FERIADOS_EXTRA`, para el feriado que declara una ley puntual.
+`FERIADOS_EXTRA`, hoy vacío, para el feriado que declare una ley puntual
+y ninguna regla prediga.
 
 `Feriados.gs` no depende de ningún otro archivo: se puede copiar solo.
 

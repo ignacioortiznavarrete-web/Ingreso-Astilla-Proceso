@@ -1710,6 +1710,15 @@
       white-space: nowrap;
     }
 
+    /* «1 proveedor · 10.889 TS en juego» no cabe entero en una
+       pantalla de 320. Va sin cortar mientras quepa, porque es una
+       frase corta y partirla no ayuda a leerla; cuando no cabe, manda
+       el ancho de la tarjeta. Sin esto, una cifra que gana un dígito
+       empuja la página entera cuatro píxeles. */
+    @media (max-width: 520px) {
+      .caso-cuenta { white-space: normal; margin-left: 0; }
+    }
+
     @media (max-width: 860px) {
       .caso-fila {
         grid-template-columns: minmax(0, 1fr) auto;

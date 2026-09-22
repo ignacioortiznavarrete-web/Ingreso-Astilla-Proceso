@@ -66,6 +66,14 @@ function correr(fuente, hoy) {
   };
   vm.createContext(ctx);
   vm.runInContext(fuente, ctx, { filename: 'feriados' });
+
+  // Un const del módulo no queda como propiedad del contexto —es la
+  // misma regla de V8 por la que CONFIG.FERIADOS es un getter—, así que
+  // para mirarlo hay que preguntarle adentro.
+  ctx.extras = function() {
+    return vm.runInContext('FERIADOS_EXTRA.slice()', ctx);
+  };
+
   return ctx;
 }
 
@@ -196,8 +204,34 @@ const hoy2026 = panel.feriadosDelPanel_();
 ok(hoy2026[0].slice(0, 4) === '2024' && hoy2026[hoy2026.length - 1].slice(0, 4) === '2028',
    'la ventana va de dos años atrás a dos adelante',
    hoy2026[0] + ' … ' + hoy2026[hoy2026.length - 1]);
-ok(hoy2026.indexOf('2026-09-21') !== -1,
-   'los feriados por ley puntual entran igual (lunes 21-09-2026)');
+// El lunes 21-09-2026 estuvo en FERIADOS_EXTRA, heredado de la lista
+// escrita a mano, y no es feriado: la Ley 20.215 corre el día solo
+// cuando el 18 cae martes o el 19 cae viernes, y en 2026 caen viernes y
+// sábado. Marcarlo costaba caro: ese lunes dejaba de ser hábil y su
+// planilla se sumaba al jueves 17 —el hábil anterior, al otro lado del
+// 18, 19 y 20—, así que dos días de despacho salían como uno.
+ok(hoy2026.indexOf('2026-09-21') === -1,
+   'el lunes 21-09-2026 es hábil: ninguna ley lo corre');
+ok(alertas.feriadosDelPanel_().indexOf('2026-09-21') === -1,
+   'y las alertas tampoco lo cuentan como feriado');
+
+// FERIADOS_EXTRA es para lo que ninguna regla predice. Lo que las
+// reglas YA dan no tiene por qué estar escrito: escribirlo de más es
+// justamente lo que pasó con el 21-09.
+const porRegla = {};
+
+for (let a = 2024; a <= 2028; a++) {
+  panel.feriadosDe_(a).forEach(function(f) { porRegla[f] = true; });
+}
+
+ok(panel.extras().every(function(f) { return !porRegla[f]; }),
+   'nada de FERIADOS_EXTRA repite algo que la regla ya calcula',
+   panel.extras());
+ok(hoy2026.join() ===
+   Object.keys(porRegla).concat(panel.extras())
+     .filter(function(f, i, l) { return l.indexOf(f) === i; })
+     .sort().join(),
+   'la lista del panel es exactamente las reglas más FERIADOS_EXTRA');
 ok(hoy2026.length === new Set(hoy2026).size, 'sin fechas repetidas');
 ok(hoy2026.slice().sort().join() === hoy2026.join(), 'y vienen ordenadas');
 ok(alertas.feriadosDelPanel_().join() === hoy2026.join(),

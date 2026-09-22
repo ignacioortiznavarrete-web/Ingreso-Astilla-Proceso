@@ -52,11 +52,18 @@
  * ===================================================================== */
 
 const FERIADOS_EXTRA = Object.freeze([
-  // Venía en la lista escrita a mano: el lunes posterior al 18 y 19,
-  // que ese año caen viernes y sábado. Ninguna regla lo predice, así
-  // que se conserva tal cual. Si resultara no ser feriado, se borra
-  // la línea y listo.
-  '2026-09-21'
+  // Vacío, y así debe quedarse mientras ninguna ley puntual diga otra
+  // cosa. Acá va SOLO el feriado que declara una ley para un año
+  // concreto y que ninguna regla predice. No va un día que la planta
+  // no trabaja: para eso está WORKDAYS.
+  //
+  // Escribir de más cuesta caro. El lunes 21-09-2026 estuvo acá,
+  // heredado de la lista vieja, y no es feriado: la Ley 20.215 corre el
+  // día solo cuando el 18 cae martes o el 19 cae viernes, y en 2026
+  // caen viernes y sábado. Con él adentro, ese lunes dejaba de ser
+  // hábil y su planilla se sumaba al jueves 17 —el hábil anterior,
+  // al otro lado del 18, 19 y 20—, así que dos días de despacho
+  // aparecían como uno.
 ]);
 
 /** Domingo de Pascua (algoritmo gregoriano anónimo). */
