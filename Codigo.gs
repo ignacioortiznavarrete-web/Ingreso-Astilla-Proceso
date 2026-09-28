@@ -3711,6 +3711,12 @@ function importarPlanillas_(rebuild) {
     let ignored = 0;
     let errors = 0;
 
+    // Un correo del reservador que la regla del asunto deja fuera es
+    // un día que desaparece del panel. Antes eso no se contaba y no se
+    // veía: se anota, con una muestra, para poder arreglarlo.
+    let delReservador = 0;
+    const asuntosFuera = [];
+
     threads.forEach(function(thread) {
       thread.getMessages().forEach(function(message) {
         examined++;
@@ -3718,8 +3724,18 @@ function importarPlanillas_(rebuild) {
         const messageId = message.getId();
         const subject = text_(message.getSubject());
 
-        if (!matchesPlanillaMessage_(message)) {
+        if (!remitenteValido_(message)) {
           ignored++;
+          return;
+        }
+
+        delReservador++;
+
+        if (!matchesSubject_(subject)) {
+          ignored++;
+
+          if (asuntosFuera.length < 5) { asuntosFuera.push(subject); }
+
           return;
         }
 
@@ -3800,7 +3816,9 @@ function importarPlanillas_(rebuild) {
       detailRows: detailRows,
       duplicates: duplicates,
       ignored: ignored,
-      errors: errors
+      errors: errors,
+      delReservador: delReservador,
+      asuntosFuera: asuntosFuera
     };
 
     console.log(JSON.stringify(result));
@@ -3813,7 +3831,12 @@ function importarPlanillas_(rebuild) {
         'Filas de detalle: ' + detailRows + '\n' +
         'Ya procesadas: ' + duplicates + '\n' +
         'Asuntos ignorados: ' + ignored + '\n' +
-        'Errores: ' + errors
+        'Errores: ' + errors +
+        (asuntosFuera.length
+          ? '\n\nOJO: ' + asuntosFuera.length +
+            ' correo(s) del reservador quedaron fuera por el asunto.\n' +
+            asuntosFuera.join('\n')
+          : '')
       );
     } catch (ignoredUi) {}
 
@@ -3830,19 +3853,44 @@ function buildGmailQuery_() {
     parts.push('label:"' + CONFIG.GMAIL_LABEL + '"');
   }
 
-  // La búsqueda ya se restringe al remitente oficial y a las frases
-  // aceptadas del asunto. Después matchesPlanillaMessage_ vuelve a
-  // validar mensaje por mensaje porque Gmail.search() devuelve hilos
-  // completos.
-  const asuntos = CONFIG.GMAIL_SUBJECTS.map(function(frase) {
-    return 'subject:"' + frase + '"';
+  // OJO: esto es un PREFILTRO, no la regla. La regla vive en
+  // matchesPlanillaMessage_, que revisa mensaje por mensaje. Acá va lo
+  // más ancho que igual sirve para no traerse el buzón entero.
+  //
+  // Antes iba la frase completa entre comillas —subject:"PLANILLA
+  // CUMPLIMIENTO SUB-PRODUCTOS"— y eso perdía correos en silencio:
+  // en la búsqueda de Gmail el guion no es una letra más, y un asunto
+  // real como "PLANILLA CUMPLIMIENTO SUB-PRODUCTOS VIERNES 25 DE
+  // SEPTIEMBRE DE 2026" no volvía en los resultados. El día entero
+  // desaparecía del panel sin una sola señal, porque un correo que la
+  // búsqueda no devuelve es un correo que nadie revisó.
+  //
+  // Va la PRIMERA palabra de cada frase aceptada, suelta y sin
+  // comillas. Como la regla exige que el asunto EMPIECE con una de las
+  // frases, todo asunto válido trae esa palabra: el prefiltro no puede
+  // ser más estrecho que la regla. Y sale de CONFIG, así que sigue
+  // valiendo si mañana se agrega otra frase.
+  const palabras = {};
+
+  (CONFIG.GMAIL_SUBJECTS || []).forEach(function(frase) {
+    const primera = normalizeKey_(frase).split(/[\s-]+/)[0];
+
+    if (primera) { palabras[primera] = true; }
   });
 
-  parts.push(
-    asuntos.length > 1
-      ? '(' + asuntos.join(' OR ') + ')'
-      : asuntos[0]
-  );
+  const claves = Object.keys(palabras);
+
+  if (claves.length) {
+    const asuntos = claves.map(function(palabra) {
+      return 'subject:' + palabra;
+    });
+
+    parts.push(
+      asuntos.length > 1
+        ? '(' + asuntos.join(' OR ') + ')'
+        : asuntos[0]
+    );
+  }
 
   if (
     CONFIG.GMAIL_ALLOWED_SENDERS &&
@@ -3878,20 +3926,27 @@ function extractEmailAddress_(value) {
  * Respuestas "Re:", reenvíos y otros mensajes del hilo se excluyen para
  * evitar que una conversación interna reemplace al informe oficial.
  */
-function matchesPlanillaMessage_(message) {
-  const subject = text_(message.getSubject());
-  const sender = extractEmailAddress_(message.getFrom());
-
+/**
+ * Remitente exacto. Las respuestas dentro del mismo hilo pueden ser de
+ * otras personas; se descartan aunque Gmail haya devuelto el hilo.
+ */
+function remitenteValido_(message) {
   const allowed = CONFIG.GMAIL_ALLOWED_SENDERS || [];
 
-  // 1) Remitente exacto. Las respuestas dentro del mismo hilo pueden ser
-  // de otras personas; se descartan aunque Gmail haya devuelto el hilo.
-  if (
-    allowed.length &&
-    allowed.map(function(item) {
-      return String(item).toLowerCase();
-    }).indexOf(sender) === -1
-  ) {
+  if (!allowed.length) { return true; }
+
+  const sender = extractEmailAddress_(message.getFrom());
+
+  return allowed.map(function(item) {
+    return String(item).toLowerCase();
+  }).indexOf(sender) !== -1;
+}
+
+function matchesPlanillaMessage_(message) {
+  const subject = text_(message.getSubject());
+
+  // 1) Remitente.
+  if (!remitenteValido_(message)) {
     return false;
   }
 

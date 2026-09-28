@@ -586,6 +586,29 @@ clasp push
 
 Solo se acepta el correo **original** de `reservador.horario@masisa.com`
 cuyo asunto **empieza** con `PLANILLA CUMPLIMIENTO SUB-PRODUCTOS` o
-`CUMPLIMIENTO SUBPRODUCTOS`. Eso descarta `Re:`, `RV:` y `Fwd:`. Las
-filas «Total…» y las que vienen sin proveedor se ignoran siempre: son
-sumas y duplicarían los camiones.
+`CUMPLIMIENTO SUBPRODUCTOS`, comparado sin espacios ni guiones —así
+`SUB-PRODUCTOS`, `SUB PRODUCTOS` y `SUBPRODUCTOS` son lo mismo—. Eso
+descarta `Re:`, `RV:` y `Fwd:`. Las filas «Total…» y las que vienen sin
+proveedor se ignoran siempre: son sumas y duplicarían los camiones.
+
+**La búsqueda de Gmail es un prefiltro, no la regla.** La regla vive en
+`matchesPlanillaMessage_` y mira mensaje por mensaje; la búsqueda solo
+evita traerse el buzón entero, y por eso va escrita lo más ancha
+posible: la **primera palabra** de cada frase aceptada, suelta y sin
+comillas, sacada de `CONFIG` para que una frase nueva entre sola.
+
+Iba con la frase completa entrecomillada y eso **perdía correos en
+silencio**: en la búsqueda de Gmail el guion no es una letra más, y un
+asunto real como `PLANILLA CUMPLIMIENTO SUB-PRODUCTOS VIERNES 25 DE
+SEPTIEMBRE DE 2026` no volvía en los resultados. El día entero
+desaparecía del panel sin una sola señal, porque un correo que la
+búsqueda no devuelve es un correo que nadie revisó.
+
+Para que no se repita, el resumen de la importación cuenta aparte
+**cuántos correos del reservador quedaron fuera por el asunto**, y lista
+los primeros cinco. Y `pruebas/gmail.js` exige que todo asunto que la
+regla acepta traiga alguna de las palabras que la búsqueda pide.
+
+```
+node pruebas/gmail.js
+```
