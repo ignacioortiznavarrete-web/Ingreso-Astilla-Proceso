@@ -3610,6 +3610,24 @@
           <div id="homoSinPar"></div>
         </article>
 
+        <article class="panel" id="panelProvisorios" hidden>
+          <div class="panel-cab">
+            <div>
+              <h2>Agrupados, esperando a SAP</h2>
+              <p class="panel-nota">
+                Grupos que ya están juntos pero cuya cabeza todavía no
+                existe en SAP: un proveedor que despacha antes de que
+                alguien lo cree. El primer tiempo ya está hecho —sus
+                formas de escribirse cuentan como uno solo—. El día que
+                SAP lo cree, se elige acá y el grupo entero se va con
+                él: no hay que reasignar nombre por nombre.
+              </p>
+            </div>
+            <div class="conteo" id="homoConteoProvisorios">—</div>
+          </div>
+          <div id="homoProvisorios"></div>
+        </article>
+
         <article class="panel">
           <div class="panel-cab">
             <div>
@@ -12155,6 +12173,7 @@
       homoCifras(r);
       homoAvisos(r);
       dibujarHomoMapa();
+      homoProvisorios(r);
       homoTabla('homoSinPar', 'homoConteoSinPar',
         r.lista.filter(function(x) { return x.sinPar; }), true, r);
       homoTabla('homoParecido', 'homoConteoParecido',
@@ -12245,6 +12264,14 @@
      * después todo SAP: si el parecido no encontró nada —pasa cuando
      * el nombre no se parece en nada, que es justo cuando hace falta
      * escribirlo— igual se puede elegir a mano.
+     *
+     * Y al final, los OTROS nombres de esta misma lista. Ese grupo es
+     * el que resuelve al proveedor que todavía no existe en SAP:
+     * despacha, la planilla lo escribe de tres formas, y hasta ahora
+     * las tres quedaban sueltas porque no había ningún proveedor de SAP
+     * al que asignarlas. Ahora se elige una como cabeza y las otras
+     * cuelgan de ella; el día que SAP lo cree, se reapunta la cabeza y
+     * el grupo entero se va con ella.
      */
     function homoTabla(cajaId, conteoId, filas, esSinPar, r) {
       var caja = document.getElementById(cajaId);
@@ -12263,7 +12290,7 @@
       var cuerpo = filas.map(function(f, i) {
         var id = cajaId + '-' + i;
 
-        var opciones = ['<option value="">Elegir proveedor de SAP…</option>'];
+        var opciones = ['<option value="">Elegir a qué corresponde…</option>'];
 
         if (f.candidatos.length) {
           opciones.push('<optgroup label="Se parecen">');
@@ -12281,6 +12308,24 @@
             esc(shortProvider(sap)) + '</option>');
         });
         opciones.push('</optgroup>');
+
+        // El proveedor que SAP todavía no tiene creado. Se agrupa bajo
+        // uno de estos nombres y después, cuando SAP lo cree, se pasa
+        // el grupo entero de una vez.
+        var otros = (r.lista || []).filter(function(x) {
+          return x.sinPar && x.alias !== f.alias;
+        });
+
+        if (esSinPar && otros.length) {
+          opciones.push(
+            '<optgroup label="Todavía no está en SAP: agrupar bajo…">'
+          );
+          otros.forEach(function(x) {
+            opciones.push('<option value="' + esc(x.alias) + '">' +
+              esc(shortProvider(x.alias)) + '</option>');
+          });
+          opciones.push('</optgroup>');
+        }
 
         // De dónde viene el nombre. Importa: uno que solo está en
         // Proyección no tiene TS entregadas ni última fecha, y sin
@@ -12329,6 +12374,119 @@
         '<th>Último</th>' +
         '<th>Asignar a SAP</th>' +
         '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
+    }
+
+    /**
+     * Los grupos que esperan a SAP.
+     *
+     * Segundo tiempo de la homologación. El primero ya se hizo desde
+     * "Sin par en SAP": se eligió un nombre de la planilla como cabeza
+     * y las otras formas de escribirlo cuelgan de él, así que el panel
+     * ya cuenta un proveedor y no tres. Lo que falta es el nombre de
+     * SAP, que llega cuando alguien lo crea.
+     *
+     * Acá se elige ese nombre una sola vez. La cabeza se reapunta y el
+     * grupo entero se va con ella, alias incluidos.
+     */
+    function homoProvisorios(r) {
+      var panel = document.getElementById('panelProvisorios');
+      var caja = document.getElementById('homoProvisorios');
+      var lista = r.provisorios || [];
+
+      panel.hidden = !lista.length;
+
+      setText('homoConteoProvisorios', lista.length
+        ? lista.length + (lista.length === 1 ? ' grupo' : ' grupos')
+        : 'ninguno');
+
+      if (!lista.length) { return; }
+
+      var cuerpo = lista.map(function(g, i) {
+        var id = 'prov-' + i;
+
+        var opciones = ['<option value="">Elegir proveedor de SAP…</option>'];
+
+        if (g.candidatos.length) {
+          opciones.push('<optgroup label="Se parecen">');
+          g.candidatos.forEach(function(c) {
+            opciones.push('<option value="' + esc(c.proveedor) + '">' +
+              esc(shortProvider(c.proveedor)) + ' · ' +
+              formatPercent(c.score) + '</option>');
+          });
+          opciones.push('</optgroup>');
+        }
+
+        opciones.push('<optgroup label="Todos los de SAP">');
+        (r.proveedoresSap || []).forEach(function(sap) {
+          opciones.push('<option value="' + esc(sap) + '">' +
+            esc(shortProvider(sap)) + '</option>');
+        });
+        opciones.push('</optgroup>');
+
+        return '<tr>' +
+          '<td><strong>' + esc(g.cabeza) + '</strong>' +
+            '<div class="homo-hoy">' + g.cuantos +
+            (g.cuantos === 1 ? ' nombre cuelga' : ' nombres cuelgan') +
+            ' de este grupo</div></td>' +
+          '<td>' + g.alias.map(function(a) {
+            return '<span class="homo-otro">' + esc(shortProvider(a)) +
+              '</span>';
+          }).join(' · ') + '</td>' +
+          celdaN(g.ts ? formatQuantity(g.ts) : '—') +
+          celdaN(g.tsProy ? formatQuantity(g.tsProy) : '—') +
+          '<td class="homo-asignar">' +
+            '<select id="' + id + '">' + opciones.join('') + '</select>' +
+            '<button class="boton" type="button" data-homo-pasar="' +
+              esc(g.cabeza) + '" data-homo-campo="' + id +
+              '">Pasar a SAP</button>' +
+          '</td>' +
+          '</tr>';
+      }).join('');
+
+      caja.innerHTML =
+        '<div class="tabla-marco tabla-fija"><table data-tabla="homoProv">' +
+        '<thead><tr>' +
+        '<th>Cabeza del grupo</th>' +
+        '<th>Nombres que cuelgan</th>' +
+        '<th class="number">Entró</th>' +
+        '<th class="number">Comprometido</th>' +
+        '<th>Pasar el grupo a SAP</th>' +
+        '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
+    }
+
+    /** Reapunta la cabeza del grupo al proveedor de SAP y recarga. */
+    function pasarGrupoASap(cabeza, campoId) {
+      if (HOMO_OCUPADO) { return; }
+
+      var campo = document.getElementById(campoId);
+      var sap = campo ? campo.value : '';
+
+      if (!sap) {
+        homoRecado('mal', 'Elige primero el proveedor de SAP.');
+        if (campo) { campo.focus(); }
+        return;
+      }
+
+      HOMO_OCUPADO = true;
+      homoRecado('ok', 'Pasando <b>' + esc(cabeza) + '</b> a <b>' +
+        esc(shortProvider(sap)) + '</b>…');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          HOMO_OCUPADO = false;
+          homoRecado('ok', 'El grupo <b>' + esc(cabeza) +
+            '</b> quedó en <b>' + esc(shortProvider(res.sap)) +
+            '</b>, con sus ' + res.filas +
+            (res.filas === 1 ? ' fila' : ' filas') +
+            '. Recargando para rehacer el cruce…');
+
+          cargarTodo();
+        })
+        .withFailureHandler(function(err) {
+          HOMO_OCUPADO = false;
+          homoRecado('mal', esc(mensaje(err)));
+        })
+        .reasignarProveedor(cabeza, sap);
     }
 
     function homoRecado(tipo, texto) {
@@ -12382,16 +12540,26 @@
     // Delegado: la tabla se redibuja entera en cada carga, así que un
     // manejador por botón habría que volver a colgarlo cada vez.
     document.addEventListener('click', function(ev) {
-      var boton = ev.target.closest
-        ? ev.target.closest('[data-homo-asignar]')
-        : null;
+      if (!ev.target.closest) { return; }
 
-      if (!boton) { return; }
+      var boton = ev.target.closest('[data-homo-asignar]');
 
-      asignarHomologacion(
-        boton.getAttribute('data-homo-asignar'),
-        boton.getAttribute('data-homo-campo')
-      );
+      if (boton) {
+        asignarHomologacion(
+          boton.getAttribute('data-homo-asignar'),
+          boton.getAttribute('data-homo-campo')
+        );
+        return;
+      }
+
+      var pasar = ev.target.closest('[data-homo-pasar]');
+
+      if (pasar) {
+        pasarGrupoASap(
+          pasar.getAttribute('data-homo-pasar'),
+          pasar.getAttribute('data-homo-campo')
+        );
+      }
     });
 
 /* =====================================================================

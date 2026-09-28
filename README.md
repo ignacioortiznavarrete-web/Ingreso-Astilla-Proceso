@@ -522,6 +522,31 @@ completa no sobra: cuando el nombre no se parece a nada (`LLASA` →
 `LAMINADORA LOS ANGELES`) el parecido no propone nada, y es justo
 cuando hace falta escribirlo.
 
+### La homologación tiene dos tiempos
+
+Porque el mundo los tiene. Un proveedor empieza despachando y la
+planilla lo escribe de tres formas **antes** de que alguien lo cree en
+SAP. Hasta ahora esas tres formas no se podían juntar: el selector solo
+ofrecía proveedores de SAP, y ese proveedor todavía no existía ahí.
+Quedaban tres filas sueltas y tres proveedores inventados en el panel.
+
+| | Qué se hace | Dónde |
+|---|---|---|
+| **Primer tiempo** | Se elige uno de los nombres de la planilla como **cabeza** y los demás cuelgan de él | «Sin par en SAP» → *Todavía no está en SAP: agrupar bajo…* |
+| **Segundo tiempo** | El día que SAP lo crea, se elige el nombre real y **el grupo entero se va con él** | «Agrupados, esperando a SAP» |
+
+El primer tiempo ya sirve de algo aunque SAP no sepa del proveedor: el
+panel cuenta **uno** en vez de tres, y su volumen queda junto.
+
+El segundo no obliga a reasignar alias por alias. `reasignarProveedor`
+reapunta la cabeza y, como los alias cuelgan de ella por arrastre, se
+van solos. Escribe además una fila que manda la cabeza vieja al nombre
+de SAP: las planillas que traigan escrito **ese** nombre también tienen
+que llegar, y son justamente las que motivaron el grupo.
+
+Los que ya cruzan con SAP no ofrecen agrupar: no tiene sentido colgar de
+un provisorio algo que ya tiene su nombre definitivo.
+
 Asignar escribe la equivalencia en la hoja `Proveedores` y recarga. Se
 escriben las **dos** celdas en la misma fila —proveedor SAP y alias— en
 vez de apoyarse en el arrastre hacia abajo: una fila que depende de la

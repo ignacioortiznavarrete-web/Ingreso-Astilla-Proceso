@@ -2403,9 +2403,82 @@ function buildHomologacionPendiente_(
       return x.origen.indexOf('Proyección') !== -1;
     }).length,
     proveedoresSap: (proveedoresSap || []).slice().sort(),
+    // Los grupos que todavía no tienen proveedor de SAP: la cabeza es
+    // un nombre de la planilla y de ella cuelgan sus variantes. El día
+    // que SAP cree el proveedor, se reapunta la cabeza y el grupo se va
+    // con ella.
+    provisorios: gruposProvisorios_(
+      proveedoresSap,
+      homologacion,
+      lista
+    ),
     conflictos: homologacion.conflictos || [],
     huerfanos: homologacion.pendientes || []
   };
+}
+
+/**
+ * Cabezas de grupo que no existen en SAP.
+ *
+ * Son las que alguien eligió como provisorias para juntar las formas
+ * en que se escribe un proveedor que SAP todavía no tiene creado. No
+ * son un error: son el primer tiempo de la homologación.
+ */
+function gruposProvisorios_(proveedoresSap, homologacion, pendientes) {
+  const enSap = {};
+
+  (proveedoresSap || []).forEach(function(sap) {
+    enSap[normalizeKey_(sap)] = true;
+  });
+
+  const porCabeza = {};
+
+  Object.keys(homologacion.porAlias || {}).forEach(function(claveAlias) {
+    const cabeza = homologacion.porAlias[claveAlias];
+    const clave = normalizeKey_(cabeza);
+
+    // La identidad —cada nombre es alias de sí mismo— no cuenta como
+    // grupo: un nombre solo no es un grupo.
+    if (!clave || enSap[clave] || clave === claveAlias) { return; }
+
+    if (!porCabeza[clave]) {
+      porCabeza[clave] = { cabeza: cabeza, alias: {} };
+    }
+
+    porCabeza[clave].alias[claveAlias] = true;
+  });
+
+  // Lo que ese grupo mueve, según lo que la revisión ya contó.
+  const volumen = {};
+
+  (pendientes || []).forEach(function(item) {
+    const clave = normalizeKey_(item.resuelto);
+
+    if (!volumen[clave]) {
+      volumen[clave] = { ts: 0, tsProy: 0, planMes: 0 };
+    }
+
+    volumen[clave].ts += item.ts || 0;
+    volumen[clave].tsProy += item.tsProy || 0;
+    volumen[clave].planMes += item.planMes || 0;
+  });
+
+  return Object.keys(porCabeza).map(function(clave) {
+    const g = porCabeza[clave];
+    const v = volumen[clave] || { ts: 0, tsProy: 0, planMes: 0 };
+
+    return {
+      cabeza: g.cabeza,
+      alias: Object.keys(g.alias).sort(),
+      cuantos: Object.keys(g.alias).length,
+      ts: round_(v.ts, 2),
+      tsProy: round_(v.tsProy, 2),
+      planMes: round_(v.planMes, 2),
+      candidatos: candidatosSap_(g.cabeza, proveedoresSap)
+    };
+  }).sort(function(a, b) {
+    return (b.ts + b.tsProy) - (a.ts + a.tsProy) || b.cuantos - a.cuantos;
+  });
 }
 
 /**
@@ -2673,6 +2746,116 @@ function asignarProveedor(alias, proveedorSap) {
     alias: nombreAlias,
     sap: nombreSap,
     fila: fila
+  };
+}
+
+/**
+ * Pasa un grupo provisorio a su proveedor de SAP.
+ *
+ * La homologación tiene dos tiempos, porque el mundo los tiene. Un
+ * proveedor empieza despachando y la planilla lo escribe de tres formas
+ * antes de que alguien lo cree en SAP. Hasta ahora esas tres formas no
+ * se podían juntar: el selector solo ofrecía proveedores de SAP, y ese
+ * proveedor todavía no existía ahí. Quedaban tres filas sueltas y tres
+ * proveedores inventados en el panel.
+ *
+ * El primer tiempo es agrupar: se elige uno de los nombres de la
+ * planilla como cabeza y los demás cuelgan de él. Eso ya deja UN
+ * proveedor en el panel en vez de tres, aunque SAP no sepa de él.
+ *
+ * El segundo tiempo es esto: el día que SAP lo crea, se reapunta la
+ * cabeza al nombre de SAP y todo el grupo se va con ella. No hay que
+ * volver a asignar alias por alias.
+ *
+ * Se escribe además una fila que manda la cabeza vieja al nombre de
+ * SAP: las filas que traigan escrito ESE nombre también tienen que
+ * llegar, y son justamente las que motivaron el grupo.
+ */
+function reasignarProveedor(actual, nuevo) {
+  const cabeza = text_(actual);
+  const destino = text_(nuevo);
+
+  if (!cabeza || !destino) {
+    throw new Error('Hacen falta el grupo y el proveedor de SAP.');
+  }
+
+  if (normalizeKey_(cabeza) === normalizeKey_(destino)) {
+    throw new Error('El grupo ya se llama así.');
+  }
+
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROVEEDORES);
+
+  if (!sheet) {
+    throw new Error(
+      'No existe la hoja "' + CONFIG.SHEET_PROVEEDORES +
+      '". Corre "Preparar hoja de proveedores".'
+    );
+  }
+
+  const columnas = columnasProveedores_(sheet);
+  const valores = sheet.getDataRange().getValues();
+  const clave = normalizeKey_(cabeza);
+
+  // Solo las celdas donde la cabeza está ESCRITA. Las de abajo la
+  // heredan por arrastre y se van solas con ella.
+  const filas = [];
+
+  for (let i = 1; i < valores.length; i++) {
+    if (normalizeKey_(text_(valores[i][columnas.sap - 1])) === clave) {
+      filas.push(i + 1);
+    }
+  }
+
+  if (!filas.length) {
+    throw new Error(
+      'En la hoja ' + CONFIG.SHEET_PROVEEDORES + ' no hay ninguna fila ' +
+      'encabezada por "' + cabeza + '".'
+    );
+  }
+
+  filas.forEach(function(fila) {
+    sheet.getRange(fila, columnas.sap).setValue(destino);
+
+    if (columnas.actualizado) {
+      sheet.getRange(fila, columnas.actualizado).setValue(new Date());
+    }
+
+    if (columnas.actualizadoPor) {
+      sheet.getRange(fila, columnas.actualizadoPor).setValue(autorActual_());
+    }
+  });
+
+  // Y la cabeza vieja, ahora como alias del nombre de SAP.
+  const yaEstaba = valores.some(function(fila, i) {
+    return i > 0 &&
+      normalizeKey_(text_(fila[columnas.alias - 1])) === clave;
+  });
+
+  if (!yaEstaba) {
+    const fila = sheet.getLastRow() + 1;
+
+    sheet.getRange(fila, columnas.sap).setValue(destino);
+    sheet.getRange(fila, columnas.alias).setValue(cabeza);
+
+    if (columnas.origen) {
+      sheet.getRange(fila, columnas.origen).setValue('Panel');
+    }
+
+    if (columnas.actualizado) {
+      sheet.getRange(fila, columnas.actualizado).setValue(new Date());
+    }
+
+    if (columnas.actualizadoPor) {
+      sheet.getRange(fila, columnas.actualizadoPor).setValue(autorActual_());
+    }
+  }
+
+  return {
+    escrito: true,
+    grupo: cabeza,
+    sap: destino,
+    filas: filas.length + (yaEstaba ? 0 : 1)
   };
 }
 
