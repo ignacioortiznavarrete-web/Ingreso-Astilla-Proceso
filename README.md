@@ -474,6 +474,35 @@ Entran las **tres** hojas que escriben nombres de proveedor:
 Cada fila dice de cuál viene, y una sola asignación las arregla todas:
 el cruce es el mismo para las tres.
 
+### Solo lo del mes en curso
+
+La lista de revisión mira **toda la historia cargada** —seis meses, o
+desde enero—, y ahí un nombre que apareció una vez en marzo pesa lo
+mismo que el que llegó ayer. Para sentarse a homologar eso estorba: lo
+que hay que resolver es lo del mes que se está mirando.
+
+El selector de arriba acota las dos listas de trabajo —«Sin par en
+SAP» y «Cruzados por parecido»— y **abre en el mes en curso**, sea
+septiembre, octubre o el que toque: sale de `DATA.month`, no hay ningún
+mes escrito en el código.
+
+| Origen del nombre | Cuándo es del mes |
+|---|---|
+| Planilla | Su **última** fecha cae dentro del mes |
+| Proyección | Siempre: esa hoja numera los días hábiles de este mes |
+| Plan | Siempre: se lee la columna de este mes |
+
+Las cifras de arriba siguen al alcance. Si la tabla muestra tres y la
+tarjeta dice doce, la tarjeta miente.
+
+Y **nada se esconde callado**: al costado del selector se dice cuántos
+nombres quedan fuera (`1 nombre más en meses anteriores`), y están a un
+clic.
+
+> Cuidado al tocar `esDelMes`: **`Plan` es principio de `Planilla`**.
+> Buscar el origen como texto suelto hace pasar a todos y el filtro deja
+> de filtrar sin que se note. Van tokens exactos.
+
 ### El ancla es SAP
 
 La pestaña nació mirando lo que falla: los nombres sueltos que no

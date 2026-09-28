@@ -2240,6 +2240,11 @@
        igual pasa desapercibido a propósito: lo que hay que ver de un
        vistazo son los DISTINTOS, que son las equivalencias que alguien
        tuvo que resolver y las que se rompen si alguien las borra. */
+    /* La tira de alcance va bajo el texto de portada y no dentro de un
+       panel: manda sobre los tres de abajo, así que no puede parecer
+       filtro de uno solo. */
+    .mandos-alcance { margin-top: var(--s3); margin-bottom: 0; }
+
     .homo-igual { color: var(--ink-3); }
 
     .homo-otro {
@@ -3532,12 +3537,21 @@
         <div>
           <h2 class="titulo-vista">Un proveedor, un nombre</h2>
           <p class="portada-nota">
-            SAP escribe cada proveedor de una sola forma; la planilla y
-            la hoja Proyección, de muchas. Cuando un nombre no cruza, el
-            panel lo deja pasar tal cual y ese proveedor aparece dos
-            veces. Acá se asignan, y una asignación arregla las dos
-            hojas a la vez.
+            SAP escribe cada proveedor de una sola forma; la planilla,
+            la hoja Proyección y el Plan, de muchas. Cuando un nombre no
+            cruza, el panel lo deja pasar tal cual y ese proveedor
+            aparece dos veces. Acá se asignan, y una asignación arregla
+            las tres hojas a la vez.
           </p>
+
+          <div class="mandos mandos-alcance">
+            <select id="homoAlcance" aria-label="Qué nombres revisar">
+              <option value="mes">Solo lo del mes en curso</option>
+              <option value="todo">Toda la historia cargada</option>
+            </select>
+            <span class="mandos-cuenta" id="homoAlcanceCuenta"
+                  aria-live="polite"></span>
+          </div>
         </div>
 
         <div class="portada-cifras" id="homoCifras"></div>
@@ -8690,6 +8704,12 @@
           dibujarHomoMapa();
         });
 
+      document.getElementById('homoAlcance')
+        .addEventListener('change', function(ev) {
+          HOMO_ALCANCE = ev.target.value;
+          dibujarHomologacion();
+        });
+
       document.addEventListener('input', function(ev) {
         const entrada = ev.target.closest
           ? ev.target.closest('[data-buscar]')
@@ -12159,16 +12179,84 @@
       nota.innerHTML = avisos.length ? ' ' + avisos.join(' ') : '';
     }
 
+    var HOMO_ALCANCE = 'mes';
+
+    /**
+     * ¿Este nombre es del mes en curso?
+     *
+     * La lista de revisión mira toda la historia cargada —seis meses, o
+     * desde enero—, y un nombre que apareció una vez en marzo pesa lo
+     * mismo que el que llegó ayer. Para sentarse a homologar eso
+     * estorba: lo que hay que resolver es lo del mes que se está
+     * mirando.
+     *
+     * La planilla trae fechas, así que se mira la última. Proyección y
+     * Plan no traen: sus dos hojas SON del mes en curso, la primera
+     * porque numera los días hábiles de este mes y la segunda porque se
+     * lee su columna. Un nombre que viene de ahí es de este mes por
+     * definición.
+     */
+    function esDelMes(x) {
+      var mes = DATA.month || {};
+
+      // Ojo con la comparación: "Plan" es principio de "Planilla", así
+      // que buscarlo suelto dentro del texto hace pasar a TODOS y el
+      // filtro no filtra nada. Van tokens exactos, que es como se armó
+      // el origen: los nombres unidos con " y ".
+      var hojas = String(x.origen || '').split(' y ');
+
+      if (hojas.indexOf('Proyección') !== -1 || hojas.indexOf('Plan') !== -1) {
+        return true;
+      }
+
+      return !!x.ultima && x.ultima >= mes.startKey && x.ultima <= mes.endKey;
+    }
+
     function homoDatos() {
-      return ((DATA.source || {}).homologacion || {}).revision || {
+      var r = ((DATA.source || {}).homologacion || {}).revision || {
         lista: [], sinPar: 0, porParecido: 0, tsSinPar: 0,
         camionesSinParProy: 0, enProyeccion: 0,
-        proveedoresSap: [], conflictos: [], huerfanos: []
+        proveedoresSap: [], provisorios: [], conflictos: [], huerfanos: []
       };
+
+      if (HOMO_ALCANCE !== 'mes') { return r; }
+
+      // Recorta la lista y recalcula las cifras sobre lo que queda: si
+      // la tabla muestra tres y la tarjeta dice doce, la tarjeta miente.
+      var lista = (r.lista || []).filter(esDelMes);
+
+      return Object.assign({}, r, {
+        lista: lista,
+        sinPar: lista.filter(function(x) { return x.sinPar; }).length,
+        porParecido: lista.filter(function(x) { return !x.sinPar; }).length,
+        tsSinPar: lista.reduce(function(t, x) {
+          return t + (x.sinPar ? x.ts : 0);
+        }, 0),
+        camionesSinParProy: lista.reduce(function(t, x) {
+          return t + (x.sinPar ? x.camionesProy : 0);
+        }, 0)
+      });
     }
 
     function dibujarHomologacion() {
       var r = homoDatos();
+      var todos = (((DATA.source || {}).homologacion || {}).revision || {})
+        .lista || [];
+
+      // Nunca esconder en silencio: si el alcance del mes deja nombres
+      // fuera, se dice cuántos y se puede ir a verlos.
+      var fuera = HOMO_ALCANCE === 'mes'
+        ? todos.length - r.lista.length
+        : 0;
+
+      setText('homoAlcanceCuenta', HOMO_ALCANCE === 'mes'
+        ? (fuera
+            ? fuera + (fuera === 1
+                ? ' nombre más en meses anteriores'
+                : ' nombres más en meses anteriores')
+            : 'no hay nombres de meses anteriores')
+        : todos.length + (todos.length === 1
+            ? ' nombre en total' : ' nombres en total'));
 
       homoCifras(r);
       homoAvisos(r);
@@ -12281,9 +12369,13 @@
         : 'ninguno');
 
       if (!filas.length) {
+        var alcance = HOMO_ALCANCE === 'mes'
+          ? ' en el mes en curso'
+          : '';
+
         caja.innerHTML = vacio(esSinPar
-          ? 'Ningún nombre entra sin cruzar. Nada que asignar.'
-          : 'Ningún nombre depende hoy del parecido automático.');
+          ? 'Ningún nombre entra sin cruzar' + alcance + '. Nada que asignar.'
+          : 'Ningún nombre depende del parecido automático' + alcance + '.');
         return;
       }
 
