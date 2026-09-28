@@ -3141,12 +3141,24 @@ function readProyeccion_(
           matchMethod: cruce.method,
           subproducto: material,
           ts: 0,
-          camiones: 0
+          camiones: 0,
+          // Qué se comprometió cada día, no solo el total del mes: sin
+          // esto no se puede preguntar qué prometió este proveedor la
+          // semana pasada, que es la pregunta de la reunión.
+          porFecha: {}
         };
       }
 
       porProveedor[clv].ts += ts;
       porProveedor[clv].camiones += camiones;
+
+      const dia = porProveedor[clv].porFecha;
+
+      if (!dia[fecha]) { dia[fecha] = { ts: 0, camiones: 0 }; }
+
+      dia[fecha].ts += ts;
+      dia[fecha].camiones += camiones;
+
       total += ts;
     });
 
@@ -3163,7 +3175,15 @@ function readProyeccion_(
   }
 
   const lista = Object.keys(porProveedor).map(function(k) {
-    return porProveedor[k];
+    const item = porProveedor[k];
+
+    item.ts = round_(item.ts, 2);
+
+    Object.keys(item.porFecha).forEach(function(f) {
+      item.porFecha[f].ts = round_(item.porFecha[f].ts, 2);
+    });
+
+    return item;
   }).sort(function(a, b) { return b.ts - a.ts; });
 
   // Los que no cruzaron con nadie: sus camiones sí entran al total del

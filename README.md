@@ -124,9 +124,18 @@ ingreso y proyección— en la única pregunta que se hace a mitad de mes:
 | Cifra | Qué es |
 |---|---|
 | Ingresado a la fecha | Real + estimado de los días corridos |
-| Comprometido por venir | Los camiones de `Proyeccion` para los días que faltan, en TS |
-| Cierre con proyección | La suma de los dos, contra el plan del mes |
+| Comprometido del mes | Todo lo escrito en `Proyeccion` para el mes, días pasados incluidos |
+| Cumple el compromiso | De lo prometido que ya venció, cuánto llegó |
+| Cierre con proyección | Lo entrado más lo que falta por llegar, contra el plan del mes |
 | Brecha al cierre | Cuánto sobra o falta al terminar así |
+
+**La promesa no caduca.** «Comprometido del mes» cuenta el mes entero y
+no se encoge al avanzar los días: antes solo mostraba lo que quedaba por
+llegar, así que a fin de mes la proyección se había evaporado y no
+quedaba contra qué comparar. Lo que sí distingue el panel son dos cosas
+distintas por día: `comprometido` (lo que prometieron, siempre) y
+`proyectado` (la parte de eso que todavía cuenta para el cierre, o sea
+solo la de los días que no han pasado).
 
 Hay **dos cierres** en el panel y no son lo mismo:
 
@@ -237,6 +246,47 @@ un día sin despacho, no un día por proyectar: su proyección ya venció.
 
 El travesaño pizarra es el plan del mes repartido entre los días
 hábiles de esa semana.
+
+### La semana: lo prometido y lo que llegó
+
+El gráfico semanal lleva **dos barras por semana**: a la izquierda,
+rayada, lo que los proveedores comprometieron en `Proyeccion` para esa
+semana; a la derecha, lo que entró. El travesaño pizarra es el plan.
+
+La barra de la promesa se dibuja completa **aunque la semana ya haya
+pasado**. Antes se apagaba al llegar el día —la proyección solo existía
+hacia adelante— y una semana cerrada quedaba sin nada con qué
+compararse, que es justo cuando interesa saber si cumplieron.
+
+Debajo, **Cumplimiento por proveedor, semana a semana**: quién prometió
+qué y quién lo cumplió. Abre en la última semana cerrada —la de la
+reunión del lunes— y el selector recorre las demás.
+
+| Columna | Qué es |
+|---|---|
+| Camiones comp. | Los camiones escritos en `Proyeccion` para esos días |
+| Comprometido | Esos camiones en TS, con el factor de su material |
+| Ingresó | Lo que realmente entró esa semana |
+| Diferencia · Cumple | Lo segundo contra lo primero |
+| Plan semana | El plan mensual del proveedor prorrateado a esos días |
+
+Tres decisiones que conviene saber:
+
+- **Se cruza por proveedor, no por proveedor y material.** La llamada es
+  al proveedor. Quien prometió nitens y trajo pino cumplió el tonelaje;
+  el material queda en la columna de al lado.
+- **Solo entra quien tiene algo que contestar**: comprometió, trajo, o
+  las dos. Uno que esa semana ni prometió ni despachó sería una fila de
+  guiones —para el plan sin ingreso está la brecha del mes—.
+- **La regla del fin de semana es la misma** que en los gráficos: lo que
+  llega sábado cuenta en el viernes.
+
+La nota de arriba dice quién trajo sin haber comprometido nada y quién
+prometió y no despachó.
+
+Esto necesita el detalle por día **y** por proveedor, así que
+`readProyeccion_` guarda un `porFecha` dentro de cada proveedor y no solo
+el total del mes.
 
 ### Brecha vs plan a la fecha
 

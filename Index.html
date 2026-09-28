@@ -1271,7 +1271,8 @@
     }
 
     .conteo {
-      flex: 0 0 auto;
+      flex: 0 1 auto;
+      max-width: 100%;
       padding: 5px var(--s3);
       font-family: var(--mono);
       font-size: var(--t-mini);
@@ -1280,6 +1281,13 @@
       border-radius: var(--r-full);
       background: var(--surface);
       white-space: nowrap;
+    }
+
+    /* En pantalla angosta la pastilla puede partirse. Va en dos
+       líneas antes que empujar la página: una cifra que gana un
+       dígito no puede desbordar el panel. */
+    @media (max-width: 560px) {
+      .conteo { white-space: normal; }
     }
 
     .pila {
@@ -3125,19 +3133,60 @@
         <article class="panel">
           <div class="panel-cab">
             <div>
-              <h2>Semana a semana: plan, ingreso y proyección</h2>
+              <h2>Semana a semana: lo prometido y lo que llegó</h2>
               <p class="panel-nota">
-                Cada semana hábil del mes. Lo que ya pasó se lee con lo
-                que entró; lo que viene, con los camiones comprometidos
-                en la hoja Proyección, convertidos a TS con el factor de
-                su material. El travesaño pizarra es el plan de esa
-                semana.
+                Dos barras por semana. A la izquierda, rayada, lo que los
+                proveedores comprometieron en la hoja Proyección para esa
+                semana; a la derecha, lo que entró. La promesa se dibuja
+                completa aunque la semana ya haya pasado: es la vara
+                contra la que se mide al proveedor. El travesaño pizarra
+                es el plan de la semana.
                 <span id="semanasNota"></span>
               </p>
             </div>
             <div class="conteo" id="conteoSemanas">—</div>
           </div>
           <div id="grafSemanas"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
+              <h2>Cumplimiento por proveedor, semana a semana</h2>
+              <p class="panel-nota">
+                Quién prometió qué y quién lo cumplió. Abre en la última
+                semana cerrada, que es la de la reunión; el selector
+                recorre las demás. Lo que entró sábado o feriado cuenta
+                en el día hábil anterior, igual que en los gráficos.
+                <span id="semProvNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="conteoSemProv">—</div>
+          </div>
+
+          <div class="mandos">
+            <select id="semanaProv" aria-label="Elegir la semana"></select>
+            <span class="mandos-cuenta" id="semProvCuenta"
+                  aria-live="polite"></span>
+          </div>
+
+          <div class="tabla-marco tabla-fija">
+            <table data-tabla="semanaProv">
+              <thead><tr>
+                <th data-orden="proveedor">Proveedor</th>
+                <th data-orden="subproductos">Subproductos</th>
+                <th class="number" data-orden="camiones">Camiones comp.</th>
+                <th class="number" data-orden="comprometido">Comprometido</th>
+                <th class="number" data-orden="entrado">Ingresó</th>
+                <th class="number" data-orden="diferencia">Diferencia</th>
+                <th class="number" data-orden="cumple"
+                    data-suma="razon:entrado/comprometido">Cumple</th>
+                <th class="number" data-orden="planSemana">Plan semana</th>
+              </tr></thead>
+              <tbody id="semProvBody"></tbody>
+              <tfoot id="semProvFoot"></tfoot>
+            </table>
+          </div>
         </article>
 
         <div class="par">
@@ -5685,6 +5734,7 @@
       dibujarCierre();
       grafDias();
       grafSemanas();
+      dibujarSemanaProveedor();
     }
 
     /* --- Rótulos de valor -------------------------------------------
@@ -6586,10 +6636,20 @@
       var dias = habiles.map(function(k) {
         var dia = porFecha[k] || { real: 0, est: 0 };
 
+        var pr = (proy.porFecha || {})[k] || { ts: 0, camiones: 0 };
+
         var cubo = {
           fecha: k,
           real: dia.real,
           est: dia.est,
+          // Lo que la hoja Proyección prometió para ESTE día, pase lo
+          // que pase después. No caduca: es contra esto que se mide si
+          // el proveedor cumplió, y si desapareciera al llegar el día
+          // la semana pasada quedaría sin nada con qué compararse.
+          comprometido: Number(pr.ts) || 0,
+          camionesComprometidos: Number(pr.camiones) || 0,
+          // Lo que de eso todavía cuenta para el cierre. Es otra cosa y
+          // por eso va aparte.
           proyectado: 0,
           camiones: 0,
           plan: planPorHabil,
@@ -6606,12 +6666,8 @@
         // Un día pasado sin nada es un día sin despacho, no un día por
         // proyectar: su proyección ya venció.
         if (!cubo.real && !cubo.est && !cubo.pasado) {
-          var pr = (proy.porFecha || {})[k];
-
-          if (pr) {
-            cubo.proyectado = Number(pr.ts) || 0;
-            cubo.camiones = Number(pr.camiones) || 0;
-          }
+          cubo.proyectado = cubo.comprometido;
+          cubo.camiones = cubo.camionesComprometidos;
         }
 
         cubo.entrado = cubo.real + cubo.est;
@@ -6660,21 +6716,41 @@
       }
 
       var entrado = 0;
-      var comprometido = 0;
-      var camiones = 0;
+      var porLlegar = 0;
+      var camionesPorLlegar = 0;
       var diasConCompromiso = 0;
       var porVenir = 0;
 
+      // El compromiso del mes entero, días pasados incluidos. No se
+      // encoge al avanzar el mes: es la vara contra la que se mide si
+      // los proveedores cumplieron.
+      var prometido = 0;
+      var camionesPrometidos = 0;
+      // Y la parte de esa promesa que ya tiene veredicto.
+      var prometidoVencido = 0;
+      var entradoVencido = 0;
+
       cubos.dias.forEach(function(d) {
         entrado += d.entrado;
-        comprometido += d.proyectado;
-        camiones += d.camiones;
+        porLlegar += d.proyectado;
+        camionesPorLlegar += d.camiones;
+        prometido += d.comprometido;
+        camionesPrometidos += d.camionesComprometidos;
 
         if (d.proyectado > 0) { diasConCompromiso++; }
         if (!d.pasado) { porVenir++; }
+
+        if (d.pasado) {
+          prometidoVencido += d.comprometido;
+          entradoVencido += d.entrado;
+        }
       });
 
-      var cierre = entrado + comprometido;
+      var cumpleCompromiso = prometidoVencido > 0
+        ? entradoVencido / prometidoVencido
+        : null;
+
+      var cierre = entrado + porLlegar;
       var plan = m.planValid ? (m.monthlyPlan || 0) : 0;
       var brecha = plan > 0 ? cierre - plan : null;
 
@@ -6694,15 +6770,24 @@
             ' días hábiles'
         },
         {
-          tag: 'Comprometido por venir',
-          val: formatQuantity(comprometido), uni: unidad(),
-          clase: comprometido > 0 ? 'val-madera' : '',
-          pie: comprometido > 0
-            ? formatInteger(camiones) + ' camiones en ' + diasConCompromiso +
-              (diasConCompromiso === 1 ? ' día' : ' días')
-            : (porVenir
-                ? 'Sin camiones escritos para los días que faltan'
-                : 'El mes ya no tiene días por venir')
+          tag: 'Comprometido del mes',
+          val: formatQuantity(prometido), uni: unidad(),
+          pie: prometido > 0
+            ? formatInteger(camionesPrometidos) + ' camiones · ' +
+              formatQuantity(porLlegar) + ' ' + unidad() + ' por llegar'
+            : 'Sin camiones escritos en la hoja Proyección'
+        },
+        {
+          tag: 'Cumple el compromiso',
+          val: cumpleCompromiso === null
+            ? '—' : formatPercent(cumpleCompromiso),
+          clase: cumpleCompromiso === null
+            ? '' : (cumpleCompromiso < 1 ? 'val-riesgo' : 'val-verde'),
+          pie: cumpleCompromiso === null
+            ? 'Todavía no vence ningún compromiso'
+            : formatQuantity(entradoVencido) + ' de ' +
+              formatQuantity(prometidoVencido) + ' ' + unidad() +
+              ' prometidas hasta hoy'
         },
         {
           tag: 'Cierre con proyección',
@@ -6764,6 +6849,268 @@
       }
 
       nota.innerHTML = avisos.join(' ');
+    }
+
+/* --- Cumplimiento por proveedor, semana a semana --------------------
+
+   La pregunta de la reunión del lunes: quién prometió qué la semana
+   pasada y quién lo cumplió.
+
+   El compromiso sale de la hoja Proyección, día por día y por
+   proveedor —por eso readProyeccion_ guarda porFecha dentro de cada
+   proveedor y no solo el total del mes—. Lo entregado sale de las
+   mismas filas que el resto del panel, con la misma regla de fin de
+   semana: lo que llega sábado cuenta en el viernes.
+
+   Se cruza por proveedor, no por proveedor y material: la llamada es
+   al proveedor. Un proveedor que prometió nitens y trajo pino cumplió
+   el tonelaje y eso es lo que se ve; el detalle del material va en la
+   columna de al lado. */
+
+    var SEM_PROV = '';
+
+    /** Las semanas del mes, de la más nueva a la más vieja. */
+    function semanasDelMes(cubos) {
+      var por = {};
+
+      cubos.dias.forEach(function(d) {
+        var lunes = lunesDe(d.fecha);
+
+        if (!por[lunes]) {
+          por[lunes] = { lunes: lunes, dias: [], cerrada: true, entrado: 0 };
+        }
+
+        por[lunes].dias.push(d.fecha);
+        por[lunes].entrado += d.entrado;
+
+        if (!d.pasado) { por[lunes].cerrada = false; }
+      });
+
+      return Object.keys(por).sort().reverse().map(function(k) {
+        return por[k];
+      });
+    }
+
+    function dibujarSemanaProveedor() {
+      var cuerpo = document.getElementById('semProvBody');
+      var pie = document.getElementById('semProvFoot');
+      var select = document.getElementById('semanaProv');
+      var nota = document.getElementById('semProvNota');
+      var cubos = cubosDiarios();
+
+      nota.innerHTML = '';
+
+      if (cubos.error) {
+        select.innerHTML = '';
+        cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="8">' +
+          esc(cubos.error) + '</td></tr>';
+        pie.innerHTML = '';
+        setText('conteoSemProv', '—');
+        setText('semProvCuenta', '');
+        return;
+      }
+
+      var semanas = semanasDelMes(cubos);
+
+      // Abre en la última semana cerrada, que es la de la reunión. Si
+      // ninguna cerró todavía —principio de mes— abre en la más nueva.
+      if (!semanas.some(function(s) { return s.lunes === SEM_PROV; })) {
+        var cerrada = semanas.filter(function(s) { return s.cerrada; })[0];
+        SEM_PROV = (cerrada || semanas[0] || {}).lunes || '';
+      }
+
+      select.innerHTML = semanas.map(function(s) {
+        return '<option value="' + esc(s.lunes) + '"' +
+          (s.lunes === SEM_PROV ? ' selected' : '') + '>' +
+          esc(etiquetaSemanaLarga(s.lunes)) +
+          (s.cerrada ? '' : ' · en curso') + '</option>';
+      }).join('');
+
+      var sem = semanas.filter(function(s) { return s.lunes === SEM_PROV; })[0];
+
+      if (!sem) {
+        cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="8">' +
+          'Sin semanas en el mes.</td></tr>';
+        pie.innerHTML = '';
+        return;
+      }
+
+      var enLaSemana = {};
+      sem.dias.forEach(function(f) { enLaSemana[f] = true; });
+
+      var filas = {};
+
+      function fila(nombre) {
+        if (!filas[nombre]) {
+          filas[nombre] = {
+            proveedor: nombre, comprometido: 0, camiones: 0,
+            entrado: 0, subs: {}, planMes: 0
+          };
+        }
+
+        return filas[nombre];
+      }
+
+      // Lo prometido: la hoja Proyección, acotada a los días de esta
+      // semana.
+      ((cubos.proy || {}).porProveedor || []).forEach(function(item) {
+        Object.keys(item.porFecha || {}).forEach(function(f) {
+          if (!enLaSemana[f]) { return; }
+
+          var x = fila(item.proveedor);
+
+          x.comprometido += Number(item.porFecha[f].ts) || 0;
+          x.camiones += Number(item.porFecha[f].camiones) || 0;
+          x.subs[item.subproducto] = true;
+        });
+      });
+
+      // Lo que llegó, con la misma regla de fin de semana que los
+      // gráficos: el camión del sábado es del viernes.
+      var mapa = mapaHabiles();
+
+      CURRENT_ROWS.forEach(function(f) {
+        var destino = mapa[f.fecha];
+
+        if (!destino || !enLaSemana[destino]) { return; }
+
+        fila(f.proveedor).entrado += Number(f.ts) || 0;
+      });
+
+      // El plan del proveedor, prorrateado a los días hábiles de esta
+      // semana. Es el mismo reparto que usa el resto del panel.
+      //
+      // Anota las filas que ya existen; no crea ninguna. Esta tabla
+      // responde «prometió y cumplió», y un proveedor que esa semana
+      // ni prometió ni trajo no tiene nada que contestar: entraría
+      // como una fila de guiones con un plan al lado. Para el plan sin
+      // ingreso está la brecha del mes.
+      var habilesMes = cubos.dias.length;
+
+      (CURRENT_PRICING || []).forEach(function(p) {
+        if (!p.monthlyPlan || !filas[p.proveedor]) { return; }
+
+        filas[p.proveedor].planMes += Number(p.monthlyPlan) || 0;
+      });
+
+      var lista = Object.keys(filas).filter(function(k) {
+        return filas[k].comprometido > 0 || filas[k].entrado > 0;
+      }).map(function(k) {
+        var x = filas[k];
+
+        x.diferencia = x.entrado - x.comprometido;
+        x.cumple = x.comprometido > 0 ? x.entrado / x.comprometido : null;
+        x.subproductos = Object.keys(x.subs).sort();
+        x.planSemana = habilesMes > 0
+          ? x.planMes * (sem.dias.length / habilesMes)
+          : 0;
+
+        return x;
+      });
+
+      // Primero el que más comprometió: es contra el que más se juega
+      // la semana. Los que solo trajeron, sin compromiso, van al final.
+      lista.sort(function(a, b) {
+        if ((a.comprometido > 0) !== (b.comprometido > 0)) {
+          return a.comprometido > 0 ? -1 : 1;
+        }
+
+        return b.comprometido - a.comprometido || b.entrado - a.entrado;
+      });
+
+      var t = {
+        comprometido: 0, entrado: 0, camiones: 0, planSemana: 0
+      };
+
+      lista.forEach(function(x) {
+        t.comprometido += x.comprometido;
+        t.entrado += x.entrado;
+        t.camiones += x.camiones;
+        t.planSemana += x.planSemana;
+      });
+
+      var cumplen = lista.filter(function(x) {
+        return x.cumple !== null && x.cumple >= 1;
+      }).length;
+      var conCompromiso = lista.filter(function(x) {
+        return x.comprometido > 0;
+      }).length;
+
+      setText('conteoSemProv', conCompromiso
+        ? cumplen + ' de ' + conCompromiso + ' cumplen'
+        : 'sin compromiso esa semana');
+
+      setText('semProvCuenta',
+        sem.dias.length + (sem.dias.length === 1 ? ' día hábil' : ' días hábiles') +
+        (sem.cerrada ? ' · cerrada' : ' · en curso'));
+
+      if (!lista.length) {
+        cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="8">' +
+          'Esa semana no tiene compromisos ni ingresos.</td></tr>';
+        pie.innerHTML = '';
+        return;
+      }
+
+      cuerpo.innerHTML = lista.map(function(x) {
+        return '<tr>' +
+          '<td><strong>' + esc(shortProvider(x.proveedor)) + '</strong></td>' +
+          '<td>' + (x.subproductos.length
+            ? esc(x.subproductos.map(shortProduct).join(' · '))
+            : '<span class="sello-fuente es-flojo">sin compromiso</span>') +
+            '</td>' +
+          celdaN(x.camiones ? formatInteger(x.camiones) : '—') +
+          celdaN(x.comprometido ? formatQuantity(x.comprometido) : '—') +
+          celdaN('<strong>' + formatQuantity(x.entrado) + '</strong>') +
+          celdaN(x.comprometido ? formatSigned(x.diferencia) : '—',
+            x.comprometido && x.diferencia < 0 ? 'val-riesgo' : '') +
+          celdaN(x.cumple === null ? '—' : formatPercent(x.cumple),
+            x.cumple !== null && x.cumple < 1 ? 'val-riesgo' : 'val-verde') +
+          celdaN(x.planSemana ? formatQuantity(x.planSemana) : '—') +
+          '</tr>';
+      }).join('');
+
+      pie.innerHTML = '<tr><td>TOTAL</td><td></td>' +
+        celdaN(formatInteger(t.camiones)) +
+        celdaN(formatQuantity(t.comprometido)) +
+        celdaN(formatQuantity(t.entrado)) +
+        celdaN(t.comprometido
+          ? formatSigned(t.entrado - t.comprometido) : '—',
+          t.comprometido && t.entrado < t.comprometido ? 'val-riesgo' : '') +
+        celdaN(t.comprometido
+          ? formatPercent(t.entrado / t.comprometido) : '—') +
+        celdaN(t.planSemana ? formatQuantity(t.planSemana) : '—') +
+        '</tr>';
+
+      var avisos = [];
+      var sinCompromiso = lista.filter(function(x) {
+        return !x.comprometido && x.entrado > 0;
+      });
+
+      if (sinCompromiso.length) {
+        avisos.push('<b>' + sinCompromiso.length +
+          (sinCompromiso.length === 1 ? ' proveedor trajo' : ' proveedores trajeron') +
+          '</b> sin haber comprometido nada esa semana: ' +
+          esc(sinCompromiso.slice(0, 3).map(function(x) {
+            return shortProvider(x.proveedor);
+          }).join(', ')) +
+          (sinCompromiso.length > 3 ? '…' : '') + '.');
+      }
+
+      var noVino = lista.filter(function(x) {
+        return x.comprometido > 0 && x.entrado === 0;
+      });
+
+      if (noVino.length) {
+        avisos.push('<b>' + noVino.length +
+          (noVino.length === 1 ? ' prometió' : ' prometieron') +
+          ' y no despachó' + (noVino.length === 1 ? '' : 'aron') + '</b>: ' +
+          esc(noVino.slice(0, 3).map(function(x) {
+            return shortProvider(x.proveedor);
+          }).join(', ')) +
+          (noVino.length > 3 ? '…' : '') + '.');
+      }
+
+      nota.innerHTML = avisos.length ? ' ' + avisos.join(' ') : '';
     }
 
     /* --- Día a día hábil ---------------------------------------------
@@ -6944,6 +7291,7 @@
         if (!semanas[lunes]) {
           semanas[lunes] = {
             lunes: lunes, real: 0, est: 0, proyectado: 0,
+            comprometido: 0, camionesComprometidos: 0,
             plan: 0, habiles: 0, camiones: 0, cerrada: true, corre: false
           };
         }
@@ -6956,6 +7304,8 @@
         sem.est += d.est;
         sem.proyectado += d.proyectado;
         sem.camiones += d.camiones;
+        sem.comprometido += d.comprometido;
+        sem.camionesComprometidos += d.camionesComprometidos;
 
         if (!d.pasado) { sem.cerrada = false; }
       });
@@ -6967,19 +7317,26 @@
         sem.total = sem.entrado + sem.proyectado;
         sem.corre = !sem.cerrada && sem.entrado > 0;
         sem.cumplimiento = sem.plan > 0 ? sem.total / sem.plan : null;
+        // Contra el plan se mide el mes; contra el compromiso se mide
+        // al proveedor. Son dos preguntas y dos cifras.
+        sem.cumpleCompromiso = sem.comprometido > 0
+          ? sem.entrado / sem.comprometido
+          : null;
 
         return sem;
       });
 
-      var proyectadoEnUso = lista.reduce(function(t, x) {
-        return t + x.proyectado;
+      var prometido = lista.reduce(function(t, x) {
+        return t + x.comprometido;
       }, 0);
+      var llegado = lista.reduce(function(t, x) { return t + x.entrado; }, 0);
 
       setText('conteoSemanas',
         lista.length + (lista.length === 1 ? ' semana' : ' semanas') +
-        (proyectadoEnUso
-          ? ' · ' + formatCorto(proyectadoEnUso) + ' TS por llegar'
-          : ' · sin proyección por delante'));
+        (prometido
+          ? ' · ' + formatCorto(llegado) + '/' +
+            formatCorto(prometido) + ' TS'
+          : ' · sin compromiso'));
 
       if (nota) {
         var avisos = [];
@@ -7006,7 +7363,8 @@
       }
 
       var tope = Math.max(
-        Math.max.apply(null, lista.map(function(x) { return x.total; })),
+        Math.max.apply(null, lista.map(function(x) { return x.entrado; })),
+        Math.max.apply(null, lista.map(function(x) { return x.comprometido; })),
         Math.max.apply(null, lista.map(function(x) { return x.plan; })),
         1
       );
@@ -7017,7 +7375,11 @@
       var w = W - M.l - M.r;
       var h = H - M.t - M.b;
       var paso = w / lista.length;
-      var ancho = Math.max(10, Math.min(64, paso - 22));
+      // Dos barras por semana: lo prometido y lo que llegó. Anchas
+      // porque el rótulo va dentro de la columna: con barras finas las
+      // dos cifras de una misma semana se tocan.
+      var hueco = 6;
+      var ancho = Math.max(9, Math.min(46, (paso - 30 - hueco) / 2));
 
       var y = function(v) { return M.t + h - (v / tope) * h; };
       var partes = [ejeY(M, w, h, tope)];
@@ -7030,33 +7392,43 @@
       );
 
       var comoSemana = formatoSerie(tope);
-      var cifras = lista.map(function(x) { return comoSemana(x.total); });
-      var rotular = cabenRotulos(cifras, paso);
+      var cifras = lista.map(function(x) { return comoSemana(x.comprometido); });
+      var cifrasEnt = lista.map(function(x) { return comoSemana(x.entrado); });
+      // Caben el doble de rótulos: hay dos barras por semana.
+      var rotular = cabenRotulos(cifras.concat(cifrasEnt), paso / 2);
 
       lista.forEach(function(sem, i) {
         var cx = M.l + paso * i + paso / 2;
         var base = M.t + h;
+        // Izquierda lo prometido, derecha lo que llegó: se lee en el
+        // orden en que ocurre.
+        var xProm = cx - hueco / 2 - ancho;
+        var xEnt = cx + hueco / 2;
 
-        function bloque(alto, desde, relleno) {
+        function bloque(x, alto, desde, relleno) {
           if (alto <= 0) { return; }
 
-          partes.push('<rect class="barra-svg" data-i="' + i + '" x="' +
-            (cx - ancho / 2) + '" y="' + (desde - alto) + '" width="' +
-            ancho + '" height="' + Math.max(1, alto) + '" fill="' +
-            relleno + '" rx="2"/>');
+          partes.push('<rect class="barra-svg" data-i="' + i + '" x="' + x +
+            '" y="' + (desde - alto) + '" width="' + ancho + '" height="' +
+            Math.max(1, alto) + '" fill="' + relleno + '" rx="2"/>');
         }
 
         var hReal = (sem.real / tope) * h;
         var hEst = (sem.est / tope) * h;
-        var hProy = (sem.proyectado / tope) * h;
+        var hProm = (sem.comprometido / tope) * h;
 
-        bloque(hReal, base, 'var(--verde)');
-        bloque(hEst, base - hReal, 'url(#rayado)');
-        bloque(hProy, base - hReal - hEst, 'url(#rayadoProy)');
+        // Lo prometido por la hoja Proyección para esa semana. Se dibuja
+        // completo aunque la semana ya haya pasado: es la vara contra la
+        // que se mide al proveedor, y borrarla al llegar el día dejaba a
+        // la semana pasada sin nada con qué compararse.
+        bloque(xProm, hProm, base, 'url(#rayadoProy)');
+
+        bloque(xEnt, hReal, base, 'var(--verde)');
+        bloque(xEnt, hEst, base - hReal, 'url(#rayado)');
 
         if (sem.plan > 0) {
-          partes.push('<line x1="' + (cx - ancho / 2 - 6) + '" x2="' +
-            (cx + ancho / 2 + 6) + '" y1="' + y(sem.plan) + '" y2="' +
+          partes.push('<line x1="' + (xProm - 5) + '" x2="' +
+            (xEnt + ancho + 5) + '" y1="' + y(sem.plan) + '" y2="' +
             y(sem.plan) + '" stroke="var(--pizarra)" stroke-width="2.5" ' +
             'stroke-linecap="round"/>');
         }
@@ -7065,15 +7437,36 @@
         // travesaño del plan y se lee como si fuera la cifra del plan.
         // El color lo decide el bloque de arriba, que es el fondo que
         // le toca: verde es oscuro, los dos rayados son claros.
-        if (rotular && sem.total > 0) {
-          var yTope = y(sem.total);
-          var arribaClaro = sem.proyectado > 0 || sem.est > 0;
+        // Lo que llegó va dentro de su columna: encima queda pegado al
+        // travesaño del plan y se lee como si fuera la cifra del plan.
+        // El color lo decide el bloque de arriba: verde es oscuro, el
+        // rayado de madera es claro.
+        if (rotular && sem.entrado > 0) {
+          var yEnt = y(sem.entrado);
+          var cxE = xEnt + ancho / 2;
 
-          if (yTope + 24 < base) {
-            partes.push(rotulo(cx, yTope + 16, cifras[i],
-              arribaClaro ? '' : 'rotulo-dentro'));
+          if (yEnt + 24 < base) {
+            partes.push(rotulo(cxE, yEnt + 16, cifrasEnt[i],
+              sem.est === 0 ? 'rotulo-dentro' : ''));
           } else {
-            partes.push(rotulo(cx, yTope - 7, cifras[i], 'rotulo-verde'));
+            partes.push(rotulo(cxE, yEnt - 7, cifrasEnt[i], 'rotulo-verde'));
+          }
+        }
+
+        // La promesa va ARRIBA de su columna y no dentro: el rayado
+        // pizarra es medio claro y medio oscuro, y cualquier cifra
+        // encima queda a medias. Solo se mete dentro si arriba está el
+        // travesaño del plan y las dos cifras se pisarían.
+        if (rotular && sem.comprometido > 0) {
+          var yProm = y(sem.comprometido);
+          var cxP = xProm + ancho / 2;
+          var chocaPlan = sem.plan > 0 &&
+            Math.abs(yProm - y(sem.plan)) < 15;
+
+          if (!chocaPlan && yProm > M.t + 10) {
+            partes.push(rotulo(cxP, yProm - 7, cifras[i], 'rotulo-pizarra'));
+          } else if (yProm + 24 < base) {
+            partes.push(rotulo(cxP, yProm + 16, cifras[i], ''));
           }
         }
 
@@ -7111,18 +7504,30 @@
               etiqueta: 'Estimado (planilla)', valor: formatTs(sem.est) });
           }
 
-          if (sem.proyectado > 0) {
-            filas.push({ color: 'var(--pizarra)', etiqueta: 'Proyectado',
-              valor: formatTs(sem.proyectado) });
+          filas.push({ etiqueta: 'Entró en la semana',
+            valor: formatTs(sem.entrado) });
+
+          if (sem.comprometido > 0) {
+            filas.push({ color: 'var(--pizarra)',
+              etiqueta: 'Comprometido',
+              valor: formatTs(sem.comprometido) + ' · ' +
+                formatInteger(sem.camionesComprometidos) + ' camiones' });
+            filas.push({ etiqueta: 'Cumple el compromiso',
+              valor: formatPercent(sem.cumpleCompromiso),
+              clase: claseDesvio(sem.entrado - sem.comprometido) });
           }
 
-          filas.push({ etiqueta: 'Total de la semana',
-            valor: formatTs(sem.total) });
+          if (sem.proyectado > 0) {
+            filas.push({ etiqueta: 'De eso, por llegar',
+              valor: formatTs(sem.proyectado) });
+            filas.push({ etiqueta: 'Cerraría la semana en',
+              valor: formatTs(sem.total) });
+          }
 
           if (sem.plan > 0) {
             filas.push({ color: 'var(--pizarra)', etiqueta: 'Plan de la semana',
               valor: formatTs(sem.plan) });
-            filas.push({ etiqueta: 'Cumplimiento',
+            filas.push({ etiqueta: 'Cumple el plan',
               valor: formatPercent(sem.cumplimiento),
               clase: claseDesvio(sem.total - sem.plan) });
           }
@@ -8158,6 +8563,14 @@
     function montarMandos() {
       montarEncabezadosOrden();
       montarSeleccion();
+
+      // El selector de semana no pasa por los mandos de tabla: es una
+      // sola perilla y redibuja solo su panel.
+      document.getElementById('semanaProv')
+        .addEventListener('change', function(ev) {
+          SEM_PROV = ev.target.value;
+          dibujarSemanaProveedor();
+        });
 
       document.addEventListener('input', function(ev) {
         const entrada = ev.target.closest
