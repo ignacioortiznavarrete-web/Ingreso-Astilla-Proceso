@@ -641,6 +641,15 @@ function getDashboardData() {
       // Proveedores que SAP no conoce y que igual se complementan en
       // días que SAP sí tenía cargados.
       ajenos: supplement.ajenos || [],
+      // Días cargados a medias en SAP: el resto del día sí está, este
+      // proveedor no. Se completa con la planilla y se dice cuáles son.
+      rezagados: (supplement.rezagados || []).map(function(x) {
+        return {
+          proveedor: x.proveedor,
+          fecha: x.fecha,
+          fechaLabel: formatDateKey_(x.fecha)
+        };
+      }),
       huecos: supplement.huecos,
       huecosLabel: (supplement.huecos || []).map(function(fecha) {
         return formatDateKey_(fecha);
@@ -1263,22 +1272,33 @@ function readInformeRows_(
  * pasaba, el día quedaba en cero en el panel aunque la planilla
  * tuviera camiones esa fecha: un día de despacho desaparecía.
  *
- * Ahora la unidad es el día. Un día con TS en Ingresos manda entero y
- * su estimado se descarta; un día que en Ingresos suma cero se
- * completa con la planilla. Es día completo y no proveedor por
- * proveedor a propósito: dentro de una misma fecha, mezclar las dos
- * fuentes contaría dos veces los camiones que ya llegaron a SAP si la
+ * La base sigue siendo el día: un día con TS en Ingresos manda entero y
+ * su estimado se descarta; un día que en Ingresos suma cero se completa
+ * con la planilla. Es día completo y no proveedor por proveedor a
+ * propósito: dentro de una misma fecha, mezclar las dos fuentes
+ * contaría dos veces los camiones que ya llegaron a SAP si la
  * homologación del nombre falla.
  *
- * Con UNA excepción, y es segura: el proveedor que SAP no conoce en
- * toda la ventana. Si Ingresos no lo nombra ni una vez, no hay con qué
- * contarlo dos veces —SAP no tiene nada suyo, ningún día—, así que su
- * planilla se complementa aunque ese día SAP traiga a otros. Sin esto,
- * el que despacha y no está registrado en SAP desaparecía de todos los
- * días en que sí se cargó el resto.
+ * Pero un día puede venir cargado A MEDIAS, y ahí la regla del día
+ * completo borra despachos que existieron. Dos excepciones, las dos
+ * atadas a poder afirmar con certeza que SAP no tiene eso:
  *
- * Se corrige sola: el día que Ingresos empiece a nombrarlo, ese
- * proveedor deja de estar ausente y vuelve a mandar la regla del día.
+ *   ajeno      el proveedor que Ingresos no nombra ni una vez en toda
+ *              la ventana. No hay nada suyo en SAP, ningún día, así que
+ *              no hay con qué contarlo dos veces.
+ *   rezagado   el proveedor que SÍ está en SAP pero a quien le falta
+ *              ESTE día, y cuyo nombre cruzó SEGURO —exacto o escrito a
+ *              mano en la hoja Proveedores—. Es el caso de AITUE: el
+ *              único que entrega nitens, su día sin cargar mientras el
+ *              resto del día sí, y el nitens de esa fecha desaparecido.
+ *
+ * El "seguro" del rezagado no es un detalle. Con un cruce por parecido
+ * no se puede afirmar "SAP no tiene nada de este proveedor ese día",
+ * porque puede ser otro proveedor; ahí sí se contaría dos veces. Por
+ * eso el parecido no basta y hay que confirmarlo en Homologación.
+ *
+ * Las dos se corrigen solas: el día que Ingresos cargue lo que falta,
+ * la fila se descarta como cualquier otra.
  */
 function buildSupplementRows_(ingresosRows, informeRows) {
   const lastActualDate = ingresosRows.reduce(
@@ -1305,6 +1325,8 @@ function buildSupplementRows_(ingresosRows, informeRows) {
   const tsPorFecha = {};
   // Y los proveedores que Ingresos SÍ nombra, con TS, alguna vez.
   const tsDeProveedor = {};
+  // Y qué proveedor trae TS en qué día: la pregunta fina.
+  const tsProveedorFecha = {};
 
   ingresosRows.forEach(function(item) {
     const ts = Number(item.ts) || 0;
@@ -1314,23 +1336,53 @@ function buildSupplementRows_(ingresosRows, informeRows) {
     if (ts > 0) {
       const clave = normalizeKey_(item.proveedor);
 
-      if (clave) { tsDeProveedor[clave] = true; }
+      if (clave) {
+        tsDeProveedor[clave] = true;
+        tsProveedorFecha[clave + '||' + item.fecha] = true;
+      }
     }
   });
 
   let staleReports = 0;
   let huecosCubiertos = {};
   const ajenos = {};
+  const rezagados = {};
 
   const rows = informeRows.filter(function(item) {
+    const clave = normalizeKey_(item.proveedor);
+
     // El proveedor que Ingresos no nombra ni una vez en toda la
     // ventana. No hay nada suyo en SAP con qué contarlo dos veces, así
     // que su planilla entra aunque ese día SAP traiga a otros.
-    const clave = normalizeKey_(item.proveedor);
     const ajeno = !!clave && !tsDeProveedor[clave];
 
+    // Y el que SÍ está en SAP pero a quien le falta ESTE día.
+    //
+    // Es el caso de AITUE: entrega nitens, es el único que entrega
+    // nitens, y su día quedó sin cargar mientras el resto del día sí se
+    // cargó. Con la regla del día completo su planilla se descartaba
+    // entera y el nitens de esa fecha desaparecía, que es justamente lo
+    // que lo hace fácil de ver.
+    //
+    // Solo cuando el nombre cruzó SEGURO: exacto o escrito a mano en la
+    // hoja Proveedores. Con un cruce por parecido no se puede afirmar
+    // "SAP no tiene nada de este proveedor ese día", porque puede ser
+    // otro proveedor, y ahí sí se contaría dos veces.
+    //
+    // Se corrige sola: el día que Ingresos cargue ese proveedor en esa
+    // fecha, la fila se descarta como cualquier otra.
+    const seguro =
+      item.matchMethod === 'Coincidencia exacta' ||
+      item.matchMethod === 'Homologado a mano';
+
+    const rezagado =
+      !ajeno &&
+      seguro &&
+      !!clave &&
+      !tsProveedorFecha[clave + '||' + item.fecha];
+
     // Día ya cubierto por Ingresos: el estimado se descarta.
-    if (!ajeno && (tsPorFecha[item.fecha] || 0) > 0) {
+    if (!ajeno && !rezagado && (tsPorFecha[item.fecha] || 0) > 0) {
       staleReports++;
       return false;
     }
@@ -1341,6 +1393,10 @@ function buildSupplementRows_(ingresosRows, informeRows) {
 
     if (ajeno && (tsPorFecha[item.fecha] || 0) > 0) {
       ajenos[item.proveedor] = true;
+    }
+
+    if (rezagado && (tsPorFecha[item.fecha] || 0) > 0) {
+      rezagados[item.proveedor + '||' + item.fecha] = true;
     }
 
     // Un día anterior al último registro real que igual se completa:
@@ -1380,7 +1436,14 @@ function buildSupplementRows_(ingresosRows, informeRows) {
     // Proveedores que SAP no conoce y que entraron en un día que SAP
     // sí tenía cargado. Conviene decirlo: o falta registrarlos, o su
     // nombre no está homologado y son otro que SAP sí conoce.
-    ajenos: Object.keys(ajenos).sort()
+    ajenos: Object.keys(ajenos).sort(),
+    // Proveedor y día que SAP tiene cargado a medias: el resto del día
+    // sí está, lo suyo no. Son los que hay que ir a cargar.
+    rezagados: Object.keys(rezagados).sort().map(function(par) {
+      const partes = par.split('||');
+
+      return { proveedor: partes[0], fecha: partes[1] };
+    })
   };
 }
 

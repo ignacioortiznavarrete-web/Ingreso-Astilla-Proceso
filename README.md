@@ -32,25 +32,38 @@ La unidad es el día completo y no el proveedor: dentro de una misma
 fecha, mezclar las dos fuentes contaría dos veces los camiones que ya
 llegaron a SAP.
 
-### El proveedor que SAP no conoce
+### Cuando SAP carga el día a medias
 
-La regla del complemento es por **día completo**: un día con TS en
+La base del complemento es el **día completo**: un día con TS en
 Ingresos manda entero. Es así a propósito —mezclar las dos fuentes
 dentro de una misma fecha contaría dos veces los camiones que ya
 llegaron a SAP si la homologación del nombre falla—.
 
-Con **una** excepción, y es segura: el proveedor que Ingresos no nombra
-**ni una vez** en toda la ventana. Si SAP no tiene nada suyo, ningún
-día, no hay con qué contarlo dos veces, así que su planilla se
-complementa aunque ese día SAP traiga a otros. Sin esto, el que
-despacha y no está registrado en SAP desaparecía de todos los días en
-que sí se cargó el resto.
+Pero un día puede venir cargado **a medias**, y ahí esa regla borra
+despachos que existieron. Dos excepciones, las dos atadas a poder
+afirmar **con certeza** que SAP no tiene eso:
 
-Se corrige sola: el día que Ingresos lo nombre una vez, ese proveedor
-deja de estar ausente y vuelve a mandar la regla del día. La nota de
-Suministro dice quiénes entraron así, porque o falta registrarlos en
-SAP, o su nombre no está homologado y en realidad son otro que SAP sí
-conoce.
+| | Quién | Por qué es seguro |
+|---|---|---|
+| **ajeno** | El proveedor que Ingresos no nombra ni una vez en toda la ventana | No hay nada suyo en SAP, ningún día: no hay con qué contarlo dos veces |
+| **rezagado** | El que **sí** está en SAP pero a quien le falta **este** día | Su nombre cruzó exacto o escrito a mano, así que «SAP no tiene nada suyo ese día» es una afirmación confiable |
+
+El rezagado es el caso de **AITUE**: entrega nitens, es el único que
+entrega nitens, y su día quedó sin cargar mientras el resto del día sí
+se cargó. La regla del día completo descartaba su planilla entera y el
+nitens de esa fecha desaparecía —que es justamente lo que lo hace fácil
+de ver—.
+
+**El «seguro» no es un detalle.** Con un cruce por *parecido* no se
+puede afirmar que SAP no tiene nada de ese proveedor ese día, porque
+puede ser otro proveedor; ahí sí se contaría dos veces. Por eso el
+parecido no basta y hay que confirmarlo en Homologación —esa
+confirmación es lo que habilita el complemento—.
+
+Las dos se corrigen solas: el día que Ingresos cargue lo que falta, la
+fila se descarta como cualquier otra. Y las dos se dicen en la nota de
+Suministro, con nombre y fecha, porque son exactamente lo que hay que ir
+a cargar.
 
 ### Factor por material
 

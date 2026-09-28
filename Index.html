@@ -4233,6 +4233,34 @@
           'son otro escrito distinto.';
       }
 
+      // Días que SAP tiene cargados a medias: el resto del día sí está,
+      // este proveedor no. Su planilla se completa igual, y se nombran
+      // porque son los que hay que ir a cargar.
+      var rezagados = source.rezagados || [];
+
+      if (rezagados.length) {
+        var quienes = {};
+
+        rezagados.forEach(function(x) { quienes[x.proveedor] = true; });
+
+        var nombres = Object.keys(quienes);
+
+        nota += ' <b>' + rezagados.length +
+          (rezagados.length === 1
+            ? ' día quedó cargado a medias en Ingresos</b> y se completó'
+            : ' días quedaron cargados a medias en Ingresos</b> y se completaron') +
+          ' con la planilla: ' +
+          esc(rezagados.slice(0, 4).map(function(x) {
+            return shortProvider(x.proveedor) + ' el ' + x.fechaLabel;
+          }).join(', ')) +
+          (rezagados.length > 4 ? '…' : '') +
+          '. El resto de ' +
+          (rezagados.length === 1 ? 'ese día' : 'esos días') +
+          ' sí está en Ingresos; lo de ' +
+          (nombres.length === 1 ? 'ese proveedor' : 'esos proveedores') +
+          ', no.';
+      }
+
       // Camiones escritos en columnas de la hoja Proyección que este
       // mes no tienen día hábil. Se descartan, así que se dicen.
       var pr = DATA.proyeccion || {};
