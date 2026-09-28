@@ -32,6 +32,26 @@ La unidad es el día completo y no el proveedor: dentro de una misma
 fecha, mezclar las dos fuentes contaría dos veces los camiones que ya
 llegaron a SAP.
 
+### El proveedor que SAP no conoce
+
+La regla del complemento es por **día completo**: un día con TS en
+Ingresos manda entero. Es así a propósito —mezclar las dos fuentes
+dentro de una misma fecha contaría dos veces los camiones que ya
+llegaron a SAP si la homologación del nombre falla—.
+
+Con **una** excepción, y es segura: el proveedor que Ingresos no nombra
+**ni una vez** en toda la ventana. Si SAP no tiene nada suyo, ningún
+día, no hay con qué contarlo dos veces, así que su planilla se
+complementa aunque ese día SAP traiga a otros. Sin esto, el que
+despacha y no está registrado en SAP desaparecía de todos los días en
+que sí se cargó el resto.
+
+Se corrige sola: el día que Ingresos lo nombre una vez, ese proveedor
+deja de estar ausente y vuelve a mandar la regla del día. La nota de
+Suministro dice quiénes entraron así, porque o falta registrarlos en
+SAP, o su nombre no está homologado y en realidad son otro que SAP sí
+conoce.
+
 ### Factor por material
 
 | Código SAP | Subproducto                | TS por camión |
@@ -449,10 +469,36 @@ reservador lo escribe de muchas: `PROMASA S.A.`, `Promasa`,
 deja pasar con el nombre que traía, y ahí aparece un proveedor nuevo
 que en realidad ya existía. **Eso es la duplicidad.**
 
-Entran **dos** hojas, porque las escribe la misma mano y fallan igual:
-`InformeAstilla` (la planilla del reservador) y `Proyeccion`. Cada fila
-dice de cuál viene, y una sola asignación arregla las dos: el cruce es
-el mismo.
+Entran las **tres** hojas que escriben nombres de proveedor:
+`InformeAstilla` (la planilla del reservador), `Proyeccion` y `Plan`.
+Cada fila dice de cuál viene, y una sola asignación las arregla todas:
+el cruce es el mismo para las tres.
+
+### El ancla es SAP
+
+La pestaña nació mirando lo que falla: los nombres sueltos que no
+cruzan. Eso sirve para arreglar, pero no para saber si el cruce está
+sano —los que están bien no salían en ninguna parte, así que «no hay
+nada pendiente» y «no hay nada cargado» se veían igual—.
+
+La primera tabla da la vuelta la pregunta: **una fila por proveedor de
+SAP**, y en cada columna cómo lo escribe esa hoja.
+
+| Proveedor SAP | En la planilla | En Proyección | En el Plan |
+|---|---|---|---|
+| PROMASA SPA. | PROMASA S.A. | PROMASA SPA. | Promasa |
+| BIOMASAS SUR SPA | BIOMASAS SUR SPA | BIOMASAS SUR SPA | *no aparece* |
+
+Un nombre igual al de SAP va en gris; uno **distinto** va recuadrado,
+porque es una equivalencia que alguien tuvo que resolver y que se rompe
+si alguien la borra. Debajo del proveedor se dice en qué hoja falta.
+
+El selector filtra: los que están en las tres, a los que les falta una,
+los que tienen algún nombre distinto, y los que **ninguna hoja nombra**
+—esos están en SAP y nadie los escribe—.
+
+Un proveedor que no está en SAP **no tiene fila acá**: no hay a qué
+anclarlo. Esos van a «Sin par en SAP», que es donde se asignan.
 
 La vista separa dos casos, que no son lo mismo:
 

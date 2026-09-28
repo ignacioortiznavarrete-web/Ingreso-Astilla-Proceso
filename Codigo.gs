@@ -638,6 +638,9 @@ function getDashboardData() {
         ? formatDateKey_(supplement.lastActualDate)
         : 'Sin datos reales',
       supplementStart: supplement.supplementStart,
+      // Proveedores que SAP no conoce y que igual se complementan en
+      // días que SAP sí tenía cargados.
+      ajenos: supplement.ajenos || [],
       huecos: supplement.huecos,
       huecosLabel: (supplement.huecos || []).map(function(fecha) {
         return formatDateKey_(fecha);
@@ -671,7 +674,18 @@ function getDashboardData() {
           rows,
           ingresos.proveedores,
           homologacion,
-          proyeccion
+          proyeccion,
+          plan.details
+        ),
+        // Cada proveedor de SAP con sus tres nombres. Es la vista al
+        // derecho: no «qué no cruza» sino «cómo escribe cada hoja a
+        // cada proveedor», los que están bien incluidos.
+        mapa: buildHomologacionMapa_(
+          ingresos.proveedores,
+          rows,
+          proyeccion,
+          plan.details,
+          homologacion
         ),
         existe: !homologacion.missingSheet,
         alias: homologacion.alias,
@@ -1251,9 +1265,20 @@ function readInformeRows_(
  *
  * Ahora la unidad es el día. Un día con TS en Ingresos manda entero y
  * su estimado se descarta; un día que en Ingresos suma cero se
- * completa con la planilla. Sigue siendo día completo y no proveedor
- * por proveedor: dentro de una misma fecha, mezclar las dos fuentes
- * contaría dos veces los camiones que ya llegaron a SAP.
+ * completa con la planilla. Es día completo y no proveedor por
+ * proveedor a propósito: dentro de una misma fecha, mezclar las dos
+ * fuentes contaría dos veces los camiones que ya llegaron a SAP si la
+ * homologación del nombre falla.
+ *
+ * Con UNA excepción, y es segura: el proveedor que SAP no conoce en
+ * toda la ventana. Si Ingresos no lo nombra ni una vez, no hay con qué
+ * contarlo dos veces —SAP no tiene nada suyo, ningún día—, así que su
+ * planilla se complementa aunque ese día SAP traiga a otros. Sin esto,
+ * el que despacha y no está registrado en SAP desaparecía de todos los
+ * días en que sí se cargó el resto.
+ *
+ * Se corrige sola: el día que Ingresos empiece a nombrarlo, ese
+ * proveedor deja de estar ausente y vuelve a mandar la regla del día.
  */
 function buildSupplementRows_(ingresosRows, informeRows) {
   const lastActualDate = ingresosRows.reduce(
@@ -1278,24 +1303,44 @@ function buildSupplementRows_(ingresosRows, informeRows) {
   // nada: para el panel es indistinguible de un día sin cargar, que
   // es justo el caso que hay que completar.
   const tsPorFecha = {};
+  // Y los proveedores que Ingresos SÍ nombra, con TS, alguna vez.
+  const tsDeProveedor = {};
 
   ingresosRows.forEach(function(item) {
-    tsPorFecha[item.fecha] =
-      (tsPorFecha[item.fecha] || 0) + (Number(item.ts) || 0);
+    const ts = Number(item.ts) || 0;
+
+    tsPorFecha[item.fecha] = (tsPorFecha[item.fecha] || 0) + ts;
+
+    if (ts > 0) {
+      const clave = normalizeKey_(item.proveedor);
+
+      if (clave) { tsDeProveedor[clave] = true; }
+    }
   });
 
   let staleReports = 0;
   let huecosCubiertos = {};
+  const ajenos = {};
 
   const rows = informeRows.filter(function(item) {
+    // El proveedor que Ingresos no nombra ni una vez en toda la
+    // ventana. No hay nada suyo en SAP con qué contarlo dos veces, así
+    // que su planilla entra aunque ese día SAP traiga a otros.
+    const clave = normalizeKey_(item.proveedor);
+    const ajeno = !!clave && !tsDeProveedor[clave];
+
     // Día ya cubierto por Ingresos: el estimado se descarta.
-    if ((tsPorFecha[item.fecha] || 0) > 0) {
+    if (!ajeno && (tsPorFecha[item.fecha] || 0) > 0) {
       staleReports++;
       return false;
     }
 
     if (latestReportDate && item.fecha > latestReportDate) {
       return false;
+    }
+
+    if (ajeno && (tsPorFecha[item.fecha] || 0) > 0) {
+      ajenos[item.proveedor] = true;
     }
 
     // Un día anterior al último registro real que igual se completa:
@@ -1331,7 +1376,11 @@ function buildSupplementRows_(ingresosRows, informeRows) {
     // La primera fecha realmente complementada, que con huecos puede
     // ser anterior al último registro real.
     supplementStart: firstSupplementDate,
-    huecos: Object.keys(huecosCubiertos).sort()
+    huecos: Object.keys(huecosCubiertos).sort(),
+    // Proveedores que SAP no conoce y que entraron en un día que SAP
+    // sí tenía cargado. Conviene decirlo: o falta registrarlos, o su
+    // nombre no está homologado y son otro que SAP sí conoce.
+    ajenos: Object.keys(ajenos).sort()
   };
 }
 
@@ -2195,7 +2244,8 @@ function buildHomologacionPendiente_(
   rows,
   proveedoresSap,
   homologacion,
-  proyeccion
+  proyeccion,
+  planDetails
 ) {
   const grupos = {};
 
@@ -2211,6 +2261,7 @@ function buildHomologacionPendiente_(
         camiones: 0,
         tsProy: 0,
         camionesProy: 0,
+        planMes: 0,
         fechas: {},
         subproductos: {},
         origenes: {}
@@ -2272,6 +2323,31 @@ function buildHomologacionPendiente_(
     if (item.subproducto) { g.subproductos[item.subproducto] = true; }
   });
 
+  // Y el Plan, que es la tercera mano que escribe estos nombres. Un
+  // proveedor del Plan que no llega a SAP no se valoriza: su volumen
+  // queda sin precio y su brecha no se puede comparar con nada.
+  (planDetails || []).forEach(function(item) {
+    const crudo = text_(item.proveedorPlan);
+
+    if (!crudo) { return; }
+
+    const cruce = resolveProveedor_(crudo, proveedoresSap, homologacion);
+
+    if (
+      cruce.method !== 'Solo en planilla' &&
+      cruce.method !== 'Coincidencia aproximada'
+    ) {
+      return;
+    }
+
+    const g = grupo(crudo, cruce.method, text_(cruce.proveedor));
+
+    g.planMes += Number(item.plan) || 0;
+    g.origenes.Plan = true;
+
+    if (item.subproducto) { g.subproductos[item.subproducto] = true; }
+  });
+
   const lista = Object.keys(grupos).map(function(clave) {
     const g = grupos[clave];
     const fechas = Object.keys(g.fechas).sort();
@@ -2290,6 +2366,8 @@ function buildHomologacionPendiente_(
       // sumarlas en una sola cifra diría algo que no es.
       tsProy: round_(g.tsProy, 2),
       camionesProy: g.camionesProy,
+      // Lo que el Plan le tiene comprometido al mes con ese nombre.
+      planMes: round_(g.planMes, 2),
       origen: Object.keys(g.origenes).sort().join(' y ') || 'Planilla',
       dias: fechas.length,
       primera: fechas[0] || '',
@@ -2305,7 +2383,8 @@ function buildHomologacionPendiente_(
   lista.sort(function(a, b) {
     if (a.sinPar !== b.sinPar) { return a.sinPar ? -1 : 1; }
 
-    return (b.ts + b.tsProy) - (a.ts + a.tsProy);
+    return (b.ts + b.tsProy + b.planMes) -
+      (a.ts + a.tsProy + a.planMes);
   });
 
   return {
@@ -2326,6 +2405,173 @@ function buildHomologacionPendiente_(
     proveedoresSap: (proveedoresSap || []).slice().sort(),
     conflictos: homologacion.conflictos || [],
     huerfanos: homologacion.pendientes || []
+  };
+}
+
+/**
+ * Un proveedor de SAP y sus tres nombres.
+ *
+ * El panel cruza tres hojas escritas por manos distintas —la planilla
+ * del reservador, Proyeccion y Plan— contra una sola lista: la de SAP.
+ * Cada hoja escribe el mismo proveedor a su manera, y hasta ahora eso
+ * solo se veía cuando FALLABA: la pestaña mostraba los nombres sueltos
+ * y nada más.
+ *
+ * Esto da la vuelta la pregunta. En vez de «qué nombres no cruzan»,
+ * arma «cada proveedor de SAP, y cómo lo escribe cada hoja». Los que
+ * están bien también salen: para saber que un proveedor está completo
+ * hay que poder verlo completo, con sus tres casillas llenas.
+ *
+ * El ancla es SIEMPRE el nombre de SAP. Un proveedor que no está en
+ * SAP no tiene fila acá —no hay a qué anclarlo—: esos van a la lista
+ * de sin par, que es donde se asignan.
+ */
+function buildHomologacionMapa_(
+  proveedoresSap,
+  rows,
+  proyeccion,
+  planDetails,
+  homologacion
+) {
+  const porSap = {};
+
+  function fila(sap) {
+    const clave = normalizeKey_(sap);
+
+    if (!porSap[clave]) {
+      porSap[clave] = {
+        sap: sap,
+        planilla: {},
+        proyeccion: {},
+        plan: {},
+        ingresos: false,
+        ts: 0,
+        tsProy: 0,
+        planMes: 0
+      };
+    }
+
+    return porSap[clave];
+  }
+
+  // La lista de SAP manda: todas sus filas existen aunque ninguna hoja
+  // las nombre. Un proveedor de SAP sin nada escrito en ninguna parte
+  // también es una respuesta.
+  (proveedoresSap || []).forEach(function(sap) { fila(sap); });
+
+  const conocidos = {};
+
+  (proveedoresSap || []).forEach(function(sap) {
+    conocidos[normalizeKey_(sap)] = true;
+  });
+
+  // 1) Lo que entró, por las dos fuentes.
+  (rows || []).forEach(function(row) {
+    const clave = normalizeKey_(row.proveedor);
+
+    if (!clave || !conocidos[clave]) { return; }
+
+    const f = fila(row.proveedor);
+
+    f.ts += Number(row.ts) || 0;
+
+    if (row.source === 'PLANILLA') {
+      const crudo = text_(row.proveedorRaw);
+
+      if (crudo) { f.planilla[crudo] = true; }
+    } else {
+      f.ingresos = true;
+    }
+  });
+
+  // 2) Lo comprometido.
+  ((proyeccion || {}).porProveedor || []).forEach(function(item) {
+    const clave = normalizeKey_(item.proveedor);
+
+    if (!clave || !conocidos[clave]) { return; }
+
+    const f = fila(item.proveedor);
+    const crudo = text_(item.proveedorRaw);
+
+    if (crudo) { f.proyeccion[crudo] = true; }
+
+    f.tsProy += Number(item.ts) || 0;
+  });
+
+  // 3) El Plan. Su nombre cruza por la hoja Proveedores igual que los
+  // otros dos; si no está escrito ahí, se prueba el parecido, que es
+  // lo mismo que hace el cruce de precio.
+  (planDetails || []).forEach(function(item) {
+    const crudo = text_(item.proveedorPlan);
+
+    if (!crudo) { return; }
+
+    const cruce = resolveProveedor_(crudo, proveedoresSap, homologacion);
+    const clave = normalizeKey_(cruce.proveedor);
+
+    if (!clave || !conocidos[clave]) { return; }
+
+    const f = fila(cruce.proveedor);
+
+    f.plan[crudo] = true;
+    f.planMes += Number(item.plan) || 0;
+  });
+
+  const lista = Object.keys(porSap).map(function(clave) {
+    const f = porSap[clave];
+    const planilla = Object.keys(f.planilla).sort();
+    const proy = Object.keys(f.proyeccion).sort();
+    const plan = Object.keys(f.plan).sort();
+
+    // Cuántas de las tres hojas lo nombran. Es la cifra que dice de un
+    // vistazo si el proveedor está completo.
+    const hojas =
+      (planilla.length ? 1 : 0) +
+      (proy.length ? 1 : 0) +
+      (plan.length ? 1 : 0);
+
+    // Un nombre distinto del de SAP escrito en una hoja es una
+    // equivalencia que alguien tuvo que resolver. Saber cuántas hay
+    // dice qué tan lejos está esa hoja de escribir como SAP.
+    const distintos = planilla.concat(proy).concat(plan)
+      .filter(function(nombre) {
+        return normalizeKey_(nombre) !== clave;
+      });
+
+    return {
+      sap: f.sap,
+      planilla: planilla,
+      proyeccion: proy,
+      plan: plan,
+      ingresos: f.ingresos,
+      hojas: hojas,
+      alias: distintos.filter(function(n, i, l) {
+        return l.indexOf(n) === i;
+      }),
+      ts: round_(f.ts, 2),
+      tsProy: round_(f.tsProy, 2),
+      planMes: round_(f.planMes, 2),
+      // Falta en estas hojas. Vacío quiere decir que está en las tres.
+      faltaEn: [
+        planilla.length ? '' : 'Planilla',
+        proy.length ? '' : 'Proyección',
+        plan.length ? '' : 'Plan'
+      ].filter(function(x) { return x; })
+    };
+  });
+
+  // Primero el que mueve más —entre entregado, comprometido y plan—:
+  // un proveedor sin plan que despacha 3.000 TS importa más que uno
+  // que no aparece en ninguna parte.
+  lista.sort(function(a, b) {
+    return (b.ts + b.tsProy + b.planMes) - (a.ts + a.tsProy + a.planMes);
+  });
+
+  return {
+    lista: lista,
+    completos: lista.filter(function(x) { return x.hojas === 3; }).length,
+    // Los que ninguna hoja nombra: están en SAP y nadie los escribe.
+    huerfanos: lista.filter(function(x) { return x.hojas === 0; }).length
   };
 }
 

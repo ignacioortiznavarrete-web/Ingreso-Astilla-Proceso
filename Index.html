@@ -2236,6 +2236,19 @@
       border-top: 1px dashed var(--rule);
     }
 
+    /* Cómo escribe cada hoja a un proveedor de SAP. El que lo escribe
+       igual pasa desapercibido a propósito: lo que hay que ver de un
+       vistazo son los DISTINTOS, que son las equivalencias que alguien
+       tuvo que resolver y las que se rompen si alguien las borra. */
+    .homo-igual { color: var(--ink-3); }
+
+    .homo-otro {
+      padding: 1px 6px;
+      border: 1px solid var(--rule);
+      border-radius: 4px;
+      background: var(--surface);
+    }
+
     .sel-pie {
       display: flex; align-items: center; gap: var(--s3);
       flex-wrap: wrap;
@@ -3537,6 +3550,51 @@
         <article class="panel">
           <div class="panel-cab">
             <div>
+              <h2>Un proveedor de SAP, sus tres nombres</h2>
+              <p class="panel-nota">
+                La vista al derecho: en vez de «qué nombres no cruzan»,
+                cada proveedor de SAP y cómo lo escribe cada hoja. Los
+                que están bien también salen, porque para saber que un
+                proveedor está completo hay que poder verlo completo.
+                El ancla es siempre el nombre de SAP.
+                <span id="homoMapaNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="conteoMapa">—</div>
+          </div>
+
+          <div class="mandos">
+            <select id="homoMapaFiltro" aria-label="Filtrar proveedores">
+              <option value="">Todos los de SAP</option>
+              <option value="incompletos">A los que les falta una hoja</option>
+              <option value="completos">En las tres hojas</option>
+              <option value="alias">Con algún nombre distinto</option>
+              <option value="huerfanos">Que ninguna hoja nombra</option>
+            </select>
+            <span class="mandos-cuenta" id="homoMapaCuenta"
+                  aria-live="polite"></span>
+          </div>
+
+          <div class="tabla-marco tabla-fija">
+            <table data-tabla="homoMapa">
+              <thead><tr>
+                <th data-orden="sap">Proveedor SAP</th>
+                <th data-orden="planilla">En la planilla</th>
+                <th data-orden="proyeccion">En Proyección</th>
+                <th data-orden="plan">En el Plan</th>
+                <th class="number" data-orden="ts">Entró</th>
+                <th class="number" data-orden="tsProy">Comprometido</th>
+                <th class="number" data-orden="planMes">Plan mes</th>
+              </tr></thead>
+              <tbody id="homoMapaBody"></tbody>
+              <tfoot id="homoMapaFoot"></tfoot>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
               <h2>Sin par en SAP</h2>
               <p class="panel-nota">
                 No cruzaron con nada y entraron con su propio nombre:
@@ -4123,6 +4181,24 @@
           esc(enCero.slice(0, 6).map(formatDateKey).join(', ')) +
           (enCero.length > 6 ? '…' : '') +
           '. No faltan: entraron en cero.';
+      }
+
+      // Proveedores que SAP no conoce en toda la ventana y que igual se
+      // complementan, aun en días que SAP sí tenía cargados. Es seguro
+      // —SAP no tiene nada suyo con qué contarlos dos veces— pero hay
+      // que decirlo: o falta registrarlos en SAP, o su nombre no está
+      // homologado y en realidad son otro que SAP sí conoce.
+      var ajenos = source.ajenos || [];
+
+      if (ajenos.length) {
+        nota += ' <b>' + ajenos.length +
+          (ajenos.length === 1
+            ? ' proveedor no está en Ingresos</b> y se complementa igual: '
+            : ' proveedores no están en Ingresos</b> y se complementan igual: ') +
+          esc(ajenos.slice(0, 4).map(shortProvider).join(', ')) +
+          (ajenos.length > 4 ? '…' : '') +
+          '. Revísalos en <b>Homologación</b>: o falta registrarlos, o ' +
+          'son otro escrito distinto.';
       }
 
       // Camiones escritos en columnas de la hoja Proyección que este
@@ -8590,6 +8666,12 @@
           dibujarSemanaProveedor();
         });
 
+      document.getElementById('homoMapaFiltro')
+        .addEventListener('change', function(ev) {
+          HOMO_MAPA_FILTRO = ev.target.value;
+          dibujarHomoMapa();
+        });
+
       document.addEventListener('input', function(ev) {
         const entrada = ev.target.closest
           ? ev.target.closest('[data-buscar]')
@@ -11926,6 +12008,139 @@
 
     var HOMO_OCUPADO = false;
 
+    /* --- Un proveedor de SAP, sus tres nombres ---------------------
+
+       La pestaña nació mirando lo que falla: los nombres sueltos que
+       no cruzan. Eso sirve para arreglar, pero no para saber si el
+       cruce está sano —los que están bien no salían en ninguna parte,
+       así que «no hay nada pendiente» y «no hay nada cargado» se veían
+       igual—.
+
+       Esta tabla da la vuelta la pregunta y ancla en SAP: una fila por
+       proveedor de SAP, y en cada columna cómo lo escribe esa hoja.
+       Una celda vacía es una hoja que no lo nombra; un nombre distinto
+       del de SAP va marcado, porque es una equivalencia que alguien
+       tuvo que resolver y que conviene ver. */
+
+    var HOMO_MAPA_FILTRO = '';
+
+    function homoMapa() {
+      return (((DATA.source || {}).homologacion || {}).mapa) ||
+        { lista: [], completos: 0, huerfanos: 0 };
+    }
+
+    /** Las celdas de una hoja: los nombres, marcando los que difieren. */
+    function celdaNombres(nombres, sap) {
+      if (!nombres.length) {
+        return '<td><span class="sello-fuente es-flojo">no aparece</span></td>';
+      }
+
+      return '<td>' + nombres.map(function(nombre) {
+        var igual = normalizaNombre(nombre) === normalizaNombre(sap);
+
+        return igual
+          ? '<span class="homo-igual">' + esc(shortProvider(nombre)) + '</span>'
+          : '<span class="homo-otro">' + esc(shortProvider(nombre)) + '</span>';
+      }).join(' · ') + '</td>';
+    }
+
+    /** Mismo criterio que el servidor para decir "es el mismo nombre". */
+    function normalizaNombre(valor) {
+      return String(valor || '')
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .trim();
+    }
+
+    function dibujarHomoMapa() {
+      var mapa = homoMapa();
+      var cuerpo = document.getElementById('homoMapaBody');
+      var pie = document.getElementById('homoMapaFoot');
+      var nota = document.getElementById('homoMapaNota');
+
+      nota.innerHTML = '';
+
+      var todos = mapa.lista || [];
+
+      var lista = todos.filter(function(x) {
+        if (HOMO_MAPA_FILTRO === 'completos') { return x.hojas === 3; }
+        if (HOMO_MAPA_FILTRO === 'incompletos') {
+          return x.hojas > 0 && x.hojas < 3;
+        }
+        if (HOMO_MAPA_FILTRO === 'alias') { return x.alias.length > 0; }
+        if (HOMO_MAPA_FILTRO === 'huerfanos') { return x.hojas === 0; }
+        return true;
+      });
+
+      setText('conteoMapa', todos.length
+        ? mapa.completos + ' de ' + todos.length + ' en las tres hojas'
+        : 'sin proveedores en SAP');
+
+      setText('homoMapaCuenta', lista.length === todos.length
+        ? ''
+        : lista.length + ' de ' + todos.length);
+
+      if (!lista.length) {
+        cuerpo.innerHTML = '<tr class="fila-vacia"><td colspan="7">' +
+          (todos.length
+            ? 'Ningún proveedor cumple ese filtro.'
+            : 'Todavía no hay proveedores leídos de Ingresos.') +
+          '</td></tr>';
+        pie.innerHTML = '';
+        return;
+      }
+
+      cuerpo.innerHTML = lista.map(function(x) {
+        return '<tr>' +
+          '<td><strong>' + esc(shortProvider(x.sap)) + '</strong>' +
+            (x.hojas === 3
+              ? ''
+              : '<div class="homo-hoy">falta en ' +
+                esc(x.faltaEn.join(', ')) + '</div>') +
+            '</td>' +
+          celdaNombres(x.planilla, x.sap) +
+          celdaNombres(x.proyeccion, x.sap) +
+          celdaNombres(x.plan, x.sap) +
+          celdaN(x.ts ? formatQuantity(x.ts) : '—') +
+          celdaN(x.tsProy ? formatQuantity(x.tsProy) : '—') +
+          celdaN(x.planMes ? formatQuantity(x.planMes) : '—') +
+          '</tr>';
+      }).join('');
+
+      var t = lista.reduce(function(s, x) {
+        s.ts += x.ts; s.tsProy += x.tsProy; s.planMes += x.planMes;
+        return s;
+      }, { ts: 0, tsProy: 0, planMes: 0 });
+
+      pie.innerHTML = '<tr><td>TOTAL</td><td></td><td></td><td></td>' +
+        celdaN(formatQuantity(t.ts)) +
+        celdaN(formatQuantity(t.tsProy)) +
+        celdaN(formatQuantity(t.planMes)) +
+        '</tr>';
+
+      var avisos = [];
+      var conAlias = todos.filter(function(x) { return x.alias.length; });
+
+      if (conAlias.length) {
+        avisos.push('<b>' + conAlias.length + '</b> ' +
+          (conAlias.length === 1
+            ? 'proveedor se escribe distinto'
+            : 'proveedores se escriben distinto') +
+          ' en alguna hoja: ya cruzan, y esta tabla muestra con qué.');
+      }
+
+      if (mapa.huerfanos) {
+        avisos.push('<b>' + mapa.huerfanos + '</b> ' +
+          (mapa.huerfanos === 1
+            ? 'está en SAP y ninguna hoja lo nombra'
+            : 'están en SAP y ninguna hoja los nombra') + '.');
+      }
+
+      nota.innerHTML = avisos.length ? ' ' + avisos.join(' ') : '';
+    }
+
     function homoDatos() {
       return ((DATA.source || {}).homologacion || {}).revision || {
         lista: [], sinPar: 0, porParecido: 0, tsSinPar: 0,
@@ -11939,6 +12154,7 @@
 
       homoCifras(r);
       homoAvisos(r);
+      dibujarHomoMapa();
       homoTabla('homoSinPar', 'homoConteoSinPar',
         r.lista.filter(function(x) { return x.sinPar; }), true, r);
       homoTabla('homoParecido', 'homoConteoParecido',
