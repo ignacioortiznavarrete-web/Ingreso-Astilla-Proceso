@@ -351,6 +351,16 @@ const SUBPRODUCTOS_OBJETIVO = Object.freeze([
   'ASTILLA PINO VERDE'
 ]);
 
+/**
+ * El día que el reservador reportó y vino en cero.
+ *
+ * La planilla admite esa forma: la tabla llega con la fecha, un cero y
+ * la fila Total, sin una sola línea de detalle. No es un error —es un
+ * día sin despacho—, y tampoco es lo mismo que un día que nadie
+ * reportó: uno dice «no entró nada» y el otro «no sabemos».
+ */
+const ESTADO_SIN_DESPACHO = 'SIN DESPACHO';
+
 const INFORME_HEADERS = Object.freeze([
   'Fecha Informe',
   'Fecha ISO',
@@ -391,6 +401,10 @@ function onOpen() {
     .addItem(
       'Probar último correo (sin escribir)',
       'probarUltimoCorreo'
+    )
+    .addItem(
+      '¿Por qué falta un día? (revisar correos)',
+      'diagnosticarCorreos'
     )
     .addItem(
       'Diagnosticar cruce Ingresos vs planilla',
@@ -613,6 +627,9 @@ function getDashboardData() {
       supplementCamiones: supplement.camiones,
       reports: informe.reports,
       errors: informe.errors,
+      // Días que el reservador reportó en cero. Sin esto, un día sin
+      // despacho y un día que nadie cargó se ven igual en el panel.
+      sinDespacho: informe.sinDespacho || [],
       historyStart: historyStart,
       historyStartLabel: formatDateKey_(historyStart),
       historyMonths: CONFIG.HISTORY_MONTHS,
@@ -1028,6 +1045,7 @@ function readInformeRows_(
       rows: [],
       reports: 0,
       errors: 0,
+      sinDespacho: [],
       missingSheet: !sheet
     };
   }
@@ -1061,6 +1079,7 @@ function readInformeRows_(
   }
 
   const byDate = {};
+  const sinDespacho = {};
   let factoresViejos = 0;
   let errors = 0;
 
@@ -1071,8 +1090,27 @@ function readInformeRows_(
   ) {
     const row = values[rowIndex];
     const displayRow = displayed[rowIndex] || [];
+    const estado = text_(row[map['estado']]);
 
-    if (text_(row[map['estado']]) !== 'OK') {
+    // Un día reportado en cero no es un error: es un día sin despacho.
+    // No entra a las filas —no tiene proveedor ni TS que sumar— pero sí
+    // se anota, porque «no entró nada» y «nadie reportó» se ven igual
+    // en el panel y no son lo mismo.
+    if (estado === ESTADO_SIN_DESPACHO) {
+      const clave =
+        parseDateText_(displayRow[map['fecha iso']]) ||
+        toDateKey_(
+          row[map['fecha informe']],
+          displayRow[map['fecha informe']],
+          timezone
+        );
+
+      if (clave) { sinDespacho[clave] = true; }
+
+      continue;
+    }
+
+    if (estado !== 'OK') {
       errors++;
       continue;
     }
@@ -1191,6 +1229,8 @@ function readInformeRows_(
     reports: Object.keys(byDate).length,
     errors: errors,
     factoresViejos: factoresViejos,
+    // Días que el reservador reportó y vinieron en cero.
+    sinDespacho: Object.keys(sinDespacho).sort(),
     missingSheet: false
   };
 }
@@ -3715,6 +3755,7 @@ function importarPlanillas_(rebuild) {
     // un día que desaparece del panel. Antes eso no se contaba y no se
     // veía: se anota, con una muestra, para poder arreglarlo.
     let delReservador = 0;
+    let sinDespacho = 0;
     const asuntosFuera = [];
 
     threads.forEach(function(thread) {
@@ -3749,6 +3790,30 @@ function importarPlanillas_(rebuild) {
             message,
             timezone
           );
+
+          if (parsed.sinDespacho) {
+            // Una sola fila que deja escrito que ese día se reportó y
+            // vino en cero. No lleva proveedor, así que el panel no la
+            // suma; lo que aporta es la diferencia entre «no entró
+            // nada» y «nadie reportó».
+            output.push([
+              dateKeyToLocalDate_(parsed.fecha),
+              parsed.fecha,
+              '', '', '', '',
+              0,
+              '',
+              0,
+              subject,
+              messageId,
+              message.getFrom(),
+              message.getDate(),
+              new Date(),
+              ESTADO_SIN_DESPACHO,
+              parsed.method
+            ]);
+
+            sinDespacho++;
+          }
 
           parsed.rows.forEach(function(item) {
             output.push([
@@ -3818,6 +3883,7 @@ function importarPlanillas_(rebuild) {
       ignored: ignored,
       errors: errors,
       delReservador: delReservador,
+      sinDespacho: sinDespacho,
       asuntosFuera: asuntosFuera
     };
 
@@ -3829,6 +3895,7 @@ function importarPlanillas_(rebuild) {
         'Mensajes revisados: ' + examined + '\n' +
         'Planillas importadas: ' + imported + '\n' +
         'Filas de detalle: ' + detailRows + '\n' +
+        'Días sin despacho: ' + sinDespacho + '\n' +
         'Ya procesadas: ' + duplicates + '\n' +
         'Asuntos ignorados: ' + ignored + '\n' +
         'Errores: ' + errors +
@@ -3994,6 +4061,123 @@ function matchesSubject_(subject) {
   });
 }
 
+
+/**
+ * ¿Por qué falta un día?
+ *
+ * Un correo puede quedarse fuera en cuatro puertas distintas, y hasta
+ * ahora todas fallaban del mismo modo: en silencio. Esto las abre una
+ * por una y dice, correo por correo, dónde se cayó cada uno.
+ *
+ * Busca a propósito MÁS ANCHO que la importación: el remitente oficial
+ * O el asunto de la planilla, con OR. Así aparecen tanto el correo con
+ * el asunto cambiado como el mandado desde otra dirección, que son los
+ * dos casos que la importación descarta sin decir nada. Si un correo
+ * no aparece ni acá, no está en esta casilla.
+ *
+ * No escribe nada.
+ */
+function diagnosticarCorreos() {
+  const dias = CONFIG.GMAIL_SEARCH_DAYS;
+  const remitente = (CONFIG.GMAIL_ALLOWED_SENDERS || [])[0] || '';
+
+  // O el remitente oficial, O el asunto de la planilla. Las dos cosas
+  // con OR y no con AND, a propósito: si se buscara solo por
+  // remitente, un correo mandado desde OTRA dirección no aparecería
+  // nunca, y ese es justo el caso que hay que poder ver. Igual al
+  // revés: el remitente correcto con el asunto cambiado.
+  const palabras = {};
+
+  (CONFIG.GMAIL_SUBJECTS || []).forEach(function(frase) {
+    const primera = normalizeKey_(frase).split(/[\s-]+/)[0];
+
+    if (primera) { palabras[primera] = true; }
+  });
+
+  const oes = Object.keys(palabras).map(function(palabra) {
+    return 'subject:' + palabra;
+  });
+
+  if (remitente) { oes.unshift('from:' + remitente); }
+
+  const consulta = (oes.length ? '(' + oes.join(' OR ') + ') ' : '') +
+    'newer_than:' + dias + 'd';
+
+  const threads = GmailApp.search(consulta, 0, CONFIG.GMAIL_MAX_THREADS);
+
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_INFORME);
+  const yaLeidos = sheet ? getProcessedMessageIds_(sheet) : {};
+  const timezone =
+    spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
+
+  const lineas = [];
+  const mensajes = [];
+
+  threads.forEach(function(thread) {
+    thread.getMessages().forEach(function(message) {
+      mensajes.push(message);
+    });
+  });
+
+  mensajes.sort(function(a, b) {
+    return b.getDate().getTime() - a.getDate().getTime();
+  });
+
+  let entran = 0;
+
+  mensajes.slice(0, 40).forEach(function(message) {
+    const asunto = text_(message.getSubject());
+    const cuando = Utilities.formatDate(
+      message.getDate(), timezone, 'dd/MM HH:mm'
+    );
+
+    let veredicto = '';
+
+    if (!remitenteValido_(message)) {
+      veredicto = 'NO: lo mandó ' +
+        extractEmailAddress_(message.getFrom()) +
+        ', no ' + remitente;
+    } else if (!matchesSubject_(asunto)) {
+      veredicto = 'NO: el asunto no empieza con ninguna frase aceptada';
+    } else if (yaLeidos[message.getId()]) {
+      veredicto = 'ya estaba leído (está en ' + CONFIG.SHEET_INFORME + ')';
+      entran++;
+    } else {
+      try {
+        const parsed = parsePlanillaEmail_(message, timezone);
+
+        veredicto = parsed.sinDespacho
+          ? 'SÍ: día sin despacho el ' + parsed.fecha
+          : 'SÍ: ' + parsed.rows.length + ' filas, día ' + parsed.fecha;
+        entran++;
+      } catch (error) {
+        veredicto = 'NO: ' + String(error.message || error);
+      }
+    }
+
+    lineas.push(cuando + ' · ' + asunto.slice(0, 60) + '\n    → ' + veredicto);
+  });
+
+  const texto =
+    'Correos de ' + (remitente || 'cualquiera') +
+    ' en los últimos ' + dias + ' días: ' + mensajes.length + '\n' +
+    'De los ' + Math.min(mensajes.length, 40) + ' más nuevos, entran ' +
+    entran + '.\n\n' +
+    (lineas.length ? lineas.join('\n\n') : 'No hay correos de ese remitente.');
+
+  console.log(texto);
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      '¿Por qué falta un día?',
+      texto.slice(0, 6000),
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  } catch (sinUi) {}
+
+  return texto;
+}
 
 /**
  * Lee la última planilla y muestra lo extraído sin escribir en la
@@ -4315,6 +4499,28 @@ function parsePlanillaEmail_(message, timezone) {
     );
   }
 
+  // La planilla admite un día en cero: la tabla llega con la fecha, un
+  // cero y la fila Total, sin una sola línea de detalle. Las columnas
+  // van en el mismo orden que siempre, así que el encabezado SÍ se
+  // reconoce; lo que no hay es nada que sumar.
+  //
+  // Antes eso reventaba con «no se encontraron filas», el correo
+  // quedaba marcado como error y el día desaparecía del panel. Un día
+  // que el reservador reportó en cero no es un día que falta: es un
+  // día sin despacho, y vale la pena que se sepa.
+  const laFecha = fromHtml.fecha || fromAttachment.fecha || fecha;
+
+  if ((fromHtml.reconocida || fromAttachment.reconocida) && laFecha) {
+    return {
+      fecha: laFecha,
+      rows: [],
+      method: fromHtml.reconocida
+        ? 'Tabla HTML del correo'
+        : (fromAttachment.method || 'Adjunto'),
+      sinDespacho: true
+    };
+  }
+
   if (!fecha) {
     throw new Error(
       'No se encontró la fecha ni la tabla de la planilla.'
@@ -4352,7 +4558,10 @@ function buildParsedReport_(fecha, rows, method) {
  * de una tabla HTML o de un adjunto, y devuelve solo las filas útiles.
  */
 function parseGridRows_(grid) {
-  const empty = { rows: [], fecha: '' };
+  // reconocida: se encontró el encabezado de la planilla, haya o no
+  // filas de detalle debajo. Es lo que separa «esta tabla vino vacía»
+  // de «acá no había ninguna tabla».
+  const empty = { rows: [], fecha: '', reconocida: false };
 
   if (!grid || !grid.length) {
     return empty;
@@ -4530,7 +4739,7 @@ function parseGridRows_(grid) {
     });
   }
 
-  return { rows: rows, fecha: fecha };
+  return { rows: rows, fecha: fecha, reconocida: true };
 }
 
 /**
@@ -4538,11 +4747,28 @@ function parseGridRows_(grid) {
  * "Drive API" activado en el editor de Apps Script.
  */
 function parseAttachments_(message) {
-  const empty = { rows: [], fecha: '', method: '' };
+  const empty = {
+    rows: [], fecha: '', method: '', reconocida: false
+  };
 
   const attachments = message.getAttachments({
     includeInlineImages: false
   });
+
+  // Un adjunto que SÍ era la planilla pero vino sin filas: el día en
+  // cero también puede llegar así, y hay que poder distinguirlo de un
+  // correo que no traía planilla.
+  let vacia = null;
+
+  function mirar(parsed, metodo) {
+    parsed.method = metodo;
+
+    if (parsed.rows.length) { return parsed; }
+
+    if (parsed.reconocida && !vacia) { vacia = parsed; }
+
+    return null;
+  }
 
   for (
     let index = 0;
@@ -4553,29 +4779,29 @@ function parseAttachments_(message) {
     const name = attachment.getName() || '';
 
     if (/\.(csv|txt)$/i.test(name)) {
-      const parsed = parseGridRows_(
-        Utilities.parseCsv(
-          attachment.getDataAsString()
-        )
+      const listo = mirar(
+        parseGridRows_(
+          Utilities.parseCsv(
+            attachment.getDataAsString()
+          )
+        ),
+        'Adjunto CSV (' + name + ')'
       );
 
-      if (parsed.rows.length) {
-        parsed.method = 'Adjunto CSV (' + name + ')';
-        return parsed;
-      }
+      if (listo) { return listo; }
     }
 
     if (/\.(xlsx|xls)$/i.test(name)) {
-      const parsed = parseExcelAttachment_(attachment);
+      const listo = mirar(
+        parseExcelAttachment_(attachment),
+        'Adjunto Excel (' + name + ')'
+      );
 
-      if (parsed.rows.length) {
-        parsed.method = 'Adjunto Excel (' + name + ')';
-        return parsed;
-      }
+      if (listo) { return listo; }
     }
   }
 
-  return empty;
+  return vacia || empty;
 }
 
 /**
@@ -4587,7 +4813,7 @@ function parseAttachments_(message) {
  * editor es v3, y ahí el campo es "name", no "title".
  */
 function parseExcelAttachment_(attachment) {
-  const empty = { rows: [], fecha: '', method: '' };
+  const empty = { rows: [], fecha: '', method: '', reconocida: false };
 
   let fileId = '';
 
@@ -4606,6 +4832,10 @@ function parseExcelAttachment_(attachment) {
       .openById(fileId)
       .getSheets();
 
+    // La primera hoja que SÍ era la planilla aunque viniera sin filas:
+    // el día en cero también puede llegar en un adjunto.
+    let vacia = null;
+
     for (let index = 0; index < sheets.length; index++) {
       const parsed = parseGridRows_(
         sheets[index].getDataRange().getDisplayValues()
@@ -4614,9 +4844,11 @@ function parseExcelAttachment_(attachment) {
       if (parsed.rows.length) {
         return parsed;
       }
+
+      if (parsed.reconocida && !vacia) { vacia = parsed; }
     }
 
-    return empty;
+    return vacia || empty;
   } catch (error) {
     throw new Error(
       'La planilla viene como Excel adjunto y no se pudo convertir. ' +
@@ -4906,9 +5138,13 @@ function getProcessedMessageIds_(sheet) {
     const messageId = text_(row[0]);
     const state = text_(row[4]);
 
+    // Un día sin despacho también queda leído: si no, cada
+    // importación lo vuelve a escribir.
     if (
       messageId &&
-      (state === 'OK' || state.indexOf('ERROR:') === 0)
+      (state === 'OK' ||
+        state === ESTADO_SIN_DESPACHO ||
+        state.indexOf('ERROR:') === 0)
     ) {
       ids[messageId] = true;
     }

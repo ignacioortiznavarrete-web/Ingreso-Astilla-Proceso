@@ -1,0 +1,13 @@
+# Qué sube al proyecto de Apps Script de las alertas y qué NO.
+#
+# pruebas/ corre en node, en el computador. No se pega en el editor.
+#
+# Va al revés de lo normal: se ignora todo y después se deja pasar,
+# uno por uno, solo lo que es el proyecto.
+**/**
+
+!Config.gs
+!Feriados.gs
+!Lectura.gs
+!Aviso.gs
+!appsscript.json

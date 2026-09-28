@@ -42,18 +42,30 @@ llegaron a SAP.
 
 ## Archivos
 
+Al proyecto de Apps Script del panel suben **tres** archivos:
+
 | Archivo            | Qué es                                            |
 |--------------------|---------------------------------------------------|
 | `Codigo.gs`        | El servidor: lectura, cruces, Gmail, Calendar      |
 | `Index.html`       | El dashboard (HTML + CSS + JS en un archivo)       |
 | `appsscript.json`  | Manifiesto: zona horaria, scopes y Drive API v3    |
-| `alertas/`         | Proyecto de Apps Script **aparte**: el correo diario |
 
-`alertas/` no es parte de este proyecto de Apps Script: es otro, que
-abre la misma planilla en modo lectura. Ver `alertas/README.md`.
+Y estos **no** suben:
 
-El panel no manda correo: eso vive en `alertas/`, con su propio
-manifiesto y sus propios permisos.
+| Carpeta            | Qué es                                            |
+|--------------------|---------------------------------------------------|
+| `pruebas/`         | Pruebas en **node**, no en Apps Script. Ver `pruebas/README.md` |
+| `alertas/`         | Otro proyecto de Apps Script: el correo diario     |
+
+`pruebas/` son archivos `.js` que corren en el computador con node y
+leen `Codigo.gs` como texto. **Nunca se pegan en el editor de Apps
+Script**, y el `.claspignore` de la raíz lo deja escrito para que
+`clasp push` no pueda subirlos ni por error: ignora todo y después deja
+pasar solo los tres de arriba.
+
+`alertas/` tampoco es parte de este proyecto: es otro, con su propio
+manifiesto y sus propios permisos, que abre la misma planilla en modo
+lectura. Ver `alertas/README.md`. El panel no manda correo.
 
 ## El panel
 
@@ -577,6 +589,7 @@ clasp push
 | Importar nuevas planillas              | Lee Gmail y suma los correos no procesados      |
 | Reconstruir planillas desde Gmail      | Respalda y reimporta todo el historial          |
 | Probar último correo (sin escribir)    | Muestra qué extraería, sin tocar la hoja        |
+| ¿Por qué falta un día?                 | Correo por correo, dónde se cayó cada uno       |
 | Diagnosticar cruce Ingresos vs planilla| Qué materiales y proveedores no están cruzando  |
 | Validar hoja Plan                      | Solo lee y valida; no modifica formato          |
 | Ubicar en el mapa                      | Geocodifica los aserraderos de la hoja Mapeos   |
@@ -609,6 +622,38 @@ Para que no se repita, el resumen de la importación cuenta aparte
 los primeros cinco. Y `pruebas/gmail.js` exige que todo asunto que la
 regla acepta traiga alguna de las palabras que la búsqueda pide.
 
+### Un día en cero no es un día que falta
+
+La tabla admite llegar **sin una sola línea de detalle**: la fecha, un
+cero y la fila `Total`, en el mismo orden de columnas de siempre. Es el
+día que el reservador reportó y vino en cero.
+
+Antes eso reventaba con «no se encontraron filas», el correo quedaba
+marcado como error y el día desaparecía. Ahora el encabezado se
+reconoce igual y se escribe **una** fila con Estado `SIN DESPACHO`: sin
+proveedor y sin TS, así que el panel no la suma, pero el día queda
+contestado. En la nota de Suministro se dice con nombre y fecha, porque
+un día en blanco y un día sin despacho se ven igual en un gráfico y no
+son lo mismo: uno hay que ir a cargarlo, el otro ya está respondido.
+
+### Cuando un día no aparece
+
+`Astilla Dashboard › ¿Por qué falta un día?` revisa **todos** los
+correos del reservador de los últimos 120 días —a propósito más ancho
+que la importación, para ver también los que la regla descarta— y dice,
+correo por correo, en cuál de las cuatro puertas se cayó:
+
+| Veredicto | Qué significa |
+|---|---|
+| `NO: lo mandó otro` | El remitente no es el oficial |
+| `NO: el asunto no empieza…` | La regla del asunto lo descarta |
+| `ya estaba leído` | Está en `InformeAstilla`; mira su Estado |
+| `SÍ: N filas` / `día sin despacho` | Entra, y con qué fecha |
+
+Si un correo no aparece **ni en esa lista**, entonces no está en la
+casilla o no lo mandó ese remitente. No escribe nada.
+
 ```
 node pruebas/gmail.js
+node pruebas/planilla.js
 ```

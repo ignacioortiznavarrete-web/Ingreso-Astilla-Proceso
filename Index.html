@@ -4107,6 +4107,24 @@
           ' de la planilla: ' + esc(huecos.join(', ')) + '.';
       }
 
+      // Días que el reservador reportó y vinieron en cero. Un día en
+      // blanco y un día sin despacho se ven igual en un gráfico, y no
+      // son lo mismo: uno hay que ir a cargarlo, el otro ya está
+      // contestado.
+      var enCero = (source.sinDespacho || []).filter(function(f) {
+        return f >= DATA.month.startKey && f <= DATA.month.endKey;
+      });
+
+      if (enCero.length) {
+        nota += ' <b>' + enCero.length +
+          (enCero.length === 1
+            ? ' día se reportó sin despacho</b>: '
+            : ' días se reportaron sin despacho</b>: ') +
+          esc(enCero.slice(0, 6).map(formatDateKey).join(', ')) +
+          (enCero.length > 6 ? '…' : '') +
+          '. No faltan: entraron en cero.';
+      }
+
       // Camiones escritos en columnas de la hoja Proyección que este
       // mes no tienen día hábil. Se descartan, así que se dicen.
       var pr = DATA.proyeccion || {};
