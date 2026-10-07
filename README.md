@@ -749,6 +749,57 @@ contestado. En la nota de Suministro se dice con nombre y fecha, porque
 un día en blanco y un día sin despacho se ven igual en un gráfico y no
 son lo mismo: uno hay que ir a cargarlo, el otro ya está respondido.
 
+### La planilla que llega sin encabezados
+
+La del martes 6 de octubre vino **sin la fila de rótulos**: arranca
+directo en la fecha y el total del día.
+
+```
+06/10/2026 | Total                     |                           |          | 0
+           | ASERRÍN COMBUSTIBLE       | COMERCIAL EL CHACAY LTDA. | NEOMAS   | 2
+           | Total ASERRÍN COMBUSTIBLE |                           |          | 2
+           | ASTILLA PINO VERDE        | PROMASA SPA.              | TABLEROS | 4
+```
+
+Las columnas van en el orden de siempre —fecha, subproducto, proveedor,
+destino, camiones—, pero el lector buscaba el rótulo `PROVEEDORES` para
+saber dónde estaba cada una. Sin rótulos devolvía tabla vacía: el día
+entero se perdía, y encima en silencio, porque un correo leído «sin
+filas» queda marcado y no se vuelve a intentar.
+
+Ahora, cuando no hay encabezado, la tabla **se reconoce por su forma**:
+
+| Condición | Para qué sirve |
+|---|---|
+| Una fecha en las primeras celdas de una fila | Es el ancla: ahí empieza la tabla |
+| Una columna de números a la derecha, con sitio para subproducto, proveedor y destino en medio | Son los camiones |
+| Alguna fila `Total` más abajo | La planilla cierra con subtotales |
+
+Hacen falta **las tres**, y por una razón concreta: el cuerpo del correo
+llega como una sola matriz con *todas* sus tablas pegadas una tras otra
+—la firma, el hilo citado, los wrappers de Outlook—, así que la planilla
+puede no ser la primera y cualquier otra tabla podría colarse. Una firma
+no tiene fecha arriba a la izquierda; una tabla de turnos no tiene fila
+`Total`; un párrafo con la fecha no tiene columna de números a la
+derecha. `pruebas/planilla.js` prueba las tres por separado, y además
+que la tabla se siga leyendo bien cuando viene con otra tabla encima.
+
+Un detalle que importa: la celda de los camiones tiene que ser **el
+número solo**. El lector de números es a propósito tolerante —les saca
+las letras y se queda con la cifra—, así que `COMERCIAL EL CHACAY LTDA.`
+le vale 0 por el punto final; eso sirve para leer una cantidad, no para
+reconocer una columna.
+
+El encabezado, cuando viene, sigue mandando: la forma se mira **solo**
+si no se encontró. Y de paso queda cubierto el día en que le cambien los
+rótulos —`PROVEEDOR / RAZÓN SOCIAL` en vez de `PROVEEDORES`—, que antes
+tiraba la tabla completa. Un día en cero sin encabezados se lee igual
+que uno con encabezados: `SIN DESPACHO`.
+
+Si el correo ya quedó con `ERROR:` en `InformeAstilla`, la importación
+normal no lo vuelve a mirar —está leído, aunque haya salido mal—; hay
+que correr `Astilla Dashboard › Reconstruir planillas desde Gmail`.
+
 ### Cuando un día no aparece
 
 `Astilla Dashboard › ¿Por qué falta un día?` revisa **todos** los

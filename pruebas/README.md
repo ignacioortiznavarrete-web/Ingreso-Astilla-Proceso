@@ -25,7 +25,7 @@ node pruebas/planilla.js
 | Archivo | Qué cuida |
 |---|---|
 | `gmail.js` | Que la búsqueda de Gmail no pierda un correo que la regla del asunto acepta |
-| `planilla.js` | Que la tabla se lea en sus dos formas: con despachos y en cero |
+| `planilla.js` | Que la tabla se lea como venga: con despachos, en cero y sin la fila de encabezados |
 
 Las dos leen `Codigo.gs` y recortan de ahí las funciones que necesitan,
 así que prueban el código de verdad y no una copia.

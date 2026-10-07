@@ -5151,7 +5151,35 @@ function parseGridRows_(grid) {
   }
 
   if (headerIndex === -1) {
-    return empty;
+    // Sin fila de encabezados. No es un caso raro: la planilla llega
+    // así, empezando directo por la fecha y la fila Total —
+    //
+    //   06/10/2026 | Total                  |                      |          | 0
+    //              | ASERRÍN COMBUSTIBLE    | COMERCIAL EL CHACAY  | NEOMAS   | 2
+    //              | Total ASERRÍN COMB...  |                      |          | 2
+    //              | ASERRÍN PINO VERDE     | ALTO LONQUEN         | TABLEROS | 1
+    //
+    // — y el orden de las columnas es el mismo de siempre. Buscar el
+    // rótulo "PROVEEDORES" devolvía tabla vacía y el día se perdía.
+    //
+    // Entonces se reconoce por la FORMA, no por los rótulos, y con una
+    // guardia estrecha: fecha arriba a la izquierda, alguna fila Total,
+    // y una última columna de números. Una tabla cualquiera del correo
+    // —una firma, un listado de contactos— no cumple las tres.
+    const porForma = columnasPorForma_(grid);
+
+    if (!porForma) {
+      return empty;
+    }
+
+    // La tabla puede no ser la primera del correo: el recorrido de
+    // abajo arranca en la fila de la fecha.
+    headerIndex = porForma.fila - 1;
+    fechaColumn = porForma.fecha;
+    subproductoColumn = porForma.subproducto;
+    proveedorColumn = porForma.proveedor;
+    destinoColumn = porForma.destino;
+    cantidadColumn = porForma.cantidad;
   }
 
   if (subproductoColumn === -1) {
@@ -5232,6 +5260,136 @@ function parseGridRows_(grid) {
   }
 
   return { rows: rows, fecha: fecha, reconocida: true };
+}
+
+/**
+ * Las columnas de una planilla que llegó sin fila de encabezados.
+ *
+ * Devuelve dónde está cada columna y en qué fila arranca la tabla, o
+ * null si lo que se está mirando no es una planilla.
+ *
+ * El orden de las columnas es el de siempre —fecha, subproducto,
+ * proveedor, destino, camiones—, así que alcanza con encontrar el
+ * ancla: la fila que trae la fecha. De ahí a la derecha, la última
+ * celda que es solo un número es la de los camiones, y el destino es
+ * la de al lado.
+ *
+ * Se recorren las primeras filas porque el cuerpo del correo llega
+ * como una sola matriz con TODAS sus tablas pegadas una tras otra: la
+ * de la planilla puede no ser la primera.
+ */
+function columnasPorForma_(grid) {
+  for (
+    let fila = 0;
+    fila < Math.min(grid.length, 15);
+    fila++
+  ) {
+    const mapa = columnasDesdeFila_(grid, fila);
+
+    if (mapa) {
+      return mapa;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * ¿Empieza acá la planilla? Las tres condiciones juntas —fecha arriba
+ * a la izquierda, columna de números a la derecha y alguna fila
+ * Total— son la guardia: una firma, un listado de contactos o el
+ * wrapper de Outlook no cumplen las tres.
+ */
+function columnasDesdeFila_(grid, fila) {
+  const row = grid[fila] || [];
+
+  // 1. La fecha, en las primeras celdas. Si viene más al medio es
+  //    texto del correo, no la primera columna de la planilla.
+  let fecha = -1;
+
+  for (
+    let columna = 0;
+    columna < Math.min(row.length, 3) && fecha === -1;
+    columna++
+  ) {
+    if (
+      parseDateText_(row[columna]) ||
+      extractSpanishDateKey_(row[columna])
+    ) {
+      fecha = columna;
+    }
+  }
+
+  if (fecha === -1) {
+    return null;
+  }
+
+  // 2. Los camiones: la última columna con número. Tiene que quedar
+  //    sitio para subproducto, proveedor y destino en medio, y se
+  //    mira también un par de filas más abajo porque el total del día
+  //    a veces llega en blanco en vez de en cero.
+  let cantidad = -1;
+
+  for (
+    let r = fila;
+    r < Math.min(grid.length, fila + 4);
+    r++
+  ) {
+    const otra = grid[r] || [];
+
+    for (
+      let columna = otra.length - 1;
+      columna > cantidad && columna >= fecha + 4;
+      columna--
+    ) {
+      if (celdaSoloNumero_(otra[columna])) {
+        cantidad = columna;
+        break;
+      }
+    }
+  }
+
+  if (cantidad === -1) {
+    return null;
+  }
+
+  // 3. Alguna fila Total: la planilla cierra con subtotales por
+  //    subproducto y un total del día.
+  const conTotal = grid.slice(fila).some(function(otra) {
+    return isTotalGridRow_(otra);
+  });
+
+  if (!conTotal) {
+    return null;
+  }
+
+  return {
+    fila: fila,
+    fecha: fecha,
+    subproducto: fecha + 1,
+    proveedor: fecha + 2,
+    destino: cantidad - 1,
+    cantidad: cantidad
+  };
+}
+
+/**
+ * ¿La celda es un número y nada más?
+ *
+ * parseOptionalNumber_ es a propósito tolerante: le saca las letras y
+ * se queda con lo que parezca cifra, así que "COMERCIAL EL CHACAY
+ * LTDA." le devuelve 0 por el punto final. Para reconocer una tabla
+ * por su forma eso no alcanza; acá hace falta una celda que sea el
+ * número solo.
+ */
+function celdaSoloNumero_(cell) {
+  if (typeof cell === 'number') {
+    return isFinite(cell);
+  }
+
+  return /^-?\d+(?:[.,]\d+)?$/.test(
+    String(cell === null || cell === undefined ? '' : cell).trim()
+  );
 }
 
 /**

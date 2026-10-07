@@ -46,6 +46,7 @@ eval([
   'extractHtmlTableRows_', 'cleanHtmlCell_', 'htmlToText_',
   'decodeHtmlEntities_',
   'parseDateText_', 'extractSpanishDateKey_', 'parseOptionalNumber_',
+  'columnasPorForma_', 'columnasDesdeFila_', 'celdaSoloNumero_',
   'isTotalGridRow_', 'isTotalText_', 'normalizeKey_', 'text_',
   'toNumber_', 'buildDateKey_', 'round_'
 ].map(recortar).join('\n'));
@@ -190,6 +191,156 @@ const normalCorreo = parsePlanillaEmail_(
 
 ok(!normalCorreo.sinDespacho && normalCorreo.rows.length === 1,
    'un día con despachos no se marca sin despacho', normalCorreo);
+
+/* =====================================================================
+ * LA PLANILLA SIN FILA DE ENCABEZADOS
+ *
+ * Así llegó la del martes 6 de octubre: sin rótulos, empezando directo
+ * por la fecha y el total del día. El orden de las columnas es el
+ * mismo de siempre. Buscando el rótulo "PROVEEDORES" la tabla salía
+ * vacía y el día se perdía, así que ahora se reconoce por la forma.
+ * ===================================================================== */
+
+// Tal como se ve en el correo, con el detalle completo.
+const SIN_CABECERA = [
+  ['06/10/2026', 'Total', '', '', '0'],
+  ['', 'ASERRÍN COMBUSTIBLE', 'COMERCIAL EL CHACAY LTDA.', 'NEOMAS', '2'],
+  ['', 'Total ASERRÍN COMBUSTIBLE', '', '', '2'],
+  ['', 'ASERRÍN PINO VERDE', 'ALTO LONQUEN', 'TABLEROS', '1'],
+  ['', '', 'ASERRADEROS LOS CASTAÑOS LTDA.', 'TABLEROS', '3'],
+  ['', '', 'BIOMASA SUR', 'TABLEROS', '1'],
+  ['', '', 'LAMINADORA LOS ANGELES S.A.', 'TABLEROS', '1'],
+  ['', 'Total ASERRÍN PINO VERDE', '', '', '6'],
+  ['', 'ASTILLA PINO VERDE', 'PROMASA SPA.', 'TABLEROS', '4'],
+  ['', '', 'ALTO LONQUEN', 'TABLEROS', '2'],
+  ['', 'Total ASTILLA PINO VERDE', '', '', '6'],
+  ['', 'ASTILLA EUCALYPTUS NITENS', 'AGRICOLA Y FORESTAL AITUE', 'TABLEROS', '1'],
+  ['', 'Total ASTILLA EUCALYPTUS NITENS', '', '', '1']
+];
+
+// --- 8. Se lee aunque no haya encabezados -----------------------------
+const sinCabecera = parseGridRows_(SIN_CABECERA);
+
+ok(sinCabecera.reconocida === true,
+   'la planilla sin encabezados se reconoce igual');
+ok(sinCabecera.fecha === '2026-10-06',
+   'con la fecha de la primera columna', sinCabecera.fecha);
+ok(sinCabecera.rows.length === 3,
+   'y solo las filas de astilla de proceso', sinCabecera.rows);
+
+const porProveedor = {};
+sinCabecera.rows.forEach(function(r) { porProveedor[r.proveedor] = r; });
+
+ok(!!porProveedor['PROMASA SPA.'] &&
+   porProveedor['PROMASA SPA.'].camiones === 4 &&
+   porProveedor['PROMASA SPA.'].subproducto === 'ASTILLA PINO VERDE' &&
+   porProveedor['PROMASA SPA.'].destino === 'TABLEROS',
+   'cada columna en su lugar: proveedor, destino y camiones',
+   porProveedor['PROMASA SPA.']);
+ok(!!porProveedor['ALTO LONQUEN'] &&
+   porProveedor['ALTO LONQUEN'].subproducto === 'ASTILLA PINO VERDE' &&
+   porProveedor['ALTO LONQUEN'].camiones === 2,
+   'el subproducto se arrastra hacia abajo también acá',
+   porProveedor['ALTO LONQUEN']);
+ok(!!porProveedor['AGRICOLA Y FORESTAL AITUE'] &&
+   porProveedor['AGRICOLA Y FORESTAL AITUE'].subproducto ===
+     'ASTILLA EUCALYPTUS NITENS',
+   'y el nitens se lee como nitens',
+   porProveedor['AGRICOLA Y FORESTAL AITUE']);
+ok(!porProveedor['COMERCIAL EL CHACAY LTDA.'] &&
+   !porProveedor['BIOMASA SUR'],
+   'el aserrín no entra: no es astilla de proceso',
+   Object.keys(porProveedor));
+
+// --- 9. El correo completo del 6 de octubre ---------------------------
+const SEIS = parsePlanillaEmail_(
+  correo(
+    '<p>Se&ntilde;or<br>Fabian Agurto:</p>' +
+    '<p>Estimado, le env&iacute;o la planilla.</p>' +
+    tablaHtml(SIN_CABECERA),
+    'PLANILLA CUMPLIMIENTO SUB-PRODUCTOS MARTES 06 DE OCTUBRE DE 2026'
+  ),
+  CONFIG.TIMEZONE
+);
+
+ok(SEIS.fecha === '2026-10-06' && SEIS.rows.length === 3,
+   'el correo del 6 de octubre entra completo', SEIS);
+ok(SEIS.method === 'Tabla HTML del correo',
+   'por la tabla del cuerpo', SEIS.method);
+ok(!SEIS.sinDespacho, 'y no se marca sin despacho');
+
+// --- 10. La tabla no tiene que ser la primera del correo --------------
+const conFirma = parseGridRows_(
+  [
+    ['Fabian Agurto', 'Jefe de planta', 'anexo 2231'],
+    ['Reservador Horario', 'Informes', 'anexo 2240']
+  ].concat(SIN_CABECERA)
+);
+
+ok(conFirma.reconocida === true &&
+   conFirma.fecha === '2026-10-06' &&
+   conFirma.rows.length === 3,
+   'una tabla antes de la planilla no la tapa', conFirma.rows.length);
+
+// --- 11. La guardia: tres condiciones, no una ------------------------
+ok(parseGridRows_([
+     ['Nombre', 'Cargo', 'Anexo', 'Correo', 'Interno'],
+     ['Fabian Agurto', 'Jefe de planta', 'planta', 'si', '2231']
+   ]).reconocida === false,
+   'sin fecha no es planilla');
+
+ok(parseGridRows_([
+     ['06/10/2026', 'Reunión de turno', 'Sala 2', 'Planta', '3'],
+     ['', 'Entrega de EPP', 'Bodega', 'Planta', '1']
+   ]).reconocida === false,
+   'con fecha y números, pero sin ninguna fila Total, tampoco');
+
+ok(parseGridRows_([
+     ['06/10/2026', 'Total', 'Turno A'],
+     ['', 'Total turno', 'Turno B']
+   ]).reconocida === false,
+   'con fecha y Total, pero sin columna de números, tampoco');
+
+ok(parseGridRows_([
+     ['Planilla enviada el 06/10/2026'],
+     ['Total de correos: 1']
+   ]).reconocida === false,
+   'una fecha suelta en un párrafo no abre la tabla');
+
+// --- 11b. Si mañana le cambian los rótulos, la forma salva el día ----
+const otroRotulo = parseGridRows_(
+  [['FECHA', 'SUBPRODUCTO', 'PROVEEDOR / RAZÓN SOCIAL', 'DESTINO', 'CAMIONES']]
+    .concat(SIN_CABECERA)
+);
+
+ok(otroRotulo.reconocida === true &&
+   otroRotulo.fecha === '2026-10-06' &&
+   otroRotulo.rows.length === 3,
+   'un encabezado con otros rótulos ya no tira la tabla entera',
+   otroRotulo.rows.length);
+
+// --- 12. Un día en cero sin encabezados sigue siendo día sin despacho -
+const ceroSinCabecera = parsePlanillaEmail_(
+  correo(
+    tablaHtml([['06/10/2026', 'Total', '', '', '0']]),
+    'PLANILLA CUMPLIMIENTO SUB-PRODUCTOS MARTES 06 DE OCTUBRE DE 2026'
+  ),
+  CONFIG.TIMEZONE
+);
+
+ok(ceroSinCabecera.sinDespacho === true &&
+   ceroSinCabecera.fecha === '2026-10-06' &&
+   ceroSinCabecera.rows.length === 0,
+   'el día en cero se lee sin encabezados igual que con ellos',
+   ceroSinCabecera);
+
+// --- 13. El número tiene que ser un número ---------------------------
+ok(celdaSoloNumero_('3') && celdaSoloNumero_(3) && celdaSoloNumero_(' 12 '),
+   'una celda con el número solo sí es número');
+ok(!celdaSoloNumero_('COMERCIAL EL CHACAY LTDA.') &&
+   !celdaSoloNumero_('TABLEROS') &&
+   !celdaSoloNumero_(''),
+   'un nombre con punto final no se hace pasar por número');
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;
