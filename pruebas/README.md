@@ -29,7 +29,7 @@ node pruebas/panel.js
 |---|---|
 | `gmail.js` | Que la búsqueda de Gmail no pierda un correo que la regla del asunto acepta |
 | `planilla.js` | Que la tabla se lea como venga: con despachos, en cero y sin la fila de encabezados |
-| `homologacion.js` | Los dos tiempos: agregar el proveedor que SAP no tiene y pasarlo a SAP cuando lo creen |
+| `homologacion.js` | Los dos tiempos, los grupos de tres hojas y asignarlos de una vez |
 | `descuadres.js` | Que la comparación planilla ↔ SAP solo afirme lo que se puede afirmar |
 | `panel.js` | Que el panel dibuje lo que el servidor le manda: homologación y descuadres |
 

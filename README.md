@@ -532,6 +532,49 @@ Entran las **tres** hojas que escriben nombres de proveedor:
 Cada fila dice de cuál viene, y una sola asignación las arregla todas:
 el cruce es el mismo para las tres.
 
+### Un proveedor, sus nombres, una decisión
+
+Lo difícil de homologar no es el cruce: es que el mismo proveedor llega
+escrito por **tres manos** —la planilla del reservador, `Proyeccion` y
+el `Plan`— y la lista de pendientes los muestra como **tres problemas
+sueltos**. Resolver uno no resuelve los otros dos, así que había que
+buscar al mismo proveedor tres veces y acertarle tres veces al mismo
+nombre de SAP.
+
+La primera tabla de la pestaña da vuelta esa lista: **una fila por
+proveedor**, con todos sus nombres colgando, de qué hoja viene cada uno,
+lo que mueven entre los tres, y **un solo botón** que los asigna a todos.
+
+El ancla es SAP siempre que se pueda:
+
+| | Cuándo | Qué propone |
+|---|---|---|
+| 1 | El nombre ya cruza por parecido | Ese proveedor de SAP. El botón solo lo deja escrito —confirmarlo lo fija— |
+| 2 | No cruza, pero se parece a uno de SAP ≥ **0,5** | Ese proveedor, diciendo cuánto se parece |
+| 3 | No hay ningún SAP al que parecerse | Nada: los nombres se juntan entre ellos por cómo se escriben |
+
+**0,5 para proponer, 0,72 para cruzar solo.** Una cosa es sugerirle
+algo a quien mira y otra decidirlo sin preguntar. Por eso el selector
+**viene elegido** cuando el parecido alcanza para cruzar por sí mismo
+—ahí el panel ya está usando ese proveedor y el botón solo lo deja
+escrito— y **viene vacío** cuando es una propuesta más floja: esa
+decisión es de quien mira.
+
+El caso 3 es el que pedía la otra opción. Ese grupo no tiene a quién
+asignarse todavía, así que el selector ofrece **dejar uno de sus propios
+nombres como el proveedor**: se agrega con ese nombre, los demás se le
+cuelgan, y el día que SAP lo cree se pasa el grupo entero desde
+«Agrupados, esperando a SAP».
+
+**No se cae por uno.** Si uno de los nombres del grupo ya apunta a otro
+proveedor, se dice cuál y se escribe el resto. Abortar todo por un
+nombre dejaría el grupo a medio escribir sin decir cuál fue.
+
+Las dos tablas de más abajo —«Sin par en SAP» y «Cruzados por
+parecido»— siguen estando: son el camino fino, para cuando un grupo
+junta dos proveedores que en realidad no son el mismo, o hay que mirar
+un nombre solo.
+
 ### Solo lo del mes en curso
 
 La lista de revisión mira **toda la historia cargada** —seis meses, o
@@ -551,7 +594,10 @@ mes escrito en el código.
 | Plan | Siempre: se lee la columna de este mes |
 
 Las cifras de arriba siguen al alcance. Si la tabla muestra tres y la
-tarjeta dice doce, la tarjeta miente.
+tarjeta dice doce, la tarjeta miente. Lo mismo con los grupos: un
+nombre de otro mes sale del grupo y las cifras del grupo se rehacen,
+porque una fila que muestra dos nombres y suma las TS de cuatro
+también miente.
 
 Y **nada se esconde callado**: al costado del selector se dice cuántos
 nombres quedan fuera (`1 nombre más en meses anteriores`), y están a un

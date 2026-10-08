@@ -55,6 +55,7 @@ eval([
   'declararProveedor', 'asignarProveedor', 'reasignarProveedor',
   'escribirFilaProveedor_', 'leerProveedores_', 'columnasProveedores_',
   'buildHomologacionPendiente_', 'buildHomologacionMapa_',
+  'agruparPendientes_', 'resolverGrupo',
   'gruposProvisorios_', 'candidatosSap_', 'resolveProveedor_',
   'homologarProveedor_', 'proveedorComparable_', 'proveedorSimilitud_',
   'candidatosDelCruce_', 'uniqueTokens_', 'levenshtein_',
@@ -378,6 +379,149 @@ HOJA = hojaFalsa([
 ok(gruposProvisorios_(SAP, homologacion(), {}).length === 0,
    'una cabeza que ya está en SAP no sale como pendiente',
    gruposProvisorios_(SAP, homologacion(), {}));
+
+/* ---------------------------------------------------------------------
+ * UN PROVEEDOR, SUS TRES NOMBRES, UNA SOLA DECISIÓN
+ *
+ * Lo difícil de homologar no es el cruce: es que el mismo proveedor
+ * llega escrito por tres manos —planilla, Proyección y Plan— y la
+ * lista los muestra como tres problemas sueltos.
+ * ------------------------------------------------------------------ */
+const SAP3 = ['LAMINADORA LOS ANGELES S.A.', 'PROMASA SPA.'];
+
+HOJA = hojaFalsa([CABECERA]);
+
+const tresManos = buildHomologacionPendiente_(
+  // La planilla escribe un nombre que cruza por parecido.
+  [{
+    fecha: '2026-10-06', source: 'PLANILLA',
+    subproducto: 'ASTILLA PINO VERDE',
+    proveedor: 'LAMINADORA LOS ANGELES S.A.',
+    proveedorRaw: 'LAMINADORA ANGELES DEL SUR',
+    matchMethod: 'Coincidencia aproximada', camiones: 3, ts: 33
+  }],
+  SAP3,
+  homologacion(),
+  // Proyección escribe otro que no cruza, pero se le parece.
+  { porProveedor: [{
+      proveedor: 'LAMINADORA LOS ANGELE',
+      proveedorRaw: 'LAMINADORA LOS ANGELE',
+      matchMethod: 'Solo en planilla', ts: 44, camiones: 4
+  }] },
+  // Y el Plan, un tercero.
+  [{ proveedorPlan: 'LAMINADORA LOS ANGELE', plan: 900 }]
+);
+
+const grupos = tresManos.grupos || [];
+const laminadora = grupos.filter(function(g) {
+  return normalizeKey_(g.destino) ===
+    normalizeKey_('LAMINADORA LOS ANGELES S.A.');
+})[0];
+
+ok(grupos.length === 1,
+   'los tres nombres son UN grupo, no tres problemas',
+   grupos.map(function(g) { return g.destino + ':' + g.cuantos; }));
+ok(!!laminadora && laminadora.enSap === true,
+   'anclado en el proveedor de SAP', laminadora);
+ok(laminadora && laminadora.cuantos === 2,
+   'con los nombres distintos que lo escriben',
+   laminadora && laminadora.nombres.map(function(n) { return n.alias; }));
+ok(laminadora &&
+   laminadora.hojas.join(' ') === 'Plan Planilla Proyección',
+   'y dice de qué hojas viene cada uno',
+   laminadora && laminadora.hojas);
+ok(laminadora && laminadora.porEscribir === 1,
+   'uno hay que escribirlo; el otro ya cruza y solo se confirma',
+   laminadora && laminadora.porEscribir);
+ok(laminadora && laminadora.ts === 33 && laminadora.tsProy === 44 &&
+   laminadora.planMes === 900,
+   'el grupo suma lo de las tres hojas', laminadora);
+ok(laminadora && laminadora.candidatos.length &&
+   laminadora.candidatos[0].proveedor === 'LAMINADORA LOS ANGELES S.A.',
+   'y propone el de SAP al que se parecen',
+   laminadora && laminadora.candidatos[0]);
+
+// --- Sin ningún SAP al que parecerse, se juntan entre ellos ---------
+const sueltos = buildHomologacionPendiente_(
+  [{
+    fecha: '2026-10-06', source: 'PLANILLA',
+    subproducto: 'ASTILLA EUCALYPTUS NITENS',
+    proveedor: 'Aitue nitens', proveedorRaw: 'Aitue nitens',
+    matchMethod: 'Solo en planilla', camiones: 2, ts: 30.4
+  }],
+  SAP3,
+  homologacion(),
+  { porProveedor: [{
+      proveedor: 'AITUE NITENS SPA', proveedorRaw: 'AITUE NITENS SPA',
+      matchMethod: 'Solo en planilla', ts: 45.6, camiones: 3
+  }] },
+  []
+);
+
+const suelto = (sueltos.grupos || [])[0];
+
+ok((sueltos.grupos || []).length === 1 && suelto.cuantos === 2,
+   'dos formas del mismo nombre que SAP no tiene son un solo grupo',
+   (sueltos.grupos || []).map(function(g) { return g.cuantos; }));
+ok(suelto && suelto.enSap === false && !suelto.destino,
+   'sin ancla en SAP: ese es el grupo que necesita la otra opción',
+   suelto);
+
+// --- Resolver el grupo de una vez ------------------------------------
+HOJA = hojaFalsa([CABECERA]);
+
+const resuelto = resolverGrupo(
+  ['LAMINADORA ANGELES DEL SUR', 'LAMINADORA LOS ANGELE'],
+  'LAMINADORA LOS ANGELES S.A.'
+);
+
+ok(resuelto.escritos === 2 && !resuelto.conflictos.length,
+   'una sola acción escribe los dos nombres', resuelto);
+
+const tras = homologacion();
+
+ok(tras.porAlias[normalizeKey_('LAMINADORA ANGELES DEL SUR')] ===
+     'LAMINADORA LOS ANGELES S.A.' &&
+   tras.porAlias[normalizeKey_('LAMINADORA LOS ANGELE')] ===
+     'LAMINADORA LOS ANGELES S.A.',
+   'y los dos quedan apuntando al proveedor de SAP',
+   tras.porAlias);
+
+// Repetirlo no duplica filas, y el que apunta a otro se informa sin
+// tumbar al resto.
+asignarProveedor('OTRO NOMBRE', 'PROMASA SPA.');
+
+const otraVuelta = resolverGrupo(
+  ['LAMINADORA ANGELES DEL SUR', 'OTRO NOMBRE', 'TERCERO'],
+  'LAMINADORA LOS ANGELES S.A.'
+);
+
+ok(otraVuelta.yaEstaban === 1 && otraVuelta.escritos === 1 &&
+   otraVuelta.conflictos.length === 1 &&
+   otraVuelta.conflictos[0].alias === 'OTRO NOMBRE',
+   'no se cae por uno: dice cuál choca y escribe el resto',
+   otraVuelta);
+
+// --- Y el grupo que no está en SAP, bajo su propio nombre -----------
+HOJA = hojaFalsa([CABECERA]);
+
+const sinSap = resolverGrupo(
+  ['Aitue nitens', 'AITUE NITENS SPA'],
+  'AITUE NITENS SPA',
+  true
+);
+
+const trasSinSap = homologacion();
+
+ok(sinSap.escritos === 2 && sinSap.sinSap === true,
+   'se agrega la cabeza y se le cuelga el resto, en una sola acción',
+   sinSap);
+ok(trasSinSap.porAlias[normalizeKey_('Aitue nitens')] ===
+     'AITUE NITENS SPA' &&
+   trasSinSap.canonicos.indexOf('AITUE NITENS SPA') !== -1,
+   'con la cabeza declarada como proveedor', trasSinSap.porAlias);
+ok(String(HOJA.datos[1][3]).indexOf('Todavía no está en SAP') === 0,
+   'y con la nota de que todavía falta SAP', HOJA.datos[1][3]);
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

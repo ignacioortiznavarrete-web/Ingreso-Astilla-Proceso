@@ -2638,6 +2638,16 @@
     .homo-asignar select { flex: 1 1 auto; min-width: 0; }
     .homo-asignar .boton { flex: 0 0 auto; min-height: 32px; }
 
+    /* La tabla de grupos es la que más se usa, así que el botón no
+       puede quedar fuera de la pantalla: su celda cede ancho y, si
+       hace falta, el botón se va bajo el selector en vez de empujar
+       la tabla a lo ancho. */
+    [data-tabla="homoGrupos"] .homo-asignar {
+      min-width: 210px; flex-wrap: wrap;
+    }
+
+    [data-tabla="homoGrupos"] .homo-asignar .boton { flex: 1 0 auto; }
+
     .homo-hoy {
       margin-top: 2px;
       font-size: var(--t-mini); color: var(--ink-3);
@@ -2648,6 +2658,25 @@
        "esto vale, y falta que lo confirmen". */
     .homo-sin-sap > td:first-child {
       box-shadow: inset 3px 0 0 var(--madera);
+    }
+
+    .es-sin-sap { color: var(--madera); }
+
+    /* Un nombre del grupo, con las hojas que lo escriben así. */
+    .homo-nombre {
+      display: flex; align-items: center; gap: 4px;
+      flex-wrap: wrap;
+      margin-bottom: 3px;
+    }
+
+    .homo-nombre:last-child { margin-bottom: 0; }
+
+    .sello-hoja {
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: var(--mono); font-size: var(--t-micro);
+      color: var(--ink-3); background: var(--surface-2);
+      white-space: nowrap;
     }
 
     .tablero {
@@ -3594,6 +3623,29 @@
         <div class="aviso aviso-ojo" id="homoOjo"></div>
         <div class="recado" id="homoRecado"></div>
 
+        <article class="panel" id="panelGrupos">
+          <div class="panel-cab">
+            <div>
+              <h2>Un proveedor, sus nombres, una decisión</h2>
+              <p class="panel-nota">
+                Lo difícil de homologar no es el cruce: es que el mismo
+                proveedor llega escrito por <b>tres manos</b> —la
+                planilla, Proyección y el Plan— y la lista de abajo los
+                muestra como tres problemas sueltos. Resolver uno no
+                resuelve los otros dos.
+                Acá van juntos: una fila por proveedor, con todos sus
+                nombres colgando, y <b>un solo botón</b> que los asigna
+                a los tres. El ancla es SAP siempre que se pueda; y
+                cuando SAP todavía no lo tiene, se deja uno de sus
+                propios nombres como cabeza hasta que lo creen.
+                <span id="gruposNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="conteoGrupos">—</div>
+          </div>
+          <div id="homoGrupos"></div>
+        </article>
+
         <article class="panel">
           <div class="panel-cab">
             <div>
@@ -3645,6 +3697,9 @@
             <div>
               <h2>Sin par en SAP</h2>
               <p class="panel-nota">
+                Caso por caso, para cuando el grupo de arriba junta dos
+                proveedores que no son el mismo o hay que mirar un
+                nombre solo.
                 No cruzaron con nada y entraron con su propio nombre:
                 cada uno de estos es un proveedor repetido en el panel.
                 Los que vienen de Proyección además arrastran camiones
@@ -12400,6 +12455,10 @@
     // propio nombre". Ningún proveedor se llama así.
     var HOMO_SIN_SAP = '__SIN_SAP__';
 
+    // Y el mismo truco cuando además hay que decir CUÁL nombre queda
+    // de cabeza: el valor lleva el nombre pegado detrás.
+    var SIN_SAP_PREFIJO = '__SIN_SAP__||';
+
     /**
      * ¿Este nombre es del mes en curso?
      *
@@ -12479,6 +12538,7 @@
 
       homoCifras(r);
       homoAvisos(r);
+      dibujarHomoGrupos(r);
       dibujarHomoMapa();
       homoProvisorios(r);
       homoTabla('homoSinPar', 'homoConteoSinPar',
@@ -12698,6 +12758,253 @@
         '<th>Último</th>' +
         '<th>Asignar a SAP</th>' +
         '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
+    }
+
+
+    /**
+     * Los grupos, recortados al alcance que está mirando el panel.
+     *
+     * El servidor los arma sobre toda la historia; si arriba está
+     * puesto "solo este mes", un grupo puede quedar con menos nombres
+     * o sin ninguno. Se recalculan sus cifras: una fila que muestra
+     * dos nombres y suma las TS de cuatro miente.
+     */
+    function homoGrupos() {
+      var base = (((DATA.source || {}).homologacion || {}).revision || {})
+        .grupos || [];
+
+      if (HOMO_ALCANCE !== 'mes') { return base; }
+
+      var salida = [];
+
+      base.forEach(function(g) {
+        var nombres = (g.nombres || []).filter(esDelMes);
+
+        if (!nombres.length) { return; }
+
+        if (nombres.length === (g.nombres || []).length) {
+          salida.push(g);
+          return;
+        }
+
+        function suma(campo) {
+          return nombres.reduce(function(t, n) {
+            return t + (Number(n[campo]) || 0);
+          }, 0);
+        }
+
+        salida.push(Object.assign({}, g, {
+          nombres: nombres,
+          cuantos: nombres.length,
+          ts: suma('ts'),
+          tsProy: suma('tsProy'),
+          planMes: suma('planMes'),
+          porEscribir: nombres.filter(function(n) {
+            return n.sinPar ||
+              normalizaNombre(n.resuelto) !== normalizaNombre(g.destino);
+          }).length
+        }));
+      });
+
+      return salida;
+    }
+
+    /** De qué hoja viene un nombre, en sellos. */
+    function sellosDeHoja(origen) {
+      return String(origen || '').split(' y ').filter(Boolean)
+        .map(function(hoja) {
+          return '<span class="sello-hoja">' + esc(hoja) + '</span>';
+        }).join('');
+    }
+
+    /**
+     * Una fila por proveedor: sus nombres, lo que mueve y el botón.
+     *
+     * El selector arranca elegido cuando el parecido alcanza para
+     * cruzar solo —ahí el panel ya está usando ese proveedor y el
+     * botón solo lo deja escrito—. Cuando es una propuesta más floja,
+     * arranca vacío a propósito: esa decisión es de quien mira.
+     */
+    function dibujarHomoGrupos(r) {
+      var lista = homoGrupos();
+      var caja = document.getElementById('homoGrupos');
+
+      setText('conteoGrupos', lista.length
+        ? lista.length + (lista.length === 1 ? ' proveedor' : ' proveedores')
+        : 'ninguno');
+
+      var sueltos = lista.filter(function(g) { return !g.enSap; }).length;
+
+      document.getElementById('gruposNota').innerHTML = sueltos
+        ? ' <b>' + sueltos + '</b> ' +
+          (sueltos === 1 ? 'no tiene' : 'no tienen') +
+          ' ningún proveedor de SAP al que parecerse: ese es el que se ' +
+          'deja con su propio nombre.'
+        : '';
+
+      if (!lista.length) {
+        caja.innerHTML = vacio(HOMO_ALCANCE === 'mes'
+          ? 'Ningún nombre quedó sin resolver en el mes en curso.'
+          : 'Ningún nombre quedó sin resolver.');
+        return;
+      }
+
+      var cuerpo = lista.map(function(g, i) {
+        var id = 'grupo-' + i;
+        var opciones = [];
+        var fuerte = g.enSap && g.score >= 0.72;
+
+        opciones.push('<option value=""' + (fuerte ? '' : ' selected') +
+          '>Elegir a qué proveedor…</option>');
+
+        if (g.enSap) {
+          opciones.push('<optgroup label="Propuesto">' +
+            '<option value="' + esc(g.destino) + '"' +
+            (fuerte ? ' selected' : '') + '>' +
+            esc(shortProvider(g.destino)) + ' · ' +
+            formatPercent(g.score) + '</option></optgroup>');
+        }
+
+        var otros = (g.candidatos || []).filter(function(c) {
+          return normalizaNombre(c.proveedor) !== normalizaNombre(g.destino);
+        });
+
+        if (otros.length) {
+          opciones.push('<optgroup label="Se parecen">');
+          otros.forEach(function(c) {
+            opciones.push('<option value="' + esc(c.proveedor) + '">' +
+              esc(shortProvider(c.proveedor)) + ' · ' +
+              formatPercent(c.score) + '</option>');
+          });
+          opciones.push('</optgroup>');
+        }
+
+        opciones.push('<optgroup label="Todos los de SAP">');
+        (r.proveedoresSap || []).forEach(function(sap) {
+          opciones.push('<option value="' + esc(sap) + '">' +
+            esc(shortProvider(sap)) + '</option>');
+        });
+        opciones.push('</optgroup>');
+
+        // La otra opción, la que pidió el caso de SAP atrasado: dejar
+        // uno de los propios nombres del grupo como el proveedor.
+        opciones.push(
+          '<optgroup label="No está en SAP todavía: dejar como proveedor…">'
+        );
+        g.nombres.forEach(function(n) {
+          opciones.push('<option value="' + SIN_SAP_PREFIJO +
+            esc(n.alias) + '">' + esc(shortProvider(n.alias)) +
+            '</option>');
+        });
+        opciones.push('</optgroup>');
+
+        var nombres = g.nombres.map(function(n) {
+          return '<div class="homo-nombre"><span class="homo-otro">' +
+            esc(shortProvider(n.alias)) + '</span>' +
+            sellosDeHoja(n.origen) + '</div>';
+        }).join('');
+
+        return '<tr>' +
+          '<td><strong>' + (g.enSap
+            ? esc(shortProvider(g.destino))
+            : '<span class="es-sin-sap">Todavía no está en SAP</span>') +
+            '</strong>' +
+            '<div class="homo-hoy">' + (g.enSap
+              ? 'se parece ' + formatPercent(g.score) + ' · ' +
+                (g.porEscribir
+                  ? g.porEscribir + (g.porEscribir === 1
+                      ? ' nombre por escribir' : ' nombres por escribir')
+                  : 'solo falta confirmarlo')
+              : 'ninguno de SAP se le parece') +
+            '</div></td>' +
+          '<td>' + nombres + '</td>' +
+          celdaN(g.ts ? formatQuantity(g.ts) : '—') +
+          celdaN(g.tsProy ? formatQuantity(g.tsProy) : '—') +
+          celdaN(g.planMes ? formatQuantity(g.planMes) : '—') +
+          '<td class="homo-asignar">' +
+            '<select id="' + id + '">' + opciones.join('') + '</select>' +
+            '<button class="boton boton-firme" type="button" ' +
+              'data-homo-grupo="' + i + '" data-homo-campo="' + id +
+              '">Asignar ' + (g.cuantos === 1
+                ? 'el nombre' : 'los ' + g.cuantos) + '</button>' +
+          '</td>' +
+          '</tr>';
+      }).join('');
+
+      caja.innerHTML =
+        '<div class="tabla-marco tabla-fija">' +
+        '<table data-tabla="homoGrupos"><thead><tr>' +
+        '<th>Proveedor</th>' +
+        '<th>Cómo lo escriben</th>' +
+        '<th class="number">Entró</th>' +
+        '<th class="number">Comprometido</th>' +
+        '<th class="number">Plan mes</th>' +
+        '<th>Asignar el grupo</th>' +
+        '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
+    }
+
+    /** Escribe de una vez todos los nombres del grupo. */
+    function resolverGrupoDesde(indice, campoId) {
+      if (HOMO_OCUPADO) { return; }
+
+      var grupo = homoGrupos()[Number(indice)];
+      var campo = document.getElementById(campoId);
+      var valor = campo ? campo.value : '';
+
+      if (!grupo) { return; }
+
+      if (!valor) {
+        homoRecado('mal', 'Elige primero a qué proveedor va el grupo.');
+        if (campo) { campo.focus(); }
+        return;
+      }
+
+      var sinSap = valor.indexOf(SIN_SAP_PREFIJO) === 0;
+      var destino = sinSap ? valor.slice(SIN_SAP_PREFIJO.length) : valor;
+      var nombres = grupo.nombres.map(function(n) { return n.alias; });
+
+      HOMO_OCUPADO = true;
+      setLoading(true, 'Escribiendo las equivalencias');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          HOMO_OCUPADO = false;
+
+          var partes = ['<b>' + esc(res.destino) + '</b> quedó con ' +
+            res.escritos + (res.escritos === 1
+              ? ' nombre escrito' : ' nombres escritos')];
+
+          if (res.yaEstaban) {
+            partes.push(res.yaEstaban + ' ya ' +
+              (res.yaEstaban === 1 ? 'estaba' : 'estaban'));
+          }
+
+          if (res.sinSap) {
+            partes.push('todavía sin SAP: cuando lo creen, pásalo desde ' +
+              '«Agrupados, esperando a SAP»');
+          }
+
+          var recado = partes.join(' · ') + '.';
+
+          if ((res.conflictos || []).length) {
+            recado += ' Quedaron fuera ' + res.conflictos.length + ': ' +
+              res.conflictos.map(function(c) {
+                return '<b>' + esc(c.alias) + '</b>';
+              }).join(', ') +
+              ' (ya apuntan a otro proveedor; corrígelo en la hoja).';
+          }
+
+          homoRecado((res.conflictos || []).length ? 'mal' : 'bien',
+            recado + ' Recargando para rehacer el cruce…');
+
+          cargarTodo();
+        })
+        .withFailureHandler(function(err) {
+          HOMO_OCUPADO = false;
+          setLoading(false);
+          homoRecado('mal', esc(mensaje(err)));
+        })
+        .resolverGrupo(nombres, destino, sinSap);
     }
 
     /**
@@ -12932,6 +13239,16 @@
         pasarGrupoASap(
           pasar.getAttribute('data-homo-pasar'),
           pasar.getAttribute('data-homo-campo')
+        );
+        return;
+      }
+
+      var juntos = ev.target.closest('[data-homo-grupo]');
+
+      if (juntos) {
+        resolverGrupoDesde(
+          juntos.getAttribute('data-homo-grupo'),
+          juntos.getAttribute('data-homo-campo')
         );
       }
     });

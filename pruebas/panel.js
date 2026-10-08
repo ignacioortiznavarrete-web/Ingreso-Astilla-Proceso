@@ -64,10 +64,13 @@ var HOMO_ALCANCE = 'mes';
 var HOMO_SIN_SAP = '__SIN_SAP__';
 var DATA = {};
 
+var SIN_SAP_PREFIJO = '__SIN_SAP__||';
+
 eval([
   'normalizaNombre', 'celdaNombres', 'homoMapa',
   'dibujarHomoMapa', 'homoProvisorios', 'homoTabla',
-  'dibujarDescuadres'
+  'dibujarDescuadres', 'esDelMes', 'homoGrupos', 'sellosDeHoja',
+  'dibujarHomoGrupos'
 ].map(recortar).join('\n'));
 
 // --- Datos como los manda el servidor -------------------------------
@@ -218,6 +221,90 @@ ok(caja('panelDescuadres').hidden === true,
 ok(caja('descuadresNota').innerHTML.indexOf('1</b> caso más') !== -1,
    'pero el de otro mes queda dicho',
    caja('descuadresNota').innerHTML);
+
+/* ---------------------------------------------------------------------
+ * Un proveedor, sus nombres, una decisión.
+ * ------------------------------------------------------------------ */
+function nombre(alias, origen, ultima, extra) {
+  return Object.assign({
+    alias: alias, origen: origen, ultima: ultima || '2026-10-06',
+    sinPar: true, resuelto: alias, metodo: 'Solo en planilla',
+    ts: 10, tsProy: 0, planMes: 0, camiones: 1, camionesProy: 0,
+    dias: 1, score: 0
+  }, extra || {});
+}
+
+DATA.source.homologacion.revision = {
+  proveedoresSap: ['LAMINADORA LOS ANGELES S.A.', 'PROMASA SPA.'],
+  grupos: [
+    {
+      clave: 'SAP||LAMINADORA', destino: 'LAMINADORA LOS ANGELES S.A.',
+      enSap: true, score: 0.735, cuantos: 2, porEscribir: 1,
+      hojas: ['Plan', 'Planilla'], candidatos: [
+        { proveedor: 'LAMINADORA LOS ANGELES S.A.', score: 0.735 },
+        { proveedor: 'PROMASA SPA.', score: 0.31 }
+      ],
+      ts: 33, tsProy: 44, planMes: 900,
+      nombres: [
+        nombre('LAMINADORA ANGELES DEL SUR', 'Planilla', '2026-10-06', {
+          sinPar: false, metodo: 'Coincidencia aproximada',
+          resuelto: 'LAMINADORA LOS ANGELES S.A.', ts: 33
+        }),
+        nombre('LAMINADORA LOS ANGELE', 'Plan y Proyección', '', {
+          ts: 0, tsProy: 44, planMes: 900
+        })
+      ]
+    },
+    {
+      clave: 'SUELTO||AITUE NITENS', destino: '', enSap: false, score: 0,
+      cuantos: 2, porEscribir: 2, hojas: ['Planilla', 'Proyección'],
+      candidatos: [], ts: 30.4, tsProy: 45.6, planMes: 0,
+      nombres: [
+        nombre('Aitue nitens', 'Planilla', '2026-10-06', { ts: 30.4 }),
+        nombre('AITUE NITENS SPA', 'Proyección', '', { ts: 0, tsProy: 45.6 })
+      ]
+    }
+  ]
+};
+
+dibujarHomoGrupos(DATA.source.homologacion.revision);
+
+const gr = caja('homoGrupos').innerHTML;
+
+ok((gr.match(/data-homo-grupo=/g) || []).length === 2,
+   'una fila por proveedor, no por nombre: cuatro nombres, dos botones',
+   (gr.match(/data-homo-grupo=/g) || []).length);
+ok(gr.indexOf('LAMINADORA LOS ANGELES S.A.') !== -1 &&
+   gr.indexOf('se parece 74%') !== -1,
+   'con el proveedor de SAP propuesto y cuánto se parece',
+   gr.slice(0, 400));
+ok(gr.indexOf('1 nombre por escribir') !== -1,
+   'y cuántos nombres hay que escribir de verdad');
+ok(gr.indexOf('Todavía no está en SAP') !== -1,
+   'el grupo sin ancla se nombra como lo que es');
+ok(caja('gruposNota').innerHTML.indexOf('1</b> no tiene') !== -1,
+   'y se dice cuántos están así', caja('gruposNota').innerHTML);
+ok(gr.indexOf('>Asignar los 2<') !== -1,
+   'un botón que asigna el grupo entero');
+ok(gr.indexOf('sello-hoja">Plan y Proyección') === -1 &&
+   gr.indexOf('>Plan</span>') !== -1 && gr.indexOf('>Proyección</span>') !== -1,
+   'cada nombre con sus hojas, una por sello');
+ok(gr.indexOf('value="LAMINADORA LOS ANGELES S.A." selected') !== -1,
+   'si el parecido alcanza para cruzar solo, viene elegido');
+ok(gr.indexOf('value="__SIN_SAP__||Aitue nitens"') !== -1,
+   'y siempre está la opción de dejar uno de sus nombres como proveedor',
+   gr.slice(gr.indexOf('No está en SAP todavía'), gr.indexOf('No está en SAP todavía') + 200));
+
+// El alcance del mes recorta los nombres y recalcula las cifras.
+HOMO_ALCANCE = 'mes';
+DATA.source.homologacion.revision.grupos[0].nombres[1] =
+  nombre('LAMINADORA VIEJA', 'Planilla', '2026-08-03', { ts: 500 });
+
+const recortado = homoGrupos()[0];
+
+ok(recortado.cuantos === 1 && recortado.ts === 33,
+   'un nombre de otro mes sale del grupo, y las cifras se rehacen',
+   [recortado.cuantos, recortado.ts]);
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

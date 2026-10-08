@@ -2696,6 +2696,9 @@ function buildHomologacionPendiente_(
     // un nombre de la planilla y de ella cuelgan sus variantes. El día
     // que SAP cree el proveedor, se reapunta la cabeza y el grupo se va
     // con ella.
+    // Los mismos nombres, pero juntos por el proveedor al que
+    // apuntan: una sola decisión para las tres hojas.
+    grupos: agruparPendientes_(lista, proveedoresSap),
     provisorios: gruposProvisorios_(
       proveedoresSap,
       homologacion,
@@ -2704,6 +2707,231 @@ function buildHomologacionPendiente_(
     conflictos: homologacion.conflictos || [],
     huerfanos: homologacion.pendientes || []
   };
+}
+
+
+/**
+ * Los nombres sueltos, juntos por el proveedor al que apuntan.
+ *
+ * Acá está la parte difícil de la homologación, y no es el cruce: es
+ * que el mismo proveedor llega escrito por TRES manos distintas —la
+ * planilla del reservador, Proyeccion y el Plan— y la lista de
+ * pendientes los muestra como tres problemas separados. Resolver uno
+ * no resuelve los otros dos, así que hay que buscar el mismo
+ * proveedor tres veces y acertarle tres veces al mismo nombre de SAP.
+ *
+ * Esto da vuelta la lista: una fila por PROVEEDOR, con todos sus
+ * nombres colgando y una sola decisión para los tres.
+ *
+ * El ancla es SAP siempre que se pueda:
+ *
+ *   1. Si el nombre ya cruza por parecido, el grupo es ese proveedor
+ *      de SAP. Confirmarlo lo deja fijo.
+ *   2. Si no cruza, pero se parece a alguno de SAP lo bastante como
+ *      para proponerlo —0,5, bajo el umbral que basta para cruzar
+ *      solo—, el grupo es ese proveedor y el panel muestra cuánto se
+ *      parece. La decisión sigue siendo de quien mira.
+ *   3. Y si no hay ningún SAP al que parecerse, los nombres se juntan
+ *      entre ellos por cómo se escriben. Ese grupo no tiene a quién
+ *      asignarse todavía: es el que necesita la otra opción, la de
+ *      agregarlo con su propio nombre hasta que SAP lo cree.
+ */
+function agruparPendientes_(lista, proveedoresSap) {
+  // Para PROPONER un ancla basta un parecido mediano. Para cruzar
+  // solo, en cambio, hace falta CONFIG.FUZZY_THRESHOLD: una cosa es
+  // sugerirle algo a quien mira y otra decidirlo sin preguntar.
+  const PROPONER = 0.5;
+
+  const grupos = {};
+
+  function grupo(clave, destino, enSap, score) {
+    if (!grupos[clave]) {
+      grupos[clave] = {
+        clave: clave,
+        destino: destino,
+        enSap: enSap,
+        score: score || 0,
+        nombres: [],
+        origenes: {},
+        candidatos: [],
+        ts: 0,
+        tsProy: 0,
+        planMes: 0,
+        camiones: 0,
+        camionesProy: 0
+      };
+    }
+
+    const g = grupos[clave];
+
+    // Gana el mejor parecido del grupo: si uno de los nombres cruza
+    // exacto, es ese el que manda sobre la propuesta de otro.
+    if ((score || 0) > g.score) { g.score = score || 0; }
+
+    return g;
+  }
+
+  (lista || []).forEach(function(item) {
+    const candidatos = item.candidatos || [];
+    const mejor = candidatos.length ? candidatos[0] : null;
+
+    let destino = '';
+    let enSap = false;
+    let score = 0;
+
+    if (!item.sinPar) {
+      // Ya cruza por parecido: su destino está decidido.
+      destino = item.resuelto;
+      enSap = true;
+      score = mejor && normalizeKey_(mejor.proveedor) ===
+        normalizeKey_(item.resuelto) ? mejor.score : 1;
+    } else if (mejor && mejor.score >= PROPONER) {
+      destino = mejor.proveedor;
+      enSap = true;
+      score = mejor.score;
+    }
+
+    // Sin ancla en SAP, se juntan entre ellos por cómo se escriben.
+    const clave = enSap
+      ? 'SAP||' + normalizeKey_(destino)
+      : 'SUELTO||' + (proveedorComparable_(item.alias) ||
+          normalizeKey_(item.alias));
+
+    const g = grupo(clave, destino, enSap, score);
+
+    g.nombres.push({
+      alias: item.alias,
+      origen: item.origen,
+      metodo: item.metodo,
+      sinPar: item.sinPar,
+      resuelto: item.resuelto,
+      ts: item.ts,
+      tsProy: item.tsProy,
+      planMes: item.planMes,
+      camiones: item.camiones,
+      camionesProy: item.camionesProy,
+      dias: item.dias,
+      ultima: item.ultima,
+      score: candidatos.length ? candidatos[0].score : 0
+    });
+
+    String(item.origen || '').split(' y ').forEach(function(hoja) {
+      if (hoja) { g.origenes[hoja] = true; }
+    });
+
+    g.ts += item.ts || 0;
+    g.tsProy += item.tsProy || 0;
+    g.planMes += item.planMes || 0;
+    g.camiones += item.camiones || 0;
+    g.camionesProy += item.camionesProy || 0;
+
+    // Los candidatos del grupo son los de todos sus nombres, con el
+    // mejor parecido de cada uno: el nombre más completo suele
+    // encontrar al proveedor que el corto no encuentra.
+    candidatos.forEach(function(c) {
+      const ya = g.candidatos.filter(function(x) {
+        return normalizeKey_(x.proveedor) === normalizeKey_(c.proveedor);
+      })[0];
+
+      if (!ya) {
+        g.candidatos.push({ proveedor: c.proveedor, score: c.score });
+      } else if (c.score > ya.score) {
+        ya.score = c.score;
+      }
+    });
+  });
+
+  return Object.keys(grupos).map(function(clave) {
+    const g = grupos[clave];
+
+    g.candidatos.sort(function(a, b) { return b.score - a.score; });
+    g.candidatos = g.candidatos.slice(0, 5);
+    g.hojas = Object.keys(g.origenes).sort();
+    g.cuantos = g.nombres.length;
+
+    // Lo que hay que escribir si se acepta la propuesta: los nombres
+    // que todavía no apuntan ahí. Un grupo donde todos ya cruzan es
+    // una confirmación, no una corrección, y conviene decirlo.
+    g.porEscribir = g.nombres.filter(function(n) {
+      return n.sinPar ||
+        normalizeKey_(n.resuelto) !== normalizeKey_(g.destino);
+    }).length;
+
+    g.ts = round_(g.ts, 2);
+    g.tsProy = round_(g.tsProy, 2);
+    g.planMes = round_(g.planMes, 2);
+    g.score = round_(g.score, 3);
+
+    delete g.origenes;
+
+    return g;
+  }).sort(function(a, b) {
+    // Primero los que mueven más, y entre iguales los que juntan más
+    // nombres: ahí una sola decisión arregla más cosas.
+    return (b.ts + b.tsProy + b.planMes) -
+      (a.ts + a.tsProy + a.planMes) ||
+      b.cuantos - a.cuantos;
+  });
+}
+
+/**
+ * Asigna de una vez todos los nombres de un grupo.
+ *
+ * Es la operación que faltaba. Hasta ahora había que asignar nombre
+ * por nombre, y como el mismo proveedor llega escrito distinto en la
+ * planilla, en Proyeccion y en el Plan, resolver un proveedor eran
+ * tres búsquedas y tres aciertos al mismo nombre de SAP.
+ *
+ * Con `sinSap` el destino no es un proveedor de SAP sino uno de los
+ * propios nombres del grupo: se agrega primero como proveedor —ese es
+ * el caso de "todavía no lo crean en SAP"— y los demás se le cuelgan.
+ *
+ * No se cae por uno: el que ya apunta a otro proveedor se informa y
+ * se sigue con el resto. Abortar todo por un nombre dejaría el grupo
+ * a medio escribir y sin decir cuál fue.
+ */
+function resolverGrupo(nombres, destino, sinSap) {
+  const lista = (nombres || []).map(text_).filter(function(x) { return x; });
+  const cabeza = text_(destino);
+
+  if (!cabeza) {
+    throw new Error('Falta el proveedor al que asignar el grupo.');
+  }
+
+  if (!lista.length) {
+    throw new Error('No hay nombres que asignar.');
+  }
+
+  const resultado = {
+    destino: cabeza,
+    sinSap: !!sinSap,
+    escritos: 0,
+    yaEstaban: 0,
+    conflictos: []
+  };
+
+  if (sinSap) {
+    const puesto = declararProveedor(cabeza);
+
+    if (puesto.escrito) { resultado.escritos++; }
+  }
+
+  lista.forEach(function(alias) {
+    if (normalizeKey_(alias) === normalizeKey_(cabeza)) { return; }
+
+    try {
+      const r = asignarProveedor(alias, cabeza);
+
+      if (r.escrito) { resultado.escritos++; } else { resultado.yaEstaban++; }
+    } catch (error) {
+      resultado.conflictos.push({
+        alias: alias,
+        motivo: String(error && error.message ? error.message : error)
+      });
+    }
+  });
+
+  return resultado;
 }
 
 /**
