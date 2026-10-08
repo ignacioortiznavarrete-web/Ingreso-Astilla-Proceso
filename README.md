@@ -755,16 +755,24 @@ Solo habla de suministro. Un proveedor sin precio homologado no genera
 una conversación sino una fila que falta en el Plan o un alias que falta
 en Proveedores: eso se cuenta al pie del panel y se arregla en la hoja.
 
-## Aviso diario de proveedores sin despachar
+## Aviso diario de proveedores del plan en riesgo
 
-Un correo cada mañana a `francisco.correa@masisa.com` y
-`jaime.rojas@masisa.com` con los proveedores que tienen plan del mes y
-llevan 3, 5 o 7 días hábiles sin un ingreso, en tres tablas.
+Un correo **todos los días hábiles a las 9:00** a
+`francisco.correa@masisa.com` y `jaime.rojas@masisa.com` con los
+proveedores que **tienen plan este mes** y están en riesgo de no
+cumplirlo, en tres grupos excluyentes:
+
+| Grupo | Quién entra |
+|---|---|
+| **No han entregado este mes** | Plan comprometido y ni un ingreso suyo en el mes |
+| **Callados** | Entregaron, pero llevan 3 días hábiles o más sin un ingreso nuevo |
+| **A la baja** | Entregando y al día, pero por debajo del ritmo que pide su plan a esta altura del mes, o de lo que ellos mismos entregaban |
 
 **Vive en un proyecto de Apps Script aparte**, en `alertas/`, y no
 necesita que nadie abra la web: el disparador horario corre solo con
-la autorización de quien lo instaló. Cómo instalarlo y por qué toma
-las decisiones que toma, en [`alertas/README.md`](alertas/README.md).
+la autorización de quien lo instaló. Cómo instalarlo, cuándo se dice
+que alguien viene «a la baja» y por qué toma las decisiones que toma,
+en [`alertas/README.md`](alertas/README.md).
 
 ## Instalación
 

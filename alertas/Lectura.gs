@@ -213,16 +213,31 @@ function desdeClave_() {
   return d.getUTCFullYear() + '-' + pad2_(d.getUTCMonth() + 1) + '-01';
 }
 
-/**
- * Días hábiles transcurridos DESPUÉS de una fecha y hasta hoy. Si
- * despachó hoy son cero; si despachó el viernes, el lunes es uno.
- *
- * Es la razón de contar en hábiles y no corridos: con días corridos,
- * quien despachó el viernes aparecería todos los lunes con tres días
- * de silencio sin que hubiera pasado nada.
- */
-function diasHabilesDesde_(desde, hasta) {
-  if (!desde || desde >= hasta) { return 0; }
+/** El día siguiente de una clave 'yyyy-MM-dd'. */
+function diaSiguiente_(clave) {
+  const p = String(clave).split('-');
+  const d = new Date(
+    Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))
+  );
+
+  d.setUTCDate(d.getUTCDate() + 1);
+
+  return d.getUTCFullYear() + '-' +
+    pad2_(d.getUTCMonth() + 1) + '-' + pad2_(d.getUTCDate());
+}
+
+/** Último día de un mes 'yyyy-MM', como clave. */
+function finDeMes_(mes) {
+  const p = String(mes).split('-');
+  const d = new Date(Date.UTC(Number(p[0]), Number(p[1]), 0));
+
+  return d.getUTCFullYear() + '-' +
+    pad2_(d.getUTCMonth() + 1) + '-' + pad2_(d.getUTCDate());
+}
+
+/** Días hábiles entre dos fechas, las dos incluidas. */
+function diasHabilesEntre_(desde, hasta) {
+  if (!desde || !hasta || desde > hasta) { return 0; }
 
   const feriados = {};
 
@@ -235,10 +250,7 @@ function diasHabilesDesde_(desde, hasta) {
 
   let habiles = 0;
 
-  // Se avanza un día y se cuenta, para no incluir el día del despacho.
   for (let i = 0; i < 400; i++) {
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-
     const clave = cursor.getUTCFullYear() + '-' +
       pad2_(cursor.getUTCMonth() + 1) + '-' + pad2_(cursor.getUTCDate());
 
@@ -250,9 +262,50 @@ function diasHabilesDesde_(desde, hasta) {
     ) {
       habiles++;
     }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   return habiles;
+}
+
+/**
+ * Días hábiles transcurridos DESPUÉS de una fecha y hasta hoy. Si
+ * despachó hoy son cero; si despachó el viernes, el lunes es uno.
+ *
+ * Es la razón de contar en hábiles y no corridos: con días corridos,
+ * quien despachó el viernes aparecería todos los lunes con tres días
+ * de silencio sin que hubiera pasado nada.
+ */
+function diasHabilesDesde_(desde, hasta) {
+  if (!desde || desde >= hasta) { return 0; }
+
+  // El día del despacho no cuenta: se empieza al día siguiente.
+  return diasHabilesEntre_(diaSiguiente_(desde), hasta);
+}
+
+/**
+ * Los meses de la ventana, del más viejo al más nuevo: 'yyyy-MM'.
+ * Sirve para el ritmo propio, que compara el mes en curso contra los
+ * cerrados.
+ */
+function mesesDeLaVentana_() {
+  const p = desdeClave_().split('-');
+  const cursor = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, 1));
+  const hasta = mesActual_();
+  const meses = [];
+
+  for (let i = 0; i < 48; i++) {
+    const mes = cursor.getUTCFullYear() + '-' +
+      pad2_(cursor.getUTCMonth() + 1);
+
+    if (mes > hasta) { break; }
+
+    meses.push(mes);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+
+  return meses;
 }
 
 function esDiaHabil_(clave) {
@@ -540,20 +593,32 @@ function leerNombresSap_(planilla) {
 }
 
 /**
- * Último día con despacho por proveedor, mirando las dos fuentes.
+ * Lo que despachó cada proveedor en la ventana, mes por mes, y cuándo
+ * fue la última vez.
  *
- * Para esta pregunta no hace falta la fusión día por día del panel:
- * la fecha más alta de Ingresos o de la planilla ES el último
- * despacho conocido, venga de donde venga.
+ * Son dos preguntas con reglas distintas, y conviene no mezclarlas:
+ *
+ *   - **Cuándo despachó por última vez.** Basta la fecha más alta de
+ *     las dos fuentes, venga de donde venga. No hace falta la fusión
+ *     día por día del panel.
+ *   - **Cuánto entró.** Acá sumar las dos fuentes está MAL: el mismo
+ *     camión está en SAP y en la planilla del reservador, y sumarlos
+ *     lo cuenta dos veces. Por día y por proveedor manda SAP, y la
+ *     planilla solo tapa el día que SAP todavía no tiene cargado. Es
+ *     la regla del panel, y acá importa porque de este número salen el
+ *     ritmo del mes y la tendencia: una cifra inflada diría que un
+ *     proveedor va al día cuando viene cayendo.
  */
-function leerUltimosDespachos_(planilla, ctx) {
+function leerDespachos_(planilla, ctx) {
   const desde = desdeClave_();
   const mes = mesActual_();
   const porProveedor = {};
 
   function anotar(clave, fecha, ts, fuente) {
     if (!porProveedor[clave]) {
-      porProveedor[clave] = { ultimo: '', fuente: '', mes: 0 };
+      porProveedor[clave] = {
+        ultimo: '', fuente: '', porFecha: {}, porMes: {}, mes: 0
+      };
     }
 
     const item = porProveedor[clave];
@@ -563,7 +628,15 @@ function leerUltimosDespachos_(planilla, ctx) {
       item.fuente = fuente;
     }
 
-    if (fecha.slice(0, 7) === mes) { item.mes += ts; }
+    if (!item.porFecha[fecha]) {
+      item.porFecha[fecha] = { sap: 0, planilla: 0 };
+    }
+
+    if (fuente === 'SAP') {
+      item.porFecha[fecha].sap += ts;
+    } else {
+      item.porFecha[fecha].planilla += ts;
+    }
   }
 
   // --- Ingresos (SAP) ---
@@ -659,6 +732,25 @@ function leerUltimosDespachos_(planilla, ctx) {
       }
     }
   }
+
+  // Los días se colapsan a meses con la precedencia: donde SAP tiene
+  // TS, manda SAP; donde no tiene, entra la planilla.
+  Object.keys(porProveedor).forEach(function(clave) {
+    const item = porProveedor[clave];
+
+    Object.keys(item.porFecha).forEach(function(fecha) {
+      const dia = item.porFecha[fecha];
+      const ts = dia.sap > 0 ? dia.sap : dia.planilla;
+      const suMes = fecha.slice(0, 7);
+
+      item.porMes[suMes] = (item.porMes[suMes] || 0) + ts;
+    });
+
+    item.mes = item.porMes[mes] || 0;
+
+    // Ya no hace falta y abulta el registro de probarSinEnviar.
+    delete item.porFecha;
+  });
 
   return porProveedor;
 }

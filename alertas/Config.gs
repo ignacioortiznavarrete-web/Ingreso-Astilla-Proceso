@@ -41,21 +41,49 @@ const CONFIG = Object.freeze({
     'jaime.rojas@masisa.com'
   ]),
 
-  ASUNTO: 'Astilla verde · proveedores sin despachar',
+  ASUNTO: 'Astilla verde · proveedores del plan en riesgo',
 
-  // Los tramos son excluyentes a propósito: un proveedor aparece en
-  // una sola tabla, la de su antigüedad. Si fueran acumulativos, el
-  // que lleva ocho días saldría en las tres y el correo diría tres
-  // veces lo mismo. `hasta: 0` significa "y de ahí para arriba".
+  // Los tramos de silencio. Son excluyentes: un proveedor lleva los
+  // días que lleva, y su fila muestra UN tramo, el suyo. `hasta: 0`
+  // significa "y de ahí para arriba".
   TRAMOS: Object.freeze([
     Object.freeze({ desde: 3, hasta: 4 }),
     Object.freeze({ desde: 5, hasta: 6 }),
     Object.freeze({ desde: 7, hasta: 0 })
   ]),
 
-  // Hora local del envío. El disparador diario corre dentro de la
-  // franja de una hora que empieza acá.
-  HORA: 7,
+  /**
+   * Cuándo se dice que un proveedor viene "a la baja".
+   *
+   * Dos señales, y basta una. Son distintas a propósito: la primera
+   * mira el compromiso —va atrasado contra SU plan—, la segunda mira
+   * al proveedor contra sí mismo —entrega menos que antes, tenga el
+   * plan que tenga—. Un proveedor puede ir bien contra un plan chico
+   * y haberse caído a la mitad; eso igual hay que verlo.
+   */
+  BAJA: Object.freeze({
+    // Fracción del ritmo que pide el plan bajo la cual se avisa. 0,85
+    // es un 15% de atraso: menos que eso lo mueve un camión.
+    RITMO_PLAN: 0.85,
+
+    // Caída respecto de su propio ritmo diario de los meses
+    // anteriores. 0,25 es "entrega un cuarto menos por día".
+    CAIDA_PROPIA: 0.25,
+
+    // Meses cerrados que forman ese promedio.
+    MESES_BASE: 3,
+
+    // Días hábiles que tiene que llevar el mes para hablar de ritmo.
+    // El día 1 nadie ha entregado nada y el prorrateo diría que TODOS
+    // vienen a la baja: un aviso que el primer día del mes acusa a
+    // todo el mundo no se vuelve a leer.
+    MINIMO_DIAS: 4
+  }),
+
+  // Hora local del envío. El disparador corre cerca de esta hora,
+  // con el margen de ±15 minutos que da Apps Script.
+  HORA: 9,
+  MINUTO: 0,
 
   // Sábado y domingo el número no cambia —no son días hábiles— y el
   // correo saldría idéntico al del viernes. Se salta.

@@ -62,7 +62,9 @@ function cargar(hojas, hoy) {
       newTrigger: f => {
         const t = { f };
         const api = {
-          timeBased: () => api, everyDays: () => api, atHour: h => { t.h = h; return api; },
+          timeBased: () => api, everyDays: () => api,
+          atHour: h => { t.h = h; return api; },
+          nearMinute: m => { t.m = m; return api; },
           inTimezone: () => api, create: () => { disparadores.push(t); return t; }
         };
         return api;

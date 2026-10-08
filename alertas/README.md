@@ -26,29 +26,65 @@ corporativa que corresponde, no desde una personal.
    igual al ejecutar.)
 4. Confirmar `SPREADSHEET_ID` y `PARA` en `Config.gs`.
 5. Ejecutar **`probarSinEnviar`** y mirar el registro: dice cuántos
-   proveedores encontró en el Plan y cuáles no cruzan con ningún
-   ingreso. Es la forma de detectar un alias que falta antes de que
-   salga un correo diciendo que alguien no despacha cuando sí lo hizo.
+   proveedores encontró en el Plan, en qué día hábil del mes va y
+   cuáles no cruzan con ningún ingreso. Es la forma de detectar un
+   alias que falta antes de que salga un correo diciendo que alguien no
+   despacha cuando sí lo hizo.
 6. Ejecutar **`enviarAhora`** para recibir uno de prueba.
 7. Ejecutar **`instalarAvisoDiario`**. Listo.
 
 Para apagarlo: `eliminarAvisoDiario`.
 
+## Cuándo sale
+
+**Todos los días hábiles a las 9:00**, con el margen de ±15 minutos que
+es lo más exacto que ofrece Apps Script (`HORA` y `MINUTO` en
+`Config.gs`).
+
+Sábado y domingo **no** sale (`SOLO_HABILES`): no son días hábiles, el
+número es idéntico al del viernes y el correo sería el mismo tres veces.
+Si se quiere igual, es cambiar esa línea a `false`.
+
 ## Qué manda
 
-Tres tablas de proveedores con plan del mes y sin ingresos recientes:
+Los proveedores que **tienen plan este mes** y están en riesgo de no
+cumplirlo, en tres grupos **excluyentes** y en orden de gravedad:
 
-| Tabla | Quién entra |
-|---|---|
-| 3 a 4 días hábiles | Se apagaron esta semana |
-| 5 a 6 días hábiles | Ya es un patrón |
-| 7 días hábiles o más | Incluye a los que no registran ningún ingreso |
+| Grupo | Quién entra | Orden |
+|---|---|---|
+| **No han entregado este mes** | Plan comprometido y ni un ingreso suyo en el mes | Por plan: lo que está en juego |
+| **Callados** | Entregaron, pero llevan 3 días hábiles o más sin un ingreso nuevo | Por días: el más callado primero |
+| **A la baja** | Entregando y al día, pero el ritmo viene cayendo | Por TS de atraso |
 
-Cuatro decisiones, todas en `Config.gs`:
+Excluyentes quiere decir que un proveedor aparece **una** vez: el que no
+ha entregado nada también lleva días callado y también viene a la baja,
+y decirlo tres veces no agrega nada.
 
-- **Los tramos son excluyentes.** Un proveedor aparece en una sola
-  tabla. Acumulativos, el que lleva ocho días saldría en las tres y el
-  correo diría tres veces lo mismo.
+### Cuándo se dice que alguien viene «a la baja»
+
+Dos señales, y basta una. Son distintas a propósito:
+
+| Señal | Qué compara | Umbral |
+|---|---|---|
+| **Contra su plan** | Lo entregado contra lo que el plan pide a esta altura del mes, prorrateado por días hábiles | `RITMO_PLAN`: bajo el 85% |
+| **Contra sí mismo** | Sus TS por día hábil de este mes contra las de los meses cerrados anteriores | `CAIDA_PROPIA`: 25% menos |
+
+Un proveedor puede ir bien contra un plan chico y haberse caído a la
+mitad; eso igual hay que verlo. Por eso la barra de «ritmo vs plan» se
+pinta **verde** cuando ese eje está sano aunque la fila esté en el
+grupo: el color dice cómo va contra el plan, y el texto debajo del
+nombre dice por qué entró.
+
+**Hasta el cuarto día hábil del mes no se habla de ritmo**
+(`MINIMO_DIAS`). El día 1 nadie ha entregado nada y el prorrateo
+acusaría a todo el mundo; un aviso que el primer día del mes reclama a
+los veinte proveedores no se vuelve a leer. Hasta entonces manda el
+silencio, que no depende del mes. Por eso «no han entregado este mes»
+también espera: el único que entra siempre es el que **nunca** despachó
+en toda la ventana.
+
+### Lo demás que decide el correo
+
 - **Los días son hábiles, no corridos.** Con días corridos, quien
   despachó el viernes aparecería todos los lunes con tres días de
   silencio sin que hubiera pasado nada.
@@ -57,11 +93,31 @@ Cuatro decisiones, todas en `Config.gs`:
 - **Solo entran los que tienen plan este mes.** Una fila del Plan con
   la celda del mes en blanco no compromete nada, así que ese proveedor
   no aparece por mucho que lleve semanas sin despachar.
-- **Sábado y domingo no sale** (`SOLO_HABILES`), porque el número no
-  cambia y el correo sería idéntico al del viernes.
+- **«Entregado» no suma las dos fuentes.** Por día y por proveedor manda
+  SAP, y la planilla solo tapa el día que SAP todavía no cargó. Sumarlas
+  contaba dos veces el mismo camión, y de ese número salen el ritmo y la
+  tendencia: inflado, decía que un proveedor va al día cuando viene
+  cayendo.
 
-Si no hay nadie atrasado, el correo igual sale diciéndolo: un correo
+Si no hay nadie en riesgo, el correo igual sale diciéndolo: un correo
 que no llega no distingue entre «todo al día» y «el script falló».
+
+## Cómo está hecho el correo
+
+Todo en **tablas**, con estilos en línea y con los atributos de tabla
+(`bgcolor`, `width`, `align`) además de las propiedades CSS: Outlook
+descarta las hojas de estilo y renderiza con Word. Nada de flex, grid,
+posicionamiento ni variables. Las barras de avance también son tablas,
+que es la única forma de que se dibujen igual en todas partes.
+
+Las dos familias son las que existen en cualquier cliente —Georgia para
+títulos y cifras, Arial para el texto—, que es el mismo reparto que hace
+el panel con Fraunces e Inter. Los colores son los suyos: verde lo real,
+madera lo que avisa, pizarra lo que se mira, ladrillo el riesgo.
+
+Va además una **versión en texto**. No es un adorno: hay clientes y
+relojes que muestran esa, y un correo sin alternativa de texto puntúa
+peor en los filtros de correo no deseado.
 
 ## Qué lee, y qué no
 
@@ -80,11 +136,22 @@ daba por callados a los proveedores que la planilla escribe distinto
 —`FATIMA` por `FORESTAL FATIMA LTDA.`— y que el panel sí cruza. Medido
 sobre la planilla real: cinco de ochenta y tres nombres.
 
-**No** usa la fusión día por día que hace el panel. Para «cuándo
-despachó por última vez» basta la fecha más alta de las dos fuentes,
-venga de donde venga; la regla de fusión resuelve otra cosa —cuánto
-sumar cada día sin contar dos veces— que aquí no se pregunta. Es menos
-código y una cosa menos que se puede desincronizar.
+Son **dos preguntas con reglas distintas**, y conviene no mezclarlas:
+
+- **Cuándo despachó por última vez.** Basta la fecha más alta de las dos
+  fuentes, venga de donde venga. No hace falta la fusión día por día del
+  panel: la pregunta es otra.
+- **Cuánto entró.** Acá sumar las dos fuentes está **mal**: el mismo
+  camión está en SAP y en la planilla, y sumarlos lo cuenta dos veces.
+  Por día y por proveedor manda SAP, y la planilla solo tapa el día que
+  SAP todavía no tiene cargado. Es la regla del panel, y acá importa
+  porque de este número salen el ritmo y la tendencia.
+
+Esto último era un error: el correo sumaba las dos fuentes y «ingresado
+en el mes» salía inflado para todo proveedor cuyo día estuviera en las
+dos. Mientras la columna era solo informativa se notaba poco; con el
+ritmo encima, habría dicho que un proveedor va al día cuando viene
+cayendo.
 
 Lo que **sí** está duplicado del dashboard son constantes y funciones
 puras: códigos de material, días hábiles y la normalización de nombres
@@ -112,8 +179,12 @@ node pruebas/feriados.js
 Corre los `.gs` en node con hojas falsas que imitan la forma real
 (fechas como `Date`, cantidades con coma decimal, `Suministro`
 arrastrado, filas `TOTAL`, filas con `Estado: ERROR`, materiales que
-no son astilla). Cubre el cruce por alias, los tres tramos, el salto
-del sábado, el caso sin atrasados y el Plan sin columna del mes.
+no son astilla). Cubre el cruce por alias, los tres grupos y que sean
+excluyentes, las dos señales de «a la baja» por separado, el día que
+está en SAP y en la planilla a la vez, el primer día del mes sin
+acusar a nadie, el salto del sábado, el caso sin nadie en riesgo y el
+Plan sin columna del mes. Deja el correo armado en
+`pruebas/correo.html` para poder mirarlo en el navegador.
 `Config.gs` se carga **antes** que `Feriados.gs` a propósito: es el
 orden que reventaría si alguien volviera a calcular los feriados al
 cargar el archivo en vez de pedirlos cuando se usan.
