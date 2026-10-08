@@ -536,11 +536,19 @@ porque es una equivalencia que alguien tuvo que resolver y que se rompe
 si alguien la borra. Debajo del proveedor se dice en qué hoja falta.
 
 El selector filtra: los que están en las tres, a los que les falta una,
-los que tienen algún nombre distinto, y los que **ninguna hoja nombra**
-—esos están en SAP y nadie los escribe—.
+los que tienen algún nombre distinto, los que **ninguna hoja nombra**
+—esos están en SAP y nadie los escribe— y los que **todavía no están en
+SAP**.
 
-Un proveedor que no está en SAP **no tiene fila acá**: no hay a qué
-anclarlo. Esos van a «Sin par en SAP», que es donde se asignan.
+Un proveedor que todavía no está en SAP **también lleva su fila**, con
+una raya madera al costado y un «todavía no está en SAP» debajo del
+nombre. Mientras SAP no lo tenga, su propio nombre hace de ancla:
+cuenta igual y agrupa sus tres hojas igual, y lo único que le falta es
+el nombre definitivo. Dejarlo fuera era dejar la casilla vacía justo en
+la tabla donde se mira si un proveedor está completo.
+
+Los nombres que no cruzan con **nada** siguen yendo a «Sin par en SAP»,
+que es donde se asignan o se agregan.
 
 La vista separa dos casos, que no son lo mismo:
 
@@ -574,11 +582,49 @@ Quedaban tres filas sueltas y tres proveedores inventados en el panel.
 
 | | Qué se hace | Dónde |
 |---|---|---|
-| **Primer tiempo** | Se elige uno de los nombres de la planilla como **cabeza** y los demás cuelgan de él | «Sin par en SAP» → *Todavía no está en SAP: agrupar bajo…* |
+| **Primer tiempo** | **Agregarlo con su propio nombre**, aunque SAP no lo tenga | «Sin par en SAP» → *No está en SAP todavía* |
+| | Y si la planilla ya lo escribe de varias formas, elegir una como **cabeza** y colgar las demás | «Sin par en SAP» → *agrupar bajo…* |
 | **Segundo tiempo** | El día que SAP lo crea, se elige el nombre real y **el grupo entero se va con él** | «Agrupados, esperando a SAP» |
 
 El primer tiempo ya sirve de algo aunque SAP no sepa del proveedor: el
 panel cuenta **uno** en vez de tres, y su volumen queda junto.
+
+#### Agregarlo aunque SAP no lo tenga
+
+SAP no carga a un proveedor nuevo el mismo día que empieza a despachar:
+pasan días, a veces semanas. Mientras tanto el selector no tenía nada
+que ofrecer —solo lista proveedores de SAP—, así que el nombre se
+quedaba sin asignar: contaba como un proveedor inventado más, su plan no
+tenía contra qué compararse y **la casilla quedaba vacía**.
+
+«Agregarlo así, con este mismo nombre» lo escribe en la hoja
+`Proveedores` como cabeza de su propio grupo, con la nota de que falta
+SAP. Desde ese momento:
+
+- cruza por la hoja, que va **antes** que el parecido;
+- sus camiones caen todos sobre un mismo proveedor;
+- lleva su fila en el mapa, con sus tres hojas, y aparece en
+  «Agrupados, esperando a SAP» con lo que de verdad mueve —entregado,
+  comprometido y plan del mes—, no en cero;
+- **y sus otras formas de escribirse llegan solas.** Esto último es lo
+  que lo hace rendir: el parecido ahora busca entre los proveedores de
+  SAP **y** los agregados a mano, así que `AITUE NITENS` en el Plan y
+  `Aitue nitens` en la planilla caen sobre `AITUE NITENS SPA` sin que
+  nadie los escriba uno por uno. Antes había que homologar a mano cada
+  forma de un proveedor que ya estaba resuelto.
+
+Cuando dos candidatos empatan —`MADEEX` escrito en la hoja y
+`MADEEX S.A.` en SAP son el mismo nombre comparable— **gana el de
+SAP**: es el ancla de verdad.
+
+El día que SAP lo cree, «Pasar a SAP» reapunta la cabeza, se lleva el
+grupo entero y **borra la nota**, que deja de ser verdad en ese mismo
+momento. Una nota vieja que dice lo contrario de su fila confunde más
+que no tener nota.
+
+Un nombre que ya cuelga de otro proveedor **no se puede agregar
+aparte**: partiría en dos lo que alguien juntó a propósito. El panel
+dice de quién cuelga y manda a corregirlo en la hoja.
 
 El segundo no obliga a reasignar alias por alias. `reasignarProveedor`
 reapunta la cabeza y, como los alias cuelgan de ella por arrastre, se

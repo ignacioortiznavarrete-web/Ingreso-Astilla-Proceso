@@ -1,8 +1,8 @@
 # Pruebas del panel
 
 **Esto NO va a Apps Script.** Ninguno de estos archivos se pega en el
-editor. Son `.js` y corren en **node**, en el computador, contra el
-código de `Codigo.gs` leído como texto.
+editor. Son `.js` y corren en **node**, en el computador, contra
+`Codigo.gs` e `Index.html` leídos como texto.
 
 Al proyecto de Apps Script del panel suben **tres** archivos y nada más:
 
@@ -20,14 +20,20 @@ puede subirlos ni por error.
 ```
 node pruebas/gmail.js
 node pruebas/planilla.js
+node pruebas/homologacion.js
+node pruebas/panel.js
 ```
 
 | Archivo | Qué cuida |
 |---|---|
 | `gmail.js` | Que la búsqueda de Gmail no pierda un correo que la regla del asunto acepta |
 | `planilla.js` | Que la tabla se lea como venga: con despachos, en cero y sin la fila de encabezados |
+| `homologacion.js` | Los dos tiempos: agregar el proveedor que SAP no tiene y pasarlo a SAP cuando lo creen |
+| `panel.js` | Que la pestaña Homologación dibuje lo que el servidor le manda |
 
-Las dos leen `Codigo.gs` y recortan de ahí las funciones que necesitan,
-así que prueban el código de verdad y no una copia.
+Las tres primeras leen `Codigo.gs` y `panel.js` lee `Index.html`;
+todas recortan de ahí las funciones que necesitan, así que prueban el
+código de verdad y no una copia. `panel.js` corre el dibujo con un DOM
+de mentira: no abre un navegador.
 
 Las alertas tienen las suyas aparte, en `alertas/pruebas/`.

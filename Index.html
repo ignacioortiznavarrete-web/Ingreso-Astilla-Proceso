@@ -2643,6 +2643,13 @@
       font-size: var(--t-mini); color: var(--ink-3);
     }
 
+    /* El proveedor que cuenta igual, pero cuyo nombre todavía no es el
+       de SAP. Madera es el color de lo estimado en todo el panel: dice
+       "esto vale, y falta que lo confirmen". */
+    .homo-sin-sap > td:first-child {
+      box-shadow: inset 3px 0 0 var(--madera);
+    }
+
     .tablero {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
@@ -3584,6 +3591,7 @@
               <option value="completos">En las tres hojas</option>
               <option value="alias">Con algún nombre distinto</option>
               <option value="huerfanos">Que ninguna hoja nombra</option>
+              <option value="sinSap">Todavía no están en SAP</option>
             </select>
             <span class="mandos-cuenta" id="homoMapaCuenta"
                   aria-live="polite"></span>
@@ -3617,6 +3625,11 @@
                 comprometidos que no se pueden comparar contra ningún
                 plan. Elige a cuál de SAP corresponde y queda escrito en
                 la hoja Proveedores.
+                <b>Si SAP todavía no lo tiene cargado</b> —pasa seguido
+                con el proveedor que recién empieza a despachar— elige
+                «Agregarlo así, con este mismo nombre»: queda como
+                proveedor desde ya, y el nombre de SAP se le pone
+                después, cuando lo creen.
               </p>
             </div>
             <div class="conteo" id="homoConteoSinPar">—</div>
@@ -3629,12 +3642,14 @@
             <div>
               <h2>Agrupados, esperando a SAP</h2>
               <p class="panel-nota">
-                Grupos que ya están juntos pero cuya cabeza todavía no
-                existe en SAP: un proveedor que despacha antes de que
-                alguien lo cree. El primer tiempo ya está hecho —sus
-                formas de escribirse cuentan como uno solo—. El día que
-                SAP lo cree, se elige acá y el grupo entero se va con
-                él: no hay que reasignar nombre por nombre.
+                Proveedores que ya cuentan en el panel pero cuyo nombre
+                todavía no existe en SAP: los que despachan antes de que
+                alguien los cree. El primer tiempo ya está hecho —sus
+                formas de escribirse cuentan como uno solo, y los
+                agregados a mano cuentan solos—. El día que SAP los
+                cree, se elige acá y el grupo entero se va con él: no
+                hay que reasignar nombre por nombre. Los que no mueven
+                nada son nombres viejos de la hoja Proveedores.
               </p>
             </div>
             <div class="conteo" id="homoConteoProvisorios">—</div>
@@ -12092,7 +12107,7 @@
 
     function homoMapa() {
       return (((DATA.source || {}).homologacion || {}).mapa) ||
-        { lista: [], completos: 0, huerfanos: 0 };
+        { lista: [], completos: 0, huerfanos: 0, sinSap: 0 };
     }
 
     /** Las celdas de una hoja: los nombres, marcando los que difieren. */
@@ -12136,7 +12151,10 @@
           return x.hojas > 0 && x.hojas < 3;
         }
         if (HOMO_MAPA_FILTRO === 'alias') { return x.alias.length > 0; }
-        if (HOMO_MAPA_FILTRO === 'huerfanos') { return x.hojas === 0; }
+        if (HOMO_MAPA_FILTRO === 'huerfanos') {
+          return x.hojas === 0 && !x.sinSap;
+        }
+        if (HOMO_MAPA_FILTRO === 'sinSap') { return x.sinSap; }
         return true;
       });
 
@@ -12159,12 +12177,22 @@
       }
 
       cuerpo.innerHTML = lista.map(function(x) {
-        return '<tr>' +
+        // Qué le falta a esta fila. El nombre de SAP primero: mientras
+        // no esté, el proveedor cuenta igual pero cuelga de su propio
+        // nombre, y eso hay que poder verlo de un vistazo.
+        var falta = [];
+
+        if (x.sinSap) { falta.push('todavía no está en SAP'); }
+
+        if (x.hojas !== 3) {
+          falta.push('falta en ' + esc(x.faltaEn.join(', ')));
+        }
+
+        return '<tr' + (x.sinSap ? ' class="homo-sin-sap"' : '') + '>' +
           '<td><strong>' + esc(shortProvider(x.sap)) + '</strong>' +
-            (x.hojas === 3
-              ? ''
-              : '<div class="homo-hoy">falta en ' +
-                esc(x.faltaEn.join(', ')) + '</div>') +
+            (falta.length
+              ? '<div class="homo-hoy">' + falta.join(' · ') + '</div>'
+              : '') +
             '</td>' +
           celdaNombres(x.planilla, x.sap) +
           celdaNombres(x.proyeccion, x.sap) +
@@ -12204,10 +12232,22 @@
             : 'están en SAP y ninguna hoja los nombra') + '.');
       }
 
+      if (mapa.sinSap) {
+        avisos.push('<b>' + mapa.sinSap + '</b> ' +
+          (mapa.sinSap === 1
+            ? 'todavía no está en SAP: cuenta con su propio nombre'
+            : 'todavía no están en SAP: cuentan con su propio nombre') +
+          ' hasta que lo creen.');
+      }
+
       nota.innerHTML = avisos.length ? ' ' + avisos.join(' ') : '';
     }
 
     var HOMO_ALCANCE = 'mes';
+
+    // Valor del selector que no es un proveedor: "agrégalo con su
+    // propio nombre". Ningún proveedor se llama así.
+    var HOMO_SIN_SAP = '__SIN_SAP__';
 
     /**
      * ¿Este nombre es del mes en curso?
@@ -12429,6 +12469,19 @@
         });
         opciones.push('</optgroup>');
 
+        // La salida para cuando el proveedor no está en SAP porque
+        // todavía no lo han cargado. Sin esto no había nada que elegir
+        // —el proveedor existe y despacha, pero no aparece en la
+        // lista—, así que el nombre se quedaba sin asignar y el panel
+        // lo contaba como un proveedor nuevo cada vez que la planilla
+        // lo escribía distinto.
+        opciones.push(
+          '<optgroup label="No está en SAP todavía">' +
+          '<option value="' + HOMO_SIN_SAP + '">' +
+          'Agregarlo así, con este mismo nombre' +
+          '</option></optgroup>'
+        );
+
         // El proveedor que SAP todavía no tiene creado. Se agrupa bajo
         // uno de estos nombres y después, cuando SAP lo cree, se pasa
         // el grupo entero de una vez.
@@ -12545,15 +12598,22 @@
 
         return '<tr>' +
           '<td><strong>' + esc(g.cabeza) + '</strong>' +
-            '<div class="homo-hoy">' + g.cuantos +
-            (g.cuantos === 1 ? ' nombre cuelga' : ' nombres cuelgan') +
-            ' de este grupo</div></td>' +
-          '<td>' + g.alias.map(function(a) {
-            return '<span class="homo-otro">' + esc(shortProvider(a)) +
-              '</span>';
-          }).join(' · ') + '</td>' +
+            '<div class="homo-hoy">' + (g.cuantos
+              ? g.cuantos +
+                (g.cuantos === 1 ? ' nombre cuelga' : ' nombres cuelgan') +
+                ' de este grupo'
+              : 'agregado con su propio nombre') +
+            '</div></td>' +
+          '<td>' + (g.cuantos
+            ? g.alias.map(function(a) {
+                return '<span class="homo-otro">' +
+                  esc(shortProvider(a)) + '</span>';
+              }).join(' · ')
+            : '<span class="sello-fuente es-flojo">solo este</span>') +
+            '</td>' +
           celdaN(g.ts ? formatQuantity(g.ts) : '—') +
           celdaN(g.tsProy ? formatQuantity(g.tsProy) : '—') +
+          celdaN(g.planMes ? formatQuantity(g.planMes) : '—') +
           '<td class="homo-asignar">' +
             '<select id="' + id + '">' + opciones.join('') + '</select>' +
             '<button class="boton" type="button" data-homo-pasar="' +
@@ -12570,6 +12630,7 @@
         '<th>Nombres que cuelgan</th>' +
         '<th class="number">Entró</th>' +
         '<th class="number">Comprometido</th>' +
+        '<th class="number">Plan mes</th>' +
         '<th>Pasar el grupo a SAP</th>' +
         '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
     }
@@ -12594,7 +12655,7 @@
       google.script.run
         .withSuccessHandler(function(res) {
           HOMO_OCUPADO = false;
-          homoRecado('ok', 'El grupo <b>' + esc(cabeza) +
+          homoRecado('bien', 'El grupo <b>' + esc(cabeza) +
             '</b> quedó en <b>' + esc(shortProvider(res.sap)) +
             '</b>, con sus ' + res.filas +
             (res.filas === 1 ? ' fila' : ' filas') +
@@ -12635,6 +12696,11 @@
         return;
       }
 
+      if (sap === HOMO_SIN_SAP) {
+        agregarSinSap(alias);
+        return;
+      }
+
       HOMO_OCUPADO = true;
       setLoading(true, 'Escribiendo la equivalencia');
 
@@ -12655,6 +12721,43 @@
           homoRecado('mal', esc(mensaje(err)));
         })
         .asignarProveedor(alias, sap);
+    }
+
+    /**
+     * Agrega el nombre de la planilla como proveedor, sin SAP.
+     *
+     * Es el caso del proveedor que empezó a despachar y que SAP no ha
+     * cargado todavía: no hay a quién asignarlo, y esperar deja sus
+     * camiones repartidos entre tantos proveedores inventados como
+     * formas tenga la planilla de escribirlo.
+     *
+     * Queda escrito con su propio nombre, así que desde ahí cuenta como
+     * uno. Lo que falta —el nombre de SAP— se pone después, en
+     * "Agrupados, esperando a SAP", y se lleva el grupo entero.
+     */
+    function agregarSinSap(nombre) {
+      HOMO_OCUPADO = true;
+      setLoading(true, 'Agregando el proveedor');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          HOMO_OCUPADO = false;
+          homoRecado('bien',
+            '<b>' + esc(res.nombre) + '</b> quedó agregado como ' +
+            'proveedor' +
+            (res.escrito ? '' : ' (ya estaba agregado)') +
+            '. Todavía sin SAP: cuando lo creen, pásalo desde ' +
+            '«Agrupados, esperando a SAP» y se va con todos sus ' +
+            'nombres. Recargando para rehacer el cruce…');
+
+          cargarTodo();
+        })
+        .withFailureHandler(function(err) {
+          HOMO_OCUPADO = false;
+          setLoading(false);
+          homoRecado('mal', esc(mensaje(err)));
+        })
+        .declararProveedor(nombre);
     }
 
     // Delegado: la tabla se redibuja entera en cada carga, así que un

@@ -2312,6 +2312,25 @@ function buildHomologacionPendiente_(
 ) {
   const grupos = {};
 
+  // Lo que mueve cada proveedor YA resuelto, cruce bien o mal. Los
+  // grupos que esperan a SAP lo necesitan y no pueden sacarlo de esta
+  // lista: ellos no están acá justamente porque cruzan —la hoja
+  // Proveedores los resuelve—, así que saldrían en cero, como si no
+  // despacharan.
+  const volumen = {};
+
+  function suma(nombre) {
+    const clave = normalizeKey_(nombre);
+
+    if (!clave) { return null; }
+
+    if (!volumen[clave]) {
+      volumen[clave] = { ts: 0, tsProy: 0, planMes: 0 };
+    }
+
+    return volumen[clave];
+  }
+
   function grupo(crudo, metodo, resuelto) {
     const clave = normalizeKey_(crudo);
 
@@ -2336,6 +2355,10 @@ function buildHomologacionPendiente_(
 
   (rows || []).forEach(function(row) {
     if (row.source !== 'PLANILLA') { return; }
+
+    const entregado = suma(row.proveedor);
+
+    if (entregado) { entregado.ts += Number(row.ts) || 0; }
 
     const crudo = text_(row.proveedorRaw);
     const metodo = row.matchMethod || '';
@@ -2365,6 +2388,12 @@ function buildHomologacionPendiente_(
   // ningún proveedor no se puede comparar contra su plan. Entran a la
   // misma lista, y asignarlos una vez arregla las dos hojas.
   ((proyeccion || {}).porProveedor || []).forEach(function(item) {
+    const comprometido = suma(item.proveedor);
+
+    if (comprometido) {
+      comprometido.tsProy += Number(item.ts) || 0;
+    }
+
     const crudo = text_(item.proveedorRaw);
     const metodo = item.matchMethod || '';
 
@@ -2395,6 +2424,9 @@ function buildHomologacionPendiente_(
     if (!crudo) { return; }
 
     const cruce = resolveProveedor_(crudo, proveedoresSap, homologacion);
+    const delPlan = suma(cruce.proveedor);
+
+    if (delPlan) { delPlan.planMes += Number(item.plan) || 0; }
 
     if (
       cruce.method !== 'Solo en planilla' &&
@@ -2473,7 +2505,7 @@ function buildHomologacionPendiente_(
     provisorios: gruposProvisorios_(
       proveedoresSap,
       homologacion,
-      lista
+      volumen
     ),
     conflictos: homologacion.conflictos || [],
     huerfanos: homologacion.pendientes || []
@@ -2481,13 +2513,19 @@ function buildHomologacionPendiente_(
 }
 
 /**
- * Cabezas de grupo que no existen en SAP.
+ * Proveedores escritos en la hoja que SAP todavía no tiene.
  *
- * Son las que alguien eligió como provisorias para juntar las formas
- * en que se escribe un proveedor que SAP todavía no tiene creado. No
- * son un error: son el primer tiempo de la homologación.
+ * No son un error: son el primer tiempo de la homologación. Un
+ * proveedor empieza despachando y alguien lo agrega acá para que sus
+ * camiones caigan sobre un proveedor en vez de quedar sueltos; el
+ * nombre de SAP llega después, cuando lo creen.
+ *
+ * Cuentan los dos casos: la cabeza que junta varias formas de escribir
+ * el mismo nombre y la que está sola. El volumen no sale de la lista de
+ * pendientes —estos ya cruzan, por eso no están ahí— sino de lo que
+ * movió el proveedor resuelto.
  */
-function gruposProvisorios_(proveedoresSap, homologacion, pendientes) {
+function gruposProvisorios_(proveedoresSap, homologacion, volumen) {
   const enSap = {};
 
   (proveedoresSap || []).forEach(function(sap) {
@@ -2496,39 +2534,42 @@ function gruposProvisorios_(proveedoresSap, homologacion, pendientes) {
 
   const porCabeza = {};
 
-  Object.keys(homologacion.porAlias || {}).forEach(function(claveAlias) {
-    const cabeza = homologacion.porAlias[claveAlias];
-    const clave = normalizeKey_(cabeza);
+  function cabeza(nombre) {
+    const clave = normalizeKey_(nombre);
 
-    // La identidad —cada nombre es alias de sí mismo— no cuenta como
-    // grupo: un nombre solo no es un grupo.
-    if (!clave || enSap[clave] || clave === claveAlias) { return; }
+    if (!clave || enSap[clave]) { return null; }
 
     if (!porCabeza[clave]) {
-      porCabeza[clave] = { cabeza: cabeza, alias: {} };
+      porCabeza[clave] = { cabeza: nombre, alias: {} };
     }
 
-    porCabeza[clave].alias[claveAlias] = true;
-  });
+    return porCabeza[clave];
+  }
 
-  // Lo que ese grupo mueve, según lo que la revisión ya contó.
-  const volumen = {};
+  // Toda cabeza escrita en la hoja que SAP todavía no tiene es un
+  // grupo, aunque de ella no cuelgue ningún otro nombre.
+  //
+  // Eso último es el caso que faltaba, y es el más común: el proveedor
+  // despacha, la planilla lo escribe de una sola forma y SAP no lo
+  // tiene creado. Antes un grupo existía solo si tenía dos nombres, así
+  // que el proveedor agregado a mano no salía en ninguna parte: cruzaba
+  // bien —por eso desaparecía de la lista de pendientes— pero nadie
+  // volvía a acordarse de apuntarlo a SAP el día que lo crearan.
+  (homologacion.canonicos || []).forEach(cabeza);
 
-  (pendientes || []).forEach(function(item) {
-    const clave = normalizeKey_(item.resuelto);
+  Object.keys(homologacion.porAlias || {}).forEach(function(claveAlias) {
+    const g = cabeza(homologacion.porAlias[claveAlias]);
 
-    if (!volumen[clave]) {
-      volumen[clave] = { ts: 0, tsProy: 0, planMes: 0 };
-    }
+    // La identidad —cada nombre es alias de sí mismo— no cuenta como
+    // nombre colgado: el grupo existe por su cabeza, no por ella.
+    if (!g || normalizeKey_(g.cabeza) === claveAlias) { return; }
 
-    volumen[clave].ts += item.ts || 0;
-    volumen[clave].tsProy += item.tsProy || 0;
-    volumen[clave].planMes += item.planMes || 0;
+    g.alias[claveAlias] = true;
   });
 
   return Object.keys(porCabeza).map(function(clave) {
     const g = porCabeza[clave];
-    const v = volumen[clave] || { ts: 0, tsProy: 0, planMes: 0 };
+    const v = (volumen || {})[clave] || { ts: 0, tsProy: 0, planMes: 0 };
 
     return {
       cabeza: g.cabeza,
@@ -2540,7 +2581,9 @@ function gruposProvisorios_(proveedoresSap, homologacion, pendientes) {
       candidatos: candidatosSap_(g.cabeza, proveedoresSap)
     };
   }).sort(function(a, b) {
-    return (b.ts + b.tsProy) - (a.ts + a.tsProy) || b.cuantos - a.cuantos;
+    return (b.ts + b.tsProy + b.planMes) -
+      (a.ts + a.tsProy + a.planMes) ||
+      b.cuantos - a.cuantos;
   });
 }
 
@@ -2558,9 +2601,15 @@ function gruposProvisorios_(proveedoresSap, homologacion, pendientes) {
  * están bien también salen: para saber que un proveedor está completo
  * hay que poder verlo completo, con sus tres casillas llenas.
  *
- * El ancla es SIEMPRE el nombre de SAP. Un proveedor que no está en
- * SAP no tiene fila acá —no hay a qué anclarlo—: esos van a la lista
- * de sin par, que es donde se asignan.
+ * El ancla es el nombre de SAP, y además el de los proveedores que
+ * alguien escribió en la hoja Proveedores porque SAP todavía no los
+ * tiene creados: esos llevan su fila igual, marcada «todavía sin SAP».
+ * Un proveedor que despacha hoy y que SAP cargará la semana que viene
+ * no puede ser una fila vacía en la tabla donde se mira si un proveedor
+ * está completo.
+ *
+ * Los nombres que no cruzan con nada siguen yendo a la lista de sin
+ * par, que es donde se asignan o se agregan.
  */
 function buildHomologacionMapa_(
   proveedoresSap,
@@ -2581,6 +2630,7 @@ function buildHomologacionMapa_(
         proyeccion: {},
         plan: {},
         ingresos: false,
+        sinSap: false,
         ts: 0,
         tsProy: 0,
         planMes: 0
@@ -2593,12 +2643,23 @@ function buildHomologacionMapa_(
   // La lista de SAP manda: todas sus filas existen aunque ninguna hoja
   // las nombre. Un proveedor de SAP sin nada escrito en ninguna parte
   // también es una respuesta.
-  (proveedoresSap || []).forEach(function(sap) { fila(sap); });
-
   const conocidos = {};
 
   (proveedoresSap || []).forEach(function(sap) {
+    fila(sap);
     conocidos[normalizeKey_(sap)] = true;
+  });
+
+  // Y los que están escritos en la hoja esperando que SAP los cree.
+  // Cuelgan de su propio nombre, así que ese nombre es el ancla
+  // mientras no haya otro.
+  (homologacion.canonicos || []).forEach(function(nombre) {
+    const clave = normalizeKey_(nombre);
+
+    if (!clave || conocidos[clave]) { return; }
+
+    fila(nombre).sinSap = true;
+    conocidos[clave] = true;
   });
 
   // 1) Lo que entró, por las dos fuentes.
@@ -2680,6 +2741,9 @@ function buildHomologacionMapa_(
       proyeccion: proy,
       plan: plan,
       ingresos: f.ingresos,
+      // Escrito en la hoja, pero SAP todavía no lo tiene. Su fila vale
+      // igual; lo que le falta es el nombre de SAP, no los datos.
+      sinSap: f.sinSap,
       hojas: hojas,
       alias: distintos.filter(function(n, i, l) {
         return l.indexOf(n) === i;
@@ -2707,7 +2771,13 @@ function buildHomologacionMapa_(
     lista: lista,
     completos: lista.filter(function(x) { return x.hojas === 3; }).length,
     // Los que ninguna hoja nombra: están en SAP y nadie los escribe.
-    huerfanos: lista.filter(function(x) { return x.hojas === 0; }).length
+    // Un proveedor que todavía no está en SAP no cuenta acá: él no
+    // sobra, le falta.
+    huerfanos: lista.filter(function(x) {
+      return x.hojas === 0 && !x.sinSap;
+    }).length,
+    // Los que esperan nombre de SAP.
+    sinSap: lista.filter(function(x) { return x.sinSap; }).length
   };
 }
 
@@ -2787,13 +2857,41 @@ function asignarProveedor(alias, proveedorSap) {
     };
   }
 
+  const fila = escribirFilaProveedor_(
+    sheet,
+    columnas,
+    nombreSap,
+    nombreAlias,
+    ''
+  );
+
+  return {
+    escrito: true,
+    alias: nombreAlias,
+    sap: nombreSap,
+    fila: fila
+  };
+}
+
+/**
+ * Escribe una fila en la hoja Proveedores.
+ *
+ * Las DOS celdas —SAP y alias— en la misma fila, nunca apoyándose en
+ * el arrastre hacia abajo: una fila que depende de la de arriba se
+ * rompe sola cuando alguien ordena o inserta.
+ */
+function escribirFilaProveedor_(sheet, columnas, sap, alias, nota) {
   const fila = sheet.getLastRow() + 1;
 
-  sheet.getRange(fila, columnas.sap).setValue(nombreSap);
-  sheet.getRange(fila, columnas.alias).setValue(nombreAlias);
+  sheet.getRange(fila, columnas.sap).setValue(sap);
+  sheet.getRange(fila, columnas.alias).setValue(alias);
 
   if (columnas.origen) {
     sheet.getRange(fila, columnas.origen).setValue('Panel');
+  }
+
+  if (nota && columnas.notas) {
+    sheet.getRange(fila, columnas.notas).setValue(nota);
   }
 
   if (columnas.actualizado) {
@@ -2804,10 +2902,101 @@ function asignarProveedor(alias, proveedorSap) {
     sheet.getRange(fila, columnas.actualizadoPor).setValue(autorActual_());
   }
 
+  return fila;
+}
+
+/**
+ * Lo que se escribe en Notas al agregar un proveedor sin SAP.
+ *
+ * El prefijo va aparte porque hay que poder reconocer la nota después,
+ * cuando el proveedor sí entre a SAP y la nota deje de ser verdad.
+ */
+const SIN_SAP_PREFIJO = 'Todavía no está en SAP';
+const NOTA_SIN_SAP =
+  SIN_SAP_PREFIJO + '. Se agregó desde el panel para que sus camiones ' +
+  'no quedaran sueltos; cuando SAP lo cree, reapúntalo desde ' +
+  '"Agrupados, esperando a SAP".';
+
+/**
+ * Agrega el proveedor de la planilla aunque SAP todavía no lo tenga.
+ *
+ * Es el agujero que quedaba. El selector solo ofrece proveedores de
+ * SAP, y SAP no carga a un proveedor nuevo el mismo día que empieza a
+ * despachar: hay días —a veces semanas— en que la planilla ya lo
+ * nombra y en SAP no existe todavía. Mientras tanto no había nada que
+ * elegir: el nombre se quedaba "solo en planilla", en el panel contaba
+ * como un proveedor inventado más y su plan no tenía contra qué
+ * compararse. La casilla quedaba vacía.
+ *
+ * Esto lo escribe como proveedor con su propio nombre, cabeza de su
+ * grupo. Desde ahí cruza —la hoja Proveedores va antes que el
+ * parecido—, sus camiones caen todos sobre un mismo proveedor y sus
+ * otras formas de escribirse se le pueden colgar.
+ *
+ * No es una homologación a medias: es la primera mitad, y queda
+ * anotada como tal. El proveedor aparece en "Agrupados, esperando a
+ * SAP" con lo que mueve, y el día que SAP lo cree se reapunta ahí de
+ * una vez, con grupo y todo.
+ */
+function declararProveedor(nombre) {
+  const limpio = text_(nombre);
+
+  if (!limpio) {
+    throw new Error('Hace falta el nombre del proveedor.');
+  }
+
+  const clave = normalizeKey_(limpio);
+
+  if (isTotalText_(limpio) || clave === 'SIN PROVEEDOR') {
+    throw new Error(
+      '"' + limpio + '" no es un proveedor.'
+    );
+  }
+
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROVEEDORES);
+
+  if (!sheet) {
+    throw new Error(
+      'No existe la hoja "' + CONFIG.SHEET_PROVEEDORES +
+      '". Corre "Preparar hoja de proveedores".'
+    );
+  }
+
+  const columnas = columnasProveedores_(sheet);
+  const previo = leerProveedores_(spreadsheet);
+  const yaApunta = previo.porAlias[clave];
+
+  // Ya está escrito, pero colgado de otro proveedor. Agregarlo aparte
+  // partiría en dos lo que alguien juntó a propósito, así que se dice
+  // dónde está en vez de escribir una contradicción en la hoja.
+  if (yaApunta && normalizeKey_(yaApunta) !== clave) {
+    throw new Error(
+      '"' + limpio + '" ya está escrito como forma de "' + yaApunta +
+      '". Si no son el mismo proveedor, corrígelo en la hoja ' +
+      CONFIG.SHEET_PROVEEDORES + ' antes de agregarlo aparte.'
+    );
+  }
+
+  if (yaApunta) {
+    return {
+      escrito: false,
+      motivo: 'Ya estaba agregado.',
+      nombre: limpio
+    };
+  }
+
+  const fila = escribirFilaProveedor_(
+    sheet,
+    columnas,
+    limpio,
+    limpio,
+    NOTA_SIN_SAP
+  );
+
   return {
     escrito: true,
-    alias: nombreAlias,
-    sap: nombreSap,
+    nombre: limpio,
     fila: fila
   };
 }
@@ -2880,6 +3069,17 @@ function reasignarProveedor(actual, nuevo) {
   filas.forEach(function(fila) {
     sheet.getRange(fila, columnas.sap).setValue(destino);
 
+    // La nota de "todavía no está en SAP" deja de ser verdad en este
+    // mismo momento. Una nota vieja que dice lo contrario de la fila
+    // confunde más que no tener nota.
+    if (
+      columnas.notas &&
+      text_(valores[fila - 1][columnas.notas - 1])
+        .indexOf(SIN_SAP_PREFIJO) === 0
+    ) {
+      sheet.getRange(fila, columnas.notas).setValue('');
+    }
+
     if (columnas.actualizado) {
       sheet.getRange(fila, columnas.actualizado).setValue(new Date());
     }
@@ -2896,22 +3096,7 @@ function reasignarProveedor(actual, nuevo) {
   });
 
   if (!yaEstaba) {
-    const fila = sheet.getLastRow() + 1;
-
-    sheet.getRange(fila, columnas.sap).setValue(destino);
-    sheet.getRange(fila, columnas.alias).setValue(cabeza);
-
-    if (columnas.origen) {
-      sheet.getRange(fila, columnas.origen).setValue('Panel');
-    }
-
-    if (columnas.actualizado) {
-      sheet.getRange(fila, columnas.actualizado).setValue(new Date());
-    }
-
-    if (columnas.actualizadoPor) {
-      sheet.getRange(fila, columnas.actualizadoPor).setValue(autorActual_());
-    }
+    escribirFilaProveedor_(sheet, columnas, destino, cabeza, '');
   }
 
   return {
@@ -2949,7 +3134,7 @@ function resolveProveedor_(rawName, candidates, homologacion) {
 
   let best = null;
 
-  (candidates || []).forEach(function(candidate) {
+  candidatosDelCruce_(candidates, homologacion).forEach(function(candidate) {
     const score = proveedorSimilitud_(
       cleaned,
       proveedorComparable_(candidate)
@@ -2975,6 +3160,57 @@ function resolveProveedor_(rawName, candidates, homologacion) {
     method: 'Solo en planilla',
     score: 0
   };
+}
+
+/**
+ * Contra qué se compara un nombre: SAP, y lo agregado a mano.
+ *
+ * Esto era el agujero de abajo del agujero. Se podía agregar un
+ * proveedor que SAP no tiene, pero el parecido seguía buscando SOLO en
+ * SAP, así que las otras formas de escribir ese mismo nombre no
+ * llegaban a él: "AITUE NITENS" en el Plan y "Aitue nitens" en la
+ * planilla quedaban sueltos aunque "AITUE NITENS SPA" ya estuviera
+ * agregado. Había que homologar a mano cada forma, una por una, para un
+ * proveedor que ya estaba resuelto.
+ *
+ * Con sus nombres en la lista, agregar el proveedor UNA vez junta
+ * también sus variantes, igual que pasa con los de SAP.
+ *
+ * Los de SAP van primero a propósito: cuando dos candidatos empatan
+ * —"MADEEX" escrito en la hoja y "MADEEX S.A." en SAP son el mismo
+ * nombre comparable— gana el de SAP, que es el ancla de verdad.
+ */
+function candidatosDelCruce_(candidates, homologacion) {
+  const lista = candidates || [];
+
+  if (!homologacion || !(homologacion.canonicos || []).length) {
+    return lista;
+  }
+
+  // Memo por identidad de la lista: resolveProveedor_ se llama una vez
+  // por fila y rehacer esto en cada una es pagar dos veces lo mismo.
+  // Si alguien llama con otra lista, se rehace.
+  if (homologacion.cruceDe !== lista) {
+    const vistos = {};
+
+    lista.forEach(function(nombre) {
+      vistos[normalizeKey_(nombre)] = true;
+    });
+
+    homologacion.cruceDe = lista;
+    homologacion.cruce = lista.concat(
+      homologacion.canonicos.filter(function(nombre) {
+        const clave = normalizeKey_(nombre);
+
+        if (!clave || vistos[clave]) { return false; }
+
+        vistos[clave] = true;
+        return true;
+      })
+    );
+  }
+
+  return homologacion.cruce;
 }
 
 function proveedorComparable_(value) {
