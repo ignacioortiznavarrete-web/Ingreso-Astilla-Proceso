@@ -3419,6 +3419,32 @@
           <p class="accion-nota" id="accionNota" hidden></p>
         </article>
 
+        <article class="panel" id="panelDescuadres" hidden>
+          <div class="panel-cab">
+            <div>
+              <h2>La planilla y SAP no cuentan lo mismo</h2>
+              <p class="panel-nota">
+                Solo los días que cubren las <b>dos</b> fuentes: ahí sí
+                se puede comparar. Ninguna cifra del panel cambia por
+                esto —donde Ingresos tiene el día cargado, Ingresos
+                manda y el estimado se descarta—, pero el error de la
+                planilla no aparecía en ninguna parte y quien la escribe
+                no se enteraba nunca. Esta es la lista para ir a
+                conversarla.
+                La planilla cuenta <b>camiones</b> y SAP pesa
+                <b>toneladas</b>, y un camión no pesa siempre lo mismo:
+                se avisa cuando la diferencia pasa de 0,6 camiones del
+                factor del material, que es más de lo que explica una
+                carga liviana.
+                <span id="descuadresNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="conteoDescuadres">—</div>
+          </div>
+
+          <div id="listaDescuadres"></div>
+        </article>
+
         <article class="panel">
           <div class="panel-cab">
             <div>
@@ -4390,9 +4416,134 @@
         );
       }
 
+      // Lo que la planilla registró de menos. No cambia ninguna cifra
+      // del panel, pero es un error que no se veía en ninguna parte.
+      var desc = source.descuadres || {};
+      var casos = (desc.faltan || []).length +
+        (desc.difieren || []).length;
+
+      if (casos) {
+        ojo.push(
+          'La planilla y <b>Ingresos</b> no cuentan lo mismo en <b>' +
+          formatInteger(casos) + '</b> ' +
+          (casos === 1 ? 'caso' : 'casos') +
+          (desc.camionesFaltantes
+            ? ', con <b>' + formatQuantity(desc.camionesFaltantes) +
+              ' camiones</b> que la planilla no registró'
+            : '') +
+          '. Están más abajo, en «La planilla y SAP no cuentan lo ' +
+          'mismo».'
+        );
+      }
+
       var caja = document.getElementById('avisoOjo');
       caja.innerHTML = ojo.join(' ');
       caja.classList.toggle('se-ve', ojo.length > 0);
+
+      dibujarDescuadres();
+    }
+
+    /**
+     * Dónde la planilla y SAP no cuentan lo mismo.
+     *
+     * No es una cifra del panel: es una lista de trabajo. Donde SAP
+     * tiene el día cargado el panel usa SAP y el estimado se descarta,
+     * así que un error de la planilla no mueve ningún total… y
+     * justamente por eso nadie lo veía.
+     *
+     * Dos casos, en una sola tabla porque se revisan juntos: el
+     * proveedor que SAP registró y la planilla no nombra, y el que
+     * está en las dos con cantidades que no cuadran.
+     */
+    function dibujarDescuadres() {
+      var d = (DATA.source || {}).descuadres || {};
+      var mes = DATA.month || {};
+
+      function delMes(x) {
+        return x.fecha >= mes.startKey && x.fecha <= mes.endKey;
+      }
+
+      var faltan = (d.faltan || []).filter(delMes);
+      var difieren = (d.difieren || []).filter(delMes);
+      var total = faltan.length + difieren.length;
+      var fuera =
+        (d.faltan || []).length + (d.difieren || []).length - total;
+
+      document.getElementById('panelDescuadres').hidden = !total;
+
+      setText('conteoDescuadres', total
+        ? total + (total === 1 ? ' caso' : ' casos')
+        : 'ninguno');
+
+      // Siempre se dice lo que no se está mostrando: los casos de
+      // meses anteriores y los que no se pueden afirmar.
+      var avisos = [];
+
+      if (fuera) {
+        avisos.push('Hay <b>' + fuera + '</b> ' +
+          (fuera === 1 ? 'caso más' : 'casos más') +
+          ' en meses anteriores.');
+      }
+
+      if (d.ambiguos) {
+        avisos.push('Otros <b>' + d.ambiguos + '</b> no se pueden ' +
+          'afirmar: ese día la planilla trae un nombre sin homologar ' +
+          'que se parece al proveedor que falta, y puede ser el mismo ' +
+          'escrito de otra forma. Homologarlo en <b>Homologación</b> ' +
+          'los destapa.');
+      }
+
+      document.getElementById('descuadresNota').innerHTML =
+        avisos.length ? ' ' + avisos.join(' ') : '';
+
+      if (!total) {
+        document.getElementById('listaDescuadres').innerHTML = '';
+        return;
+      }
+
+      var cuerpo = faltan.map(function(x) {
+        return '<tr>' +
+          '<td>' + esc(x.fechaLabel) + '</td>' +
+          '<td><strong>' + esc(shortProvider(x.proveedor)) +
+            '</strong></td>' +
+          '<td>' + esc(shortProduct(x.subproducto)) + '</td>' +
+          '<td>no lo nombra</td>' +
+          celdaN(formatQuantity(x.camiones) + ' cam · ' +
+            formatQuantity(x.ts) + ' TS') +
+          '<td><span class="sello-fuente es-flojo">' +
+            'no quedó registrado</span></td>' +
+          '</tr>';
+      }).concat(difieren.map(function(x) {
+        var menos = x.diferencia < 0;
+
+        return '<tr>' +
+          '<td>' + esc(x.fechaLabel) + '</td>' +
+          '<td><strong>' + esc(shortProvider(x.proveedor)) +
+            '</strong></td>' +
+          '<td>' + esc(shortProduct(x.subproducto)) + '</td>' +
+          celdaN(formatInteger(x.camionesPlanilla) + ' cam') +
+          celdaN('≈ ' + formatQuantity(x.camionesSap) + ' cam · ' +
+            formatQuantity(x.ts) + ' TS') +
+          '<td><span class="sello-fuente ' +
+            (menos ? 'es-flojo' : 'es-est') + '">' +
+            (menos
+              ? 'anotó ' + formatQuantity(Math.abs(x.diferencia)) +
+                ' de menos'
+              : 'anotó ' + formatQuantity(x.diferencia) + ' de más') +
+            '</span></td>' +
+          '</tr>';
+      })).join('');
+
+      document.getElementById('listaDescuadres').innerHTML =
+        '<div class="tabla-marco tabla-fija">' +
+        '<table data-tabla="descuadres"><thead><tr>' +
+        '<th>Día</th>' +
+        '<th>Proveedor</th>' +
+        '<th>Subproducto</th>' +
+        '<th>Dice la planilla</th>' +
+        '<th class="number">Tiene Ingresos</th>' +
+        '<th>Qué pasó</th>' +
+        '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
     }
 
     /* =================================================================
@@ -12609,7 +12760,7 @@
                 return '<span class="homo-otro">' +
                   esc(shortProvider(a)) + '</span>';
               }).join(' · ')
-            : '<span class="sello-fuente es-flojo">solo este</span>') +
+            : '<span class="sello-fuente">solo este</span>') +
             '</td>' +
           celdaN(g.ts ? formatQuantity(g.ts) : '—') +
           celdaN(g.tsProy ? formatQuantity(g.tsProy) : '—') +

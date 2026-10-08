@@ -65,6 +65,51 @@ fila se descarta como cualquier otra. Y las dos se dicen en la nota de
 Suministro, con nombre y fecha, porque son exactamente lo que hay que ir
 a cargar.
 
+### Cuando la planilla registró de menos
+
+La planilla la escribe una persona a mano, día a día, y a veces registra
+**menos** de lo que entró: se le queda un proveedor afuera, o anota
+menos camiones de los que llegaron.
+
+Donde Ingresos tiene el día cargado el panel no se equivoca por eso
+—Ingresos manda y el estimado se descarta—, y precisamente por eso el
+error **no aparecía en ninguna parte**: ni movía una cifra, ni quien
+escribe la planilla se enteraba nunca. El único lugar donde se notaba
+era al revés, cuando SAP venía atrasado y el panel tenía que completar
+el día con una planilla incompleta.
+
+El panel de **«La planilla y SAP no cuentan lo mismo»** (en Suministro,
+bajo el plan de acción) compara las dos fuentes **solo en los días que
+cubren las dos**: si Ingresos no tiene el día, la planilla es lo único
+que hay y no hay con qué compararla; si la planilla no llegó, no hay
+nada que revisar.
+
+| Caso | Qué muestra |
+|---|---|
+| El proveedor que Ingresos registró y la planilla **no nombra** | Sus camiones y sus TS: eso no quedó registrado |
+| Los que están en las dos con cantidades que **no cuadran** | Lo que dice la planilla, lo que pesó Ingresos y de cuánto es la diferencia |
+
+**La comparación de cantidades pisa con cuidado.** La planilla cuenta
+*camiones* y SAP pesa *toneladas*, y un camión no pesa siempre lo
+mismo: se avisa solo cuando la diferencia pasa de **0,6 camiones** del
+factor de ese material, que es más de lo que explica una carga liviana.
+La diferencia se redondea **antes** de comparar: `15,4 / 11` da
+`1,4000000000000001`, y un umbral que se decide por el error del punto
+flotante no es un umbral.
+
+**Y hay una honestidad en el medio.** Si ese día la planilla trae un
+nombre que todavía no cruza y que **se parece** al proveedor que falta,
+puede ser el mismo escrito de otra forma. Ahí no se afirma nada: el caso
+se cuenta aparte y se dice cuántos hay. Acusar a la planilla de no
+registrar algo que sí registró quemaría la lista entera, y una lista que
+miente una vez no se vuelve a mirar. Homologar ese nombre destapa el
+caso. Para dudar basta un parecido lejano (0,45); para afirmar un cruce
+hace falta mucho más (0,72).
+
+La lista muestra el mes en curso, lo más nuevo primero —el error de ayer
+todavía se puede conversar—, y dice cuántos casos quedaron en meses
+anteriores.
+
 ### Factor por material
 
 | Código SAP | Subproducto                | TS por camión |

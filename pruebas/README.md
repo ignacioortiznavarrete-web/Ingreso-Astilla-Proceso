@@ -21,6 +21,7 @@ puede subirlos ni por error.
 node pruebas/gmail.js
 node pruebas/planilla.js
 node pruebas/homologacion.js
+node pruebas/descuadres.js
 node pruebas/panel.js
 ```
 
@@ -29,9 +30,10 @@ node pruebas/panel.js
 | `gmail.js` | Que la búsqueda de Gmail no pierda un correo que la regla del asunto acepta |
 | `planilla.js` | Que la tabla se lea como venga: con despachos, en cero y sin la fila de encabezados |
 | `homologacion.js` | Los dos tiempos: agregar el proveedor que SAP no tiene y pasarlo a SAP cuando lo creen |
-| `panel.js` | Que la pestaña Homologación dibuje lo que el servidor le manda |
+| `descuadres.js` | Que la comparación planilla ↔ SAP solo afirme lo que se puede afirmar |
+| `panel.js` | Que el panel dibuje lo que el servidor le manda: homologación y descuadres |
 
-Las tres primeras leen `Codigo.gs` y `panel.js` lee `Index.html`;
+Las cuatro primeras leen `Codigo.gs` y `panel.js` lee `Index.html`;
 todas recortan de ahí las funciones que necesitan, así que prueban el
 código de verdad y no una copia. `panel.js` corre el dibujo con un DOM
 de mentira: no abre un navegador.

@@ -563,6 +563,14 @@ function getDashboardData() {
     informe.rows
   );
 
+  // Lo que la planilla registró de menos. No cambia ninguna cifra del
+  // panel —SAP manda donde el día está cargado— pero es lo que hay que
+  // ir a conversar con quien la escribe.
+  const descuadres = buildDescuadres_(
+    ingresos.rows,
+    informe.rows
+  );
+
   const baseRows = ingresos.rows.concat(supplement.rows);
 
   const workdays = buildWorkdaysInfo_(
@@ -650,6 +658,22 @@ function getDashboardData() {
           fechaLabel: formatDateKey_(x.fecha)
         };
       }),
+      // Dónde la planilla y SAP no cuentan lo mismo, en los días que
+      // cubren las dos.
+      descuadres: {
+        faltan: descuadres.faltan.map(function(x) {
+          return Object.assign({}, x, {
+            fechaLabel: formatDateKey_(x.fecha)
+          });
+        }),
+        difieren: descuadres.difieren.map(function(x) {
+          return Object.assign({}, x, {
+            fechaLabel: formatDateKey_(x.fecha)
+          });
+        }),
+        ambiguos: descuadres.ambiguos,
+        camionesFaltantes: descuadres.camionesFaltantes
+      },
       huecos: supplement.huecos,
       huecosLabel: (supplement.huecos || []).map(function(fecha) {
         return formatDateKey_(fecha);
@@ -1445,6 +1469,176 @@ function buildSupplementRows_(ingresosRows, informeRows) {
       return { proveedor: partes[0], fecha: partes[1] };
     })
   };
+}
+
+
+/**
+ * Dónde la planilla y SAP no cuentan lo mismo.
+ *
+ * La planilla la escribe una persona a mano, día a día, y a veces
+ * registra menos de lo que entró: se le queda un proveedor afuera, o
+ * anota menos camiones de los que llegaron. Mientras SAP tenga el día
+ * cargado el panel no se equivoca —SAP manda y el estimado se
+ * descarta—, pero el error no aparece en ninguna parte: ni quien lo
+ * escribe se entera, ni se puede ir a corregirlo.
+ *
+ * Esto lo pone a la vista, y solo donde se puede afirmar algo: días
+ * que cubren las DOS fuentes. Si SAP no tiene el día, la planilla es lo
+ * único que hay y no hay con qué compararla; si la planilla no llegó,
+ * no hay nada que revisar.
+ *
+ * Dos cosas que no son lo mismo:
+ *
+ *   - Un proveedor que SAP registró ese día y la planilla no nombra.
+ *   - Los que están en las dos pero con cantidades que no cuadran. Acá
+ *     hay que tener cuidado: la planilla cuenta CAMIONES y SAP pesa
+ *     TONELADAS, y un camión no pesa siempre lo mismo. Se avisa solo
+ *     cuando la diferencia pasa de 0,6 camiones del factor de ese
+ *     material: más de lo que puede explicar una carga liviana.
+ *
+ * Y una honestidad: si ese día la planilla trae un nombre que todavía
+ * no cruza y que se parece al que falta, puede ser el mismo escrito de
+ * otra forma. Ahí no se afirma nada —se cuenta aparte— porque acusar a
+ * la planilla de no registrar algo que sí registró quemaría la lista
+ * entera. Homologar el nombre destapa el caso.
+ */
+function buildDescuadres_(ingresosRows, informeRows) {
+  const sap = {};
+  const planilla = {};
+  const camionesDia = {};
+  const nombres = {};
+  const sueltos = {};
+
+  function clave(item) {
+    return [
+      item.fecha,
+      normalizeKey_(item.proveedor),
+      text_(item.subproducto)
+    ].join('||');
+  }
+
+  (ingresosRows || []).forEach(function(item) {
+    const ts = Number(item.ts) || 0;
+
+    // Una fila de cero TS no dice que el proveedor entró.
+    if (ts <= 0) { return; }
+
+    const k = clave(item);
+
+    sap[k] = (sap[k] || 0) + ts;
+    nombres[k] = item.proveedor;
+  });
+
+  (informeRows || []).forEach(function(item) {
+    const camiones = Number(item.camiones) || 0;
+
+    if (camiones <= 0) { return; }
+
+    const k = clave(item);
+
+    planilla[k] = (planilla[k] || 0) + camiones;
+    camionesDia[item.fecha] =
+      (camionesDia[item.fecha] || 0) + camiones;
+
+    if (!nombres[k]) { nombres[k] = item.proveedor; }
+
+    if (item.matchMethod === 'Solo en planilla') {
+      if (!sueltos[item.fecha]) { sueltos[item.fecha] = []; }
+
+      sueltos[item.fecha].push(item.proveedor);
+    }
+  });
+
+  const faltan = [];
+  const difieren = [];
+  let ambiguos = 0;
+
+  Object.keys(sap).forEach(function(k) {
+    const partes = k.split('||');
+    const fecha = partes[0];
+    const subproducto = partes[2];
+
+    // Solo los días que cubren las dos fuentes.
+    if (!(camionesDia[fecha] > 0)) { return; }
+
+    const factor = factorDe_(subproducto) || 0;
+    const camionesSap = factor ? sap[k] / factor : 0;
+    const enPlanilla = planilla[k] || 0;
+
+    if (!enPlanilla) {
+      if (pareceAlgunSuelto_(nombres[k], sueltos[fecha])) {
+        ambiguos++;
+        return;
+      }
+
+      faltan.push({
+        fecha: fecha,
+        proveedor: nombres[k],
+        subproducto: subproducto,
+        ts: round_(sap[k], 2),
+        camiones: round_(camionesSap, 1)
+      });
+
+      return;
+    }
+
+    // Se redondea ANTES de comparar: 15,4 TS entre 11 da
+    // 1,4000000000000001, y un umbral que se decide por el error del
+    // punto flotante no es un umbral.
+    const diferencia = round_(enPlanilla - camionesSap, 2);
+
+    // Un camión liviano no es un descuadre.
+    if (Math.abs(diferencia) < 0.6) { return; }
+
+    difieren.push({
+      fecha: fecha,
+      proveedor: nombres[k],
+      subproducto: subproducto,
+      camionesPlanilla: enPlanilla,
+      camionesSap: round_(camionesSap, 1),
+      ts: round_(sap[k], 2),
+      diferencia: round_(diferencia, 1)
+    });
+  });
+
+  // Lo más nuevo primero: el error de ayer todavía se puede conversar.
+  function recienteAntes(a, b) {
+    if (a.fecha !== b.fecha) { return a.fecha < b.fecha ? 1 : -1; }
+
+    return String(a.proveedor).localeCompare(
+      String(b.proveedor), 'es', { sensitivity: 'base' }
+    );
+  }
+
+  return {
+    faltan: faltan.sort(recienteAntes),
+    difieren: difieren.sort(recienteAntes),
+    // Casos que no se pueden afirmar porque ese día hay un nombre sin
+    // homologar que se parece al proveedor que falta.
+    ambiguos: ambiguos,
+    // Camiones que la planilla no registró, de los casos afirmables.
+    camionesFaltantes: round_(faltan.reduce(function(total, x) {
+      return total + x.camiones;
+    }, 0), 1)
+  };
+}
+
+/**
+ * ¿Alguno de los nombres sin homologar de ese día se parece a este
+ * proveedor? Umbral bajo a propósito: para DUDAR basta un parecido
+ * lejano, aunque para afirmar un cruce haga falta mucho más.
+ */
+function pareceAlgunSuelto_(proveedor, sueltos) {
+  const limpio = proveedorComparable_(proveedor);
+
+  if (!limpio) { return false; }
+
+  return (sueltos || []).some(function(nombre) {
+    return proveedorSimilitud_(
+      limpio,
+      proveedorComparable_(nombre)
+    ) >= 0.45;
+  });
 }
 
 /* =====================================================================
