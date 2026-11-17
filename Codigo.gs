@@ -344,7 +344,10 @@ const CONFIG = Object.freeze({
   MATERIAL_MAP: Object.freeze({
     '3000039': 'ASTILLA PINO VERDE',
     '3009002': 'AST. PINO VERDE C/ CORTEZA',
-    '3009003': 'ASTILLA EUCALYPTUS NITENS'
+    '3009003': 'ASTILLA EUCALYPTUS NITENS',
+    // En SAP se llama "ASERRIN (TS)", sin decir la especie: el código
+    // es lo que lo identifica.
+    '3000043': 'ASERRÍN PINO VERDE'
   }),
 
   // Posiciones de respaldo (base cero) de la hoja Ingresos.
@@ -1134,12 +1137,12 @@ function resolveIngresosSubproducto_(material, descripcion, textoPosicion) {
     [descripcion, textoPosicion].join(' ')
   );
 
-  // Por descripción y no solo por código: el aserrín entró a proceso
-  // después, y su código de material todavía no está en MATERIAL_MAP.
-  // Reconocerlo por el texto hace que cruce desde el primer día, y el
-  // día que alguien agregue el código tampoco estorba.
+  // El código es lo que manda —3000043 es el aserrín de proceso— y se
+  // resolvió más arriba. Esto es la red por si SAP exporta una fila
+  // con un código que todavía no está en la tabla: así fue como el
+  // aserrín cruzó antes de que apareciera el suyo.
   if (key.indexOf('ASERRIN') !== -1) {
-    return key.indexOf('COMBUSTIBLE') === -1 && key.indexOf('VERDE') !== -1
+    return aserrinDeProceso_(key)
       ? {
           subproducto: 'ASERRÍN PINO VERDE',
           method: 'Descripción material'
@@ -7185,6 +7188,25 @@ function factorDe_(subproducto) {
   return tabla[clave] || CONFIG.FACTOR_CAMION;
 }
 
+/**
+ * ¿Este aserrín entra a proceso?
+ *
+ * El de pino verde sí; el combustible no —ese va a NEOMAS y no es
+ * materia prima del tablero—.
+ *
+ * No se exige que diga "verde", y esa es la parte que importa: el
+ * libro de la portería escribe "ASERRÍN PINO VERDE" pero SAP lo llama
+ * "ASERRIN (TS)" a secas. Pedir la palabra dejaba fuera justo al lado
+ * que trae el peso real. Lo que sí se descarta es la especie escrita:
+ * un aserrín de álamo o de eucalipto no es este.
+ */
+function aserrinDeProceso_(key) {
+  return key.indexOf('COMBUSTIBLE') === -1 &&
+    key.indexOf('ALAMO') === -1 &&
+    key.indexOf('EUCA') === -1 &&
+    key.indexOf('NITENS') === -1;
+}
+
 function canonicalSubproducto_(value) {
   const key = normalizeKey_(value)
     .replace(/\//g, ' ')
@@ -7195,14 +7217,9 @@ function canonicalSubproducto_(value) {
     return '';
   }
 
-  // El aserrín de pino verde entra a proceso igual que la astilla. El
-  // de combustible no: ese va a NEOMAS y no es materia prima del
-  // tablero, así que se descarta aunque empiece igual.
+  // El aserrín de pino verde entra a proceso igual que la astilla.
   if (/^(ASERRIN|ASERRINES)\b/.test(key)) {
-    return key.indexOf('COMBUSTIBLE') === -1 &&
-      key.indexOf('VERDE') !== -1
-      ? 'ASERRÍN PINO VERDE'
-      : '';
+    return aserrinDeProceso_(key) ? 'ASERRÍN PINO VERDE' : '';
   }
 
   if (!/^(AST|ASTILLA|ASTILLAS)\b/.test(key)) {

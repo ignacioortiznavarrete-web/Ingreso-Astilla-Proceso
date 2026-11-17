@@ -116,7 +116,9 @@ const CONFIG = Object.freeze({
   MATERIAL_MAP: Object.freeze({
     '3000039': 'ASTILLA PINO VERDE',
     '3009002': 'AST. PINO VERDE C/ CORTEZA',
-    '3009003': 'ASTILLA EUCALYPTUS NITENS'
+    '3009003': 'ASTILLA EUCALYPTUS NITENS',
+    // "ASERRIN (TS)" en SAP, sin decir la especie.
+    '3000043': 'ASERRÍN PINO VERDE'
   }),
 
   // Posiciones de respaldo (base cero) de la hoja Ingresos, por si

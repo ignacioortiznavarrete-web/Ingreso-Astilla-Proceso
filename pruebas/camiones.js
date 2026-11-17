@@ -54,7 +54,13 @@ const CONFIG = {
     'AST. PINO VERDE C/ CORTEZA': 10.7,
     'ASTILLA PINO VERDE': 11
   },
-  CAMIONES: { PATRON: 'CAMIONES INGRESO', COLUMNAS_MAX: 24 }
+  CAMIONES: { PATRON: 'CAMIONES INGRESO', COLUMNAS_MAX: 24 },
+  MATERIAL_MAP: {
+    '3000039': 'ASTILLA PINO VERDE',
+    '3009002': 'AST. PINO VERDE C/ CORTEZA',
+    '3009003': 'ASTILLA EUCALYPTUS NITENS',
+    '3000043': 'ASERRÍN PINO VERDE'
+  }
 };
 
 CONFIG.FACTOR_POR_MATERIAL['ASERRÍN PINO VERDE'] = 11;
@@ -64,7 +70,9 @@ eval([recortarConst('MESES_LARGOS')].concat([
   'hojaDeCamiones_', 'buscarLibroEnDrive_', 'leerFuentes_',
   'normalizaGuia_', 'claveDeMes_', 'nombreDelMes_', 'idDeEnlace_',
   'factoresObservados_',
-  'canonicalSubproducto_', 'factorDe_', 'resolveProveedor_',
+  'canonicalSubproducto_', 'aserrinDeProceso_', 'factorDe_',
+  'resolveIngresosSubproducto_', 'normalizeSapMaterialCode_',
+  'resolveProveedor_',
   'homologarProveedor_', 'candidatosDelCruce_', 'proveedorComparable_',
   'proveedorSimilitud_', 'uniqueTokens_', 'levenshtein_',
   'uniqueSorted_', 'buildHeaderMap_', 'normalizeHeader_',
@@ -452,6 +460,47 @@ const partida = factoresObservados_(
 ok(partida[0].camiones === 12 && partida[0].observado === 11,
    'una guía partida en dos filas sigue siendo un camión',
    partida[0]);
+
+/* ---------------------------------------------------------------------
+ * EL ASERRÍN, DE LOS DOS LADOS
+ *
+ * El libro lo escribe "ASERRÍN PINO VERDE" y SAP lo llama
+ * "ASERRIN (TS)" a secas, con el código 3000043. Los dos tienen que
+ * caer en el mismo subproducto o el camión se contaría dos veces: una
+ * real y otra estimada.
+ * ------------------------------------------------------------------ */
+ok(resolveIngresosSubproducto_('3000043', 'ASERRIN (TS)', '').subproducto
+   === 'ASERRÍN PINO VERDE',
+   'en SAP manda el código 3000043',
+   resolveIngresosSubproducto_('3000043', 'ASERRIN (TS)', ''));
+
+ok(resolveIngresosSubproducto_('9999', 'ASERRIN (TS)', '').subproducto
+   === 'ASERRÍN PINO VERDE',
+   'y si el código no estuviera, la descripción lo salva: SAP no dice ' +
+   '"verde" en ninguna parte');
+
+ok(resolveIngresosSubproducto_('9999', 'ASERRIN COMBUSTIBLE', '')
+     .subproducto === '' &&
+   resolveIngresosSubproducto_('9998', 'ASERRIN ALAMO', '').subproducto === '',
+   'el combustible y otra especie no entran');
+
+ok(canonicalSubproducto_('ASERRÍN PINO VERDE') === 'ASERRÍN PINO VERDE' &&
+   canonicalSubproducto_('ASERRÍN COMBUSTIBLE') === '',
+   'y del lado del libro, lo mismo con los nombres que escribe la ' +
+   'portería');
+
+// El camión de aserrín del libro, cuando SAP lo carga.
+const conAserrinEnSap = complementarCamiones_(
+  INGRESOS.concat([{
+    fecha: '2026-11-17', source: 'INGRESOS', guia: '47209',
+    proveedor: 'LAMINADORA LOS ANGLES', ts: 8.4
+  }]),
+  leido.rows
+);
+
+ok(conAserrinEnSap.rows.every(function(r) { return r.guia !== '47209'; }),
+   'cargado en SAP, el aserrín estimado desaparece como cualquier otro',
+   conAserrinEnSap.rows.map(function(r) { return r.guia; }));
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

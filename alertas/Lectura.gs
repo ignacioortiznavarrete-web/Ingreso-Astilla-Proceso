@@ -608,9 +608,12 @@ function esDeProceso_(codigo, descripcion) {
 
   const texto = normalizeKey_(descripcion);
 
+  // Sin exigir que diga "verde": SAP lo llama "ASERRIN (TS)" a secas.
+  // Lo que se descarta es el combustible y la especie escrita.
   return texto.indexOf('ASERRIN') !== -1 &&
     texto.indexOf('COMBUSTIBLE') === -1 &&
-    texto.indexOf('VERDE') !== -1;
+    texto.indexOf('ALAMO') === -1 &&
+    texto.indexOf('EUCA') === -1;
 }
 
 /**

@@ -211,19 +211,26 @@ Cuatro materiales, y la lista es exactamente esa:
 |    3009003 | ASTILLA EUCALYPTUS NITENS  |          15,2 |
 |    3009002 | AST. PINO VERDE C/ CORTEZA |          10,7 |
 |    3000039 | ASTILLA PINO VERDE         |            11 |
-|          — | ASERRÍN PINO VERDE         |   11 *(provisorio)* |
+|    3000043 | ASERRÍN PINO VERDE         |   11 *(provisorio)* |
 
-El **aserrín de pino verde** entró después, y por eso tiene dos cosas
-distintas:
+El **aserrín de pino verde** entró después, y tiene una particularidad
+que hay que tener presente: **cada fuente lo llama distinto**.
 
-- **No se reconoce por código sino por descripción.** Su código de
-  material todavía no está escrito en ninguna parte, así que el panel lo
-  identifica por el texto: lleva `ASERRÍN`, lleva `VERDE` y no lleva
-  `COMBUSTIBLE`. Eso hace que cruce desde el primer día y no estorba el
-  día que alguien agregue el código a `MATERIAL_MAP`.
-- **Su factor es provisorio.** Nadie ha dicho cuánto pesa su camión, así
-  que usa el factor general (11 TS). Mientras no se corrija, lo estimado
-  de ese material queda corrido.
+| Dónde | Cómo aparece |
+|---|---|
+| El libro de camiones y la planilla | `ASERRÍN PINO VERDE` |
+| SAP | `ASERRIN (TS)`, código **3000043**, sin decir la especie |
+
+Por eso la regla no exige que diga «verde»: pedirla dejaba fuera justo
+al lado que trae el peso real. Entra todo lo que diga `ASERRÍN` y no
+diga `COMBUSTIBLE` ni nombre otra especie (`ÁLAMO`, `EUCALIPTO`). En
+SAP el que manda es el código; la descripción es la red por si llega
+una fila con un código que todavía no está en la tabla —así fue como
+el aserrín cruzó antes de que apareciera el suyo—.
+
+**Su factor sigue siendo provisorio.** Nadie ha dicho cuánto pesa un
+camión de aserrín, así que usa el factor general (11 TS). Ahora que SAP
+lo reconoce, el panel va a poder decir el real: ver abajo.
 
 El **aserrín combustible no entra**: ese va a NEOMAS y no es materia
 prima del tablero. Lo mismo el trozo aserrable, el MR y la astilla

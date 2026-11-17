@@ -43,6 +43,7 @@ const SUBPRODUCTOS_OBJETIVO = Object.values(CONFIG.MATERIAL_MAP);
 eval([
   'parsePlanillaEmail_', 'parseGridRows_', 'parseAttachments_',
   'parsePlanillaText_', 'buildParsedReport_', 'canonicalSubproducto_',
+  'aserrinDeProceso_',
   'extractHtmlTableRows_', 'cleanHtmlCell_', 'htmlToText_',
   'decodeHtmlEntities_',
   'parseDateText_', 'extractSpanishDateKey_', 'parseOptionalNumber_',
