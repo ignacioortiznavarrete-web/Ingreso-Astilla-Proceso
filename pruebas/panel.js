@@ -46,7 +46,8 @@ function caja(id) {
 const document = {
   getElementById: caja,
   hidden: false,
-  activeElement: null
+  activeElement: null,
+  body: caja('body')
 };
 
 var HOMO_OCUPADO = false;
@@ -82,7 +83,8 @@ eval([
   'normalizaNombre', 'celdaNombres', 'homoMapa',
   'dibujarHomoMapa', 'homoProvisorios', 'homoTabla',
   'dibujarDescuadres', 'esDelMes', 'homoGrupos', 'sellosDeHoja',
-  'dibujarHomoGrupos', 'marcarVivo', 'puedeRefrescar', 'esEstimado'
+  'dibujarHomoGrupos', 'marcarVivo', 'puedeRefrescar', 'esEstimado',
+  'marcarPermisos'
 ].map(recortar).join('\n'));
 
 // --- Datos como los manda el servidor -------------------------------
@@ -388,6 +390,39 @@ ok(esEstimado({ source: 'CAMIONES' }) === true &&
    esEstimado({ source: 'PLANILLA' }) === true &&
    esEstimado({ source: 'INGRESOS' }) === false,
    'lo real es SAP; el libro y la planilla son estimación');
+
+/* ---------------------------------------------------------------------
+ * SOLO LECTURA
+ *
+ * Compartido como aplicación web, el panel lo abre gente que no tiene
+ * acceso a las hojas. Ven todo; lo que no pueden hacer no se les
+ * ofrece. (La negativa de verdad está en el servidor: esconder un
+ * botón no impide llamar a la función.)
+ * ------------------------------------------------------------------ */
+DATA.permisos = { quien: 'alguien@masisa.com', puedeEditar: false };
+marcarPermisos();
+
+ok(document.body.classList.contains('solo-lectura'),
+   'sin permiso de escritura, el panel se marca de solo lectura');
+ok(caja('selloLectura').hidden === false,
+   'y se dice, en vez de dejar botones que no funcionan');
+ok(/alguien@masisa\.com/.test(caja('selloLectura').title),
+   'diciendo como quién lo está viendo', caja('selloLectura').title);
+
+DATA.permisos = { quien: 'dueño@masisa.com', puedeEditar: true };
+marcarPermisos();
+
+ok(!document.body.classList.contains('solo-lectura') &&
+   caja('selloLectura').hidden === true,
+   'con permiso, el panel queda como siempre');
+
+// Un panel servido por una versión vieja del servidor no manda
+// permisos: ahí no se esconde nada, que es como funcionaba antes.
+DATA.permisos = undefined;
+marcarPermisos();
+
+ok(!document.body.classList.contains('solo-lectura'),
+   'sin el dato, se asume que puede: no se rompe lo que ya andaba');
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

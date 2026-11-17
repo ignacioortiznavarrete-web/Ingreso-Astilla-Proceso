@@ -228,6 +228,17 @@ const CONFIG = Object.freeze({
   SHEET_INGRESOS: 'Ingresos',
   // Dónde está escrito qué libro de camiones usar cada mes.
   SHEET_FUENTES: 'Fuentes',
+
+  /**
+   * Quién puede ESCRIBIR desde el panel compartido.
+   *
+   * Mirar es de todos; escribir, de los que estén acá. Quien desplegó
+   * la aplicación web siempre puede, sin necesidad de escribirse.
+   * Correos completos, uno por línea:
+   *
+   *   EDITORES: Object.freeze(['alguien@masisa.com']),
+   */
+  EDITORES: Object.freeze([]),
   SHEET_INFORME: 'InformeAstilla',
   SHEET_PLAN: 'Plan',
   SHEET_PROYECCION: 'Proyeccion',
@@ -457,6 +468,65 @@ function onOpen() {
     .addItem('Instalar automatización', 'instalarDisparador')
     .addItem('Eliminar automatización', 'eliminarDisparadores')
     .addToUi();
+}
+
+/* =====================================================================
+ * QUIÉN PUEDE ESCRIBIR
+ *
+ * El panel se comparte como aplicación web para que lo vea gente que
+ * NO tiene acceso a las hojas: la app corre con los permisos de quien
+ * la desplegó, así que el libro de camiones, Ingresos y el Plan los
+ * lee el script y no el que mira. Esa es justamente la gracia.
+ *
+ * Y es también lo que hay que atajar acá. Si el script escribe con los
+ * permisos de quien lo desplegó, cualquiera que abra el enlace podría
+ * homologar un proveedor o borrar un apunte EN NOMBRE DE ÉL, y en la
+ * hoja quedaría su correo como autor.
+ *
+ * La comprobación va en el servidor y no en el panel: esconder un
+ * botón no impide llamar a la función que había detrás.
+ *
+ * Solo se guardan las funciones que el panel puede llamar. Las del
+ * menú —instalar hojas, reconstruir, rellenar— se corren desde la
+ * planilla, y ahí el control son los permisos de la planilla misma:
+ * quien puede abrirla ya podía escribirla a mano.
+ * ===================================================================== */
+
+/**
+ * ¿Quién está mirando, y puede escribir?
+ *
+ * En la aplicación web el usuario ACTIVO es el que abrió el enlace y
+ * el EFECTIVO es quien la desplegó. Abierto desde la planilla, los dos
+ * son la misma persona y todo sigue como antes.
+ */
+function puedeEditar_() {
+  const quien = normalizeKey_(autorActual_());
+
+  // Sin saber quién es —otro dominio, o un acceso anónimo— solo se
+  // mira. Es el lado seguro del error.
+  if (!quien) { return false; }
+
+  let dueno = '';
+
+  try {
+    dueno = normalizeKey_(Session.getEffectiveUser().getEmail());
+  } catch (ignorado) {}
+
+  if (dueno && quien === dueno) { return true; }
+
+  return (CONFIG.EDITORES || []).some(function(correo) {
+    return normalizeKey_(correo) === quien;
+  });
+}
+
+function exigirEdicion_(accion) {
+  if (puedeEditar_()) { return; }
+
+  throw new Error(
+    'Esta vista es de solo lectura. ' +
+    (accion || 'Eso') + ' lo hace quien tiene el panel a su nombre; ' +
+    'si necesitas hacerlo tú, pide que te agreguen a EDITORES.'
+  );
 }
 
 function doGet() {
@@ -724,6 +794,13 @@ function getDashboardData() {
           fechaLabel: formatDateKey_(x.fecha)
         };
       }),
+      // Quién está mirando y si puede escribir. El panel esconde lo
+      // que no va a poder hacer, para no ofrecer un botón que después
+      // responde que no.
+      permisos: {
+        quien: autorActual_(),
+        puedeEditar: puedeEditar_()
+      },
       // Cuánto pesa de verdad un camión de cada material, según las
       // guías que SAP ya tiene pesadas.
       factoresObservados: factoresObservados_(ingresos.rows),
@@ -3028,6 +3105,8 @@ function agruparPendientes_(lista, proveedoresSap) {
  * a medio escribir y sin decir cuál fue.
  */
 function resolverGrupo(nombres, destino, sinSap) {
+  exigirEdicion_('Asignar un grupo de nombres');
+
   const lista = (nombres || []).map(text_).filter(function(x) { return x; });
   const cabeza = text_(destino);
 
@@ -3374,6 +3453,8 @@ function candidatosSap_(nombre, proveedoresSap) {
  * sin volver a leer toda la planilla.
  */
 function asignarProveedor(alias, proveedorSap) {
+  exigirEdicion_('Escribir una equivalencia de proveedor');
+
   const nombreAlias = text_(alias);
   const nombreSap = text_(proveedorSap);
 
@@ -3498,6 +3579,8 @@ const NOTA_SIN_SAP =
  * una vez, con grupo y todo.
  */
 function declararProveedor(nombre) {
+  exigirEdicion_('Agregar un proveedor');
+
   const limpio = text_(nombre);
 
   if (!limpio) {
@@ -3583,6 +3666,8 @@ function declararProveedor(nombre) {
  * llegar, y son justamente las que motivaron el grupo.
  */
 function reasignarProveedor(actual, nuevo) {
+  exigirEdicion_('Pasar un grupo a SAP');
+
   const cabeza = text_(actual);
   const destino = text_(nuevo);
 
@@ -4973,6 +5058,8 @@ function applyPlanPricing_(rows, planDetails, homologacion) {
  * ===================================================================== */
 
 function procesarPlanillasGmail() {
+  exigirEdicion_('Importar los correos');
+
   return importarPlanillas_(false);
 }
 
@@ -8452,6 +8539,8 @@ function autorActual_() {
  * gestión cerrada que no suma tonelaje. Se rechaza antes de escribir.
  */
 function guardarMapeo(payload) {
+  exigirEdicion_('Guardar una visita');
+
   payload = payload || {};
 
   const id = text_(payload.id);
@@ -8524,6 +8613,8 @@ function guardarMapeo(payload) {
  * callejero pero que sabes exactamente dónde está.
  */
 function guardarUbicacion(payload) {
+  exigirEdicion_('Mover un aserradero en el mapa');
+
   payload = payload || {};
 
   const id = text_(payload.id);
@@ -8594,6 +8685,8 @@ function guardarUbicacion(payload) {
 
 /** Alta rápida desde el mapa, sin pasar por la hoja. */
 function agregarMapeo(payload) {
+  exigirEdicion_('Agregar un aserradero');
+
   payload = payload || {};
 
   const nombre = text_(payload.nombre);
@@ -9045,6 +9138,8 @@ function getApuntes() {
  * Crea o actualiza un apunte. Sin id, es nuevo.
  */
 function guardarApunte(payload) {
+  exigirEdicion_('Guardar un apunte');
+
   const datos = payload || {};
 
   const asunto = text_(datos.asunto);
@@ -9147,6 +9242,8 @@ function guardarApunte(payload) {
 }
 
 function eliminarApunte(id) {
+  exigirEdicion_('Borrar un apunte');
+
   const clave = text_(id);
 
   if (!clave) {
@@ -9484,6 +9581,8 @@ function getRutas() {
  * otro: agendar dos veces la misma ruta llenaría el día de duplicados.
  */
 function guardarRuta(payload) {
+  exigirEdicion_('Guardar una ruta');
+
   payload = payload || {};
 
   const nombre = text_(payload.nombre);
@@ -9779,6 +9878,8 @@ function sincronizarEvento_(
 
 /** Borra la ruta y su evento. */
 function eliminarRuta(id) {
+  exigirEdicion_('Borrar una ruta');
+
   const objetivoId = text_(id);
 
   if (!objetivoId) {

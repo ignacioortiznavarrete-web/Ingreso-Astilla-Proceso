@@ -950,6 +950,51 @@ la autorización de quien lo instaló. Cómo instalarlo, cuándo se dice
 que alguien viene «a la baja» y por qué toma las decisiones que toma,
 en [`alertas/README.md`](alertas/README.md).
 
+## Compartirlo con gente que no tiene acceso a las hojas
+
+El panel se puede abrir de dos maneras, y la diferencia **no es de
+permisos sino de despliegue**:
+
+| | Desde la planilla | Como aplicación web |
+|---|---|---|
+| Cómo se abre | `Extensiones › Apps Script › Abrir dashboard` | Un enlace |
+| Con qué permisos lee | **Los de quien mira** | **Los de quien la desplegó** |
+| Qué necesita el que mira | Acceso a la planilla **y** al libro de camiones | Nada |
+
+La segunda es la que sirve para compartir. El libro de camiones es
+ajeno —de otra área— y la planilla tiene datos que no todos tienen por
+qué ver; con la aplicación web **los lee el script**, no el que mira.
+
+`Implementar › Nueva implementación › Aplicación web`, con
+**Ejecutar como: yo** y **Quién tiene acceso: cualquier usuario de
+masisa.com**. Eso ya está escrito en `appsscript.json`; el enlace que
+entrega es el que se reparte.
+
+### Y por eso el panel distingue mirar de escribir
+
+Si el script escribe con los permisos de quien lo desplegó, cualquiera
+que abra el enlace podría homologar un proveedor o borrar un apunte
+**en su nombre**, y en la hoja quedaría su correo como autor.
+
+Así que:
+
+- **Mirar es de todos.** Quien abre el enlace ve el panel completo.
+- **Escribir es de quien desplegó la app**, más los correos escritos en
+  `CONFIG.EDITORES`.
+- La comprobación está **en el servidor**, en cada función que escribe
+  —homologar, apuntes, mapeos, rutas, importar—: esconder un botón no
+  impide llamar a la función que había detrás.
+- El panel además **esconde lo que no se va a poder hacer** y lo dice
+  con un sello `solo lectura`, para no ofrecer un botón que después
+  responde que no.
+- Si no se sabe quién está mirando —otro dominio, acceso anónimo—,
+  solo lectura. Es el lado seguro del error.
+
+Las funciones del **menú** (instalar hojas, reconstruir, rellenar) no
+llevan esa comprobación: se corren desde la planilla, y ahí el control
+son los permisos de la planilla misma. Quien puede abrirla ya podía
+escribirla a mano.
+
 ## Instalación
 
 1. Abrir el spreadsheet → **Extensiones › Apps Script**.

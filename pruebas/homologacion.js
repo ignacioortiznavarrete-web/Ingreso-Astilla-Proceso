@@ -45,7 +45,21 @@ function recortarConst(nombre) {
 const CONFIG = {
   SPREADSHEET_ID: 'libro',
   SHEET_PROVEEDORES: 'Proveedores',
-  FUZZY_THRESHOLD: 0.72
+  FUZZY_THRESHOLD: 0.72,
+  EDITORES: []
+};
+
+// Quién está mirando. En la aplicación web el usuario activo es el que
+// abrió el enlace y el efectivo es quien la desplegó.
+let USUARIO = 'dueno@masisa.com';
+
+const Session = {
+  getActiveUser: function() {
+    return { getEmail: function() { return USUARIO; } };
+  },
+  getEffectiveUser: function() {
+    return { getEmail: function() { return 'dueno@masisa.com'; } };
+  }
 };
 
 eval([
@@ -58,6 +72,7 @@ eval([
   'agruparPendientes_', 'resolverGrupo', 'esEstimada_',
   'gruposProvisorios_', 'candidatosSap_', 'resolveProveedor_',
   'homologarProveedor_', 'proveedorComparable_', 'proveedorSimilitud_',
+  'puedeEditar_', 'exigirEdicion_',
   'candidatosDelCruce_', 'uniqueTokens_', 'levenshtein_',
   'uniqueSorted_', 'isTotalText_',
   'autorActual_', 'normalizeHeader_', 'normalizeKey_', 'text_',
@@ -555,6 +570,49 @@ ok(delLibro.lista[0].origen === 'Libro',
    delLibro.lista[0].origen);
 ok(delLibro.lista[0].ts === 11,
    'con lo que ese camión trajo', delLibro.lista[0].ts);
+
+/* ---------------------------------------------------------------------
+ * MIRAR NO ES ESCRIBIR
+ *
+ * Compartido como aplicación web, el panel corre con los permisos de
+ * quien lo desplegó. Sin esto, cualquiera que abriera el enlace podría
+ * homologar un proveedor EN SU NOMBRE.
+ * ------------------------------------------------------------------ */
+HOJA = hojaFalsa([CABECERA]);
+
+USUARIO = 'cualquiera@masisa.com';
+
+let negado = '';
+
+try {
+  declararProveedor('PROVEEDOR DE PRUEBA SPA');
+} catch (e) {
+  negado = String(e.message || e);
+}
+
+ok(/solo lectura/i.test(negado),
+   'quien solo mira no puede escribir, aunque llame a la función',
+   negado);
+ok(HOJA.datos.length === 1,
+   'y la hoja no se tocó', HOJA.datos.length);
+
+CONFIG.EDITORES = ['cualquiera@masisa.com'];
+
+ok(declararProveedor('PROVEEDOR DE PRUEBA SPA').escrito === true,
+   'escrito en EDITORES, sí puede');
+
+CONFIG.EDITORES = [];
+USUARIO = 'dueno@masisa.com';
+
+ok(puedeEditar_() === true,
+   'y quien desplegó el panel puede siempre, sin escribirse en la lista');
+
+USUARIO = '';
+
+ok(puedeEditar_() === false,
+   'sin saber quién mira, solo lectura: es el lado seguro del error');
+
+USUARIO = 'dueno@masisa.com';
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

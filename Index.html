@@ -2364,6 +2364,19 @@
     }
 
     .sello-vivo:empty { display: none; }
+
+    /* Solo lectura: lo que escribe no se muestra. No es por seguridad
+       —esa está en el servidor— sino por no ofrecer un botón que
+       después responde que no. */
+    body.solo-lectura [data-escribe] { display: none !important; }
+
+    .sello-lectura {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 8px; border-radius: 4px;
+      font-family: var(--mono); font-size: var(--t-micro);
+      color: var(--madera); background: var(--madera-soft);
+      white-space: nowrap;
+    }
     .sello-vivo.es-flojo::before { background: var(--ladrillo); }
     .sello-vivo.es-flojo { color: var(--ladrillo); background: none; }
 
@@ -3005,7 +3018,8 @@
             <path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2z"/>
           </svg>
         </button>
-        <button class="boton" id="botonImportar" type="button"
+        <span class="sello-lectura" id="selloLectura" hidden>solo lectura</span>
+        <button class="boton" id="botonImportar" data-escribe type="button"
                 onclick="importarGmail()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -3792,7 +3806,7 @@
 
         <div style="display:flex;justify-content:flex-end;
                     align-items:center;gap:8px;flex-wrap:wrap">
-          <button class="boton" type="button" onclick="abrirRuta()">
+          <button class="boton" data-escribe type="button" onclick="abrirRuta()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="1.9" stroke-linecap="round"
                  stroke-linejoin="round">
@@ -3802,7 +3816,7 @@
             Armar ruta
           </button>
           <button class="boton boton-firme" type="button"
-                  onclick="abrirAlta()">
+                  data-escribe onclick="abrirAlta()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round">
               <path d="M12 5v14M5 12h14"/>
@@ -3937,7 +3951,8 @@
           </div>
 
           <div class="apuntes-marco">
-            <form class="apunte-form" id="apunteForm" autocomplete="off">
+            <form class="apunte-form" id="apunteForm" data-escribe
+                  autocomplete="off">
               <input type="hidden" id="apId">
 
               <div class="apunte-fila">
@@ -4239,6 +4254,7 @@
             }
 
             marcarVivo();
+            marcarPermisos();
             renderAll();
 
             if (VISTA === 'comparacion') { dibujarComparacion(); }
@@ -4294,6 +4310,34 @@
            asignación en curso o el foco está en un selector, se espera
            al turno siguiente.
        ================================================================= */
+
+    /**
+     * Esconde lo que escribe cuando el panel es de solo lectura.
+     *
+     * Compartido como aplicación web, el panel lo abre gente que no
+     * tiene acceso a las hojas: ven todo, y lo que no pueden hacer no
+     * se les ofrece. La comprobación de verdad está en el servidor
+     * —esconder un botón no impide llamar a la función—; esto es para
+     * no prometer lo que después se va a negar.
+     */
+    function marcarPermisos() {
+      var permisos = (DATA || {}).permisos || {};
+      var sello = document.getElementById('selloLectura');
+
+      document.body.classList.toggle(
+        'solo-lectura', permisos.puedeEditar === false
+      );
+
+      if (!sello) { return; }
+
+      sello.hidden = permisos.puedeEditar !== false;
+      sello.title = permisos.quien
+        ? 'Estás viendo el panel como ' + permisos.quien +
+          '. Puedes mirarlo todo; escribir lo hace quien lo tiene a su ' +
+          'nombre.'
+        : 'Puedes mirarlo todo; escribir lo hace quien tiene el panel a ' +
+          'su nombre.';
+    }
 
     var VIVO = { cada: 3 * 60 * 1000, ultima: 0, fallo: false };
 
@@ -10554,9 +10598,9 @@
               ? '<span>Compromiso: ' + esc(formatDateKey(a.compromiso)) +
                 '</span>'
               : '') +
-            '<button type="button" class="boton boton-fino" ' +
+            '<button type="button" class="boton boton-fino" data-escribe ' +
               'data-accion="editar" data-id="' + esc(a.id) + '">Editar</button>' +
-            '<button type="button" class="boton boton-fino" ' +
+            '<button type="button" class="boton boton-fino" data-escribe ' +
               'data-accion="borrar" data-id="' + esc(a.id) + '">Borrar</button>' +
           '</div>' +
         '</article>';
@@ -12941,7 +12985,7 @@
           celdaN(f.camionesProy ? formatInteger(f.camionesProy) : '—') +
           celdaN(f.dias ? formatInteger(f.dias) : '—') +
           '<td>' + esc(formatDateKey(f.ultima)) + '</td>' +
-          '<td class="homo-asignar">' +
+          '<td class="homo-asignar" data-escribe>' +
             '<select id="' + id + '" data-homo-select="' + esc(f.alias) +
               '">' + opciones.join('') + '</select>' +
             '<button class="boton" type="button" data-homo-asignar="' +
@@ -13124,7 +13168,7 @@
           celdaN(g.ts ? formatQuantity(g.ts) : '—') +
           celdaN(g.tsProy ? formatQuantity(g.tsProy) : '—') +
           celdaN(g.planMes ? formatQuantity(g.planMes) : '—') +
-          '<td class="homo-asignar">' +
+          '<td class="homo-asignar" data-escribe>' +
             '<select id="' + id + '">' + opciones.join('') + '</select>' +
             '<button class="boton boton-firme" type="button" ' +
               'data-homo-grupo="' + i + '" data-homo-campo="' + id +
@@ -13275,7 +13319,7 @@
           celdaN(g.ts ? formatQuantity(g.ts) : '—') +
           celdaN(g.tsProy ? formatQuantity(g.tsProy) : '—') +
           celdaN(g.planMes ? formatQuantity(g.planMes) : '—') +
-          '<td class="homo-asignar">' +
+          '<td class="homo-asignar" data-escribe>' +
             '<select id="' + id + '">' + opciones.join('') + '</select>' +
             '<button class="boton" type="button" data-homo-pasar="' +
               esc(g.cabeza) + '" data-homo-campo="' + id +
