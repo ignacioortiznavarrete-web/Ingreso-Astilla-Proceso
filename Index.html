@@ -97,10 +97,13 @@
       --ladrillo-soft: #FBEBE8;
       --ladrillo-linea: rgba(163, 56, 42, .38);
 
-      /* Un subproducto = un color, en todo el panel. */
+      /* Un subproducto = un color, en todo el panel. El aserrín lleva
+         un oliva dorado: no se confunde con el verde del nitens ni con
+         el café del corteza, y es el color que tiene. */
       --sub-nitens: #14563A;
       --sub-corteza: #A96C2A;
       --sub-pino: #4F6376;
+      --sub-aserrin: #7A6A1F;
 
       /* Pin de parada de ruta: verde oscuro en los dos temas, porque
          encima lleva el número en blanco. */
@@ -214,6 +217,7 @@
       --sub-nitens: #5FBF8C;
       --sub-corteza: #D69B54;
       --sub-pino: #8FA7BC;
+      --sub-aserrin: #C9B35E;
 
       --pin-ruta: #1E7A50;
 
@@ -262,6 +266,7 @@
         --sub-nitens: #5FBF8C;
         --sub-corteza: #D69B54;
         --sub-pino: #8FA7BC;
+        --sub-aserrin: #C9B35E;
 
         --pin-ruta: #1E7A50;
 
@@ -2345,6 +2350,23 @@
       background: var(--surface-2); color: var(--ink-2);
     }
 
+    /* Cuándo se leyó por última vez. Va en el mono y en tinta floja:
+       es un dato de servicio, no una cifra del panel. */
+    .sello-vivo {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-family: var(--mono); font-size: var(--t-micro);
+      color: var(--ink-3); white-space: nowrap;
+    }
+
+    .sello-vivo::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--verde-2);
+    }
+
+    .sello-vivo:empty { display: none; }
+    .sello-vivo.es-flojo::before { background: var(--ladrillo); }
+    .sello-vivo.es-flojo { color: var(--ladrillo); background: none; }
+
     .es-real { color: var(--verde); background: var(--verde-soft); }
     .es-est { color: var(--madera); background: var(--madera-soft); }
     .es-flojo { color: var(--ladrillo); background: var(--ladrillo-soft); }
@@ -2991,6 +3013,8 @@
           </svg>
           Importar Gmail
         </button>
+        <span class="sello-vivo" id="selloVivo" aria-live="polite"
+              title="El panel vuelve a leer el libro de camiones solo, cada pocos minutos"></span>
         <button class="boton boton-firme" type="button" onclick="cargarTodo()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round">
@@ -4011,7 +4035,8 @@
     const PRODUCT_VARS = {
       'ASTILLA EUCALYPTUS NITENS': '--sub-nitens',
       'AST. PINO VERDE C/ CORTEZA': '--sub-corteza',
-      'ASTILLA PINO VERDE': '--sub-pino'
+      'ASTILLA PINO VERDE': '--sub-pino',
+      'ASERRÍN PINO VERDE': '--sub-aserrin'
     };
 
     /** Color del subproducto, listo para usar en CSS o en un SVG. */
@@ -4180,17 +4205,40 @@
        CARGA
        ================================================================= */
 
-    function cargarTodo() {
-      setLoading(true, 'Leyendo Ingresos, planilla y Plan');
-      hideError();
+    function cargarTodo(silencioso) {
+      if (!silencioso) {
+        setLoading(true, 'Leyendo Ingresos, el libro de camiones y el Plan');
+        hideError();
+      }
 
       google.script.run
         .withSuccessHandler(function(res) {
           DATA = res;
           COMP_PINTADA = false;
+          VIVO.ultima = Date.now();
+          VIVO.fallo = false;
 
           try {
+            // configureDashboard reescribe el rango de fechas con el
+            // mes en curso. En una relectura callada eso le borraría a
+            // quien está mirando el rango que eligió, así que se
+            // guarda y se devuelve. Los tres selectores se cuidan
+            // solos: fillSelect ya conserva lo que estaba elegido.
+            var rango = silencioso
+              ? {
+                  desde: document.getElementById('dateFrom').value,
+                  hasta: document.getElementById('dateTo').value
+                }
+              : null;
+
             configureDashboard();
+
+            if (rango) {
+              document.getElementById('dateFrom').value = rango.desde;
+              document.getElementById('dateTo').value = rango.hasta;
+            }
+
+            marcarVivo();
             renderAll();
 
             if (VISTA === 'comparacion') { dibujarComparacion(); }
@@ -4211,11 +4259,85 @@
           }
         })
         .withFailureHandler(function(err) {
+          // Una relectura callada que falla no borra la pantalla: lo
+          // que se está mirando sigue siendo válido, solo quedó viejo.
+          // Se dice en el sello y se reintenta al rato.
+          if (silencioso) {
+            VIVO.fallo = true;
+            marcarVivo();
+            return;
+          }
+
           setLoading(false);
           showError(mensaje(err));
         })
         .getDashboardData();
     }
+
+    /* =================================================================
+       EN VIVO
+
+       El libro de camiones se escribe mientras el panel está abierto:
+       una fila cada vez que entra un camión. Si el panel leyera solo al
+       abrirse, a media mañana estaría mostrando lo de hace dos horas.
+
+       El libro es ajeno y no se le puede poner un disparador que avise,
+       así que el panel vuelve a preguntar cada pocos minutos. Tres
+       reglas para que eso no estorbe:
+
+         - Solo con la pestaña a la vista. Un panel en segundo plano no
+           lo mira nadie, y cada relectura son segundos de Apps Script
+           que salen de la cuota del día.
+         - Sin el velo de «cargando»: un parpadeo cada tres minutos
+           molesta más que el dato viejo.
+         - Nunca encima de algo que se esté haciendo. Si hay una
+           asignación en curso o el foco está en un selector, se espera
+           al turno siguiente.
+       ================================================================= */
+
+    var VIVO = { cada: 3 * 60 * 1000, ultima: 0, fallo: false };
+
+    function marcarVivo() {
+      var caja = document.getElementById('selloVivo');
+
+      if (!caja) { return; }
+
+      if (!VIVO.ultima) { caja.textContent = ''; return; }
+
+      var minutos = Math.floor((Date.now() - VIVO.ultima) / 60000);
+
+      caja.textContent = VIVO.fallo
+        ? 'sin conexión'
+        : (minutos < 1
+            ? 'en vivo · recién'
+            : 'en vivo · hace ' + minutos + ' min');
+
+      caja.classList.toggle('es-flojo', VIVO.fallo || minutos >= 10);
+    }
+
+    function puedeRefrescar() {
+      if (document.hidden || HOMO_OCUPADO) { return false; }
+
+      var activo = document.activeElement;
+
+      if (activo && /^(SELECT|TEXTAREA)$/.test(activo.tagName)) {
+        return false;
+      }
+
+      return Date.now() - VIVO.ultima >= VIVO.cada;
+    }
+
+    function latido() {
+      marcarVivo();
+
+      if (puedeRefrescar()) { cargarTodo(true); }
+    }
+
+    setInterval(latido, 20000);
+
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) { latido(); }
+    });
 
     function importarGmail() {
       var boton = document.getElementById('botonImportar');
@@ -4551,6 +4673,25 @@
           (cam.sinGuia === 1 ? 'camión de astilla no trae' : 'camiones de astilla no traen') +
           ' número de guía en el libro: sin guía no hay con qué ' +
           'cruzarlos contra Ingresos, así que no se complementan.');
+      }
+
+      // El factor con que se estima, contra lo que SAP pesa. No cambia
+      // ninguna cifra; dice cuál hay que ir a corregir.
+      var desviados = (source.factoresObservados || []).filter(function(f) {
+        return Math.abs(f.desvio) >= 0.08;
+      });
+
+      if (desviados.length) {
+        ojo.push('El factor con que se estiman los camiones no se ' +
+          'parece a lo que pesa Ingresos: ' +
+          desviados.map(function(f) {
+            return '<b>' + esc(shortProduct(f.subproducto)) + '</b> ' +
+              formatQuantity(f.observado) + ' TS por camión en ' +
+              formatInteger(f.camiones) + ' guías, y se está estimando ' +
+              'con ' + formatQuantity(f.usado);
+          }).join('; ') +
+          '. Mientras no se cambie, lo estimado de ese material queda ' +
+          'corrido.');
       }
 
       var caja = document.getElementById('avisoOjo');
@@ -14207,6 +14348,7 @@
       if (name === 'ASTILLA EUCALYPTUS NITENS') return 'Eucalyptus Nitens';
       if (name === 'AST. PINO VERDE C/ CORTEZA') return 'Pino verde c/corteza';
       if (name === 'ASTILLA PINO VERDE') return 'Pino verde';
+      if (name === 'ASERRÍN PINO VERDE') return 'Aserrín pino verde';
       return name || '';
     }
 

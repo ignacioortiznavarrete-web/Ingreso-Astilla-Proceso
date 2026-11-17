@@ -57,10 +57,13 @@ const CONFIG = {
   CAMIONES: { PATRON: 'CAMIONES INGRESO', COLUMNAS_MAX: 24 }
 };
 
+CONFIG.FACTOR_POR_MATERIAL['ASERRÍN PINO VERDE'] = 11;
+
 eval([recortarConst('MESES_LARGOS')].concat([
   'readCamiones_', 'complementarCamiones_', 'mesesDelLibro_',
   'hojaDeCamiones_', 'buscarLibroEnDrive_', 'leerFuentes_',
   'normalizaGuia_', 'claveDeMes_', 'nombreDelMes_', 'idDeEnlace_',
+  'factoresObservados_',
   'canonicalSubproducto_', 'factorDe_', 'resolveProveedor_',
   'homologarProveedor_', 'candidatosDelCruce_', 'proveedorComparable_',
   'proveedorSimilitud_', 'uniqueTokens_', 'levenshtein_',
@@ -213,6 +216,12 @@ const FILAS = [
   // Mismo número de guía, otro proveedor: no se puede afirmar nada.
   camion('OK', '16-11-2026', '2733', 'MADERAS DEL SUR DOS LTDA',
          'ASTILLA PINO VERDE'),
+  // El aserrín de pino verde también entra a proceso.
+  camion('OK', '17-11-2026', '47209', 'LAMINADORA LOS ANGLES',
+         'ASERRÍN PINO VERDE'),
+  // El de combustible no: ese va a NEOMAS.
+  camion('OK', '17-11-2026', '38901', 'ECOPAR CHILE LTDA',
+         'ASERRÍN COMBUSTIBLE', 'NEOMAS'),
   // Un día escrito de antemano, sin camión todavía.
   ['', '', '', '', '17-11-2026']
 ];
@@ -260,11 +269,16 @@ const leido = readCamiones_(
 const porGuia = {};
 leido.rows.forEach(function(r) { porGuia[r.guia] = r; });
 
-ok(leido.rows.length === 6,
-   'entran solo los camiones de astilla de proceso, una vez cada uno',
+ok(leido.rows.length === 7,
+   'entran los camiones que van a proceso, una vez cada uno',
    leido.rows.map(function(r) { return r.guia + ' ' + r.subproducto; }));
-ok(leido.otrosProductos === 2,
-   'el MR y la astilla combustible quedan fuera, y se cuentan',
+ok(!!porGuia['47209'] &&
+   porGuia['47209'].subproducto === 'ASERRÍN PINO VERDE',
+   'el aserrín de pino verde entra: también es materia prima',
+   porGuia['47209']);
+ok(leido.otrosProductos === 3,
+   'el MR, la astilla combustible y el aserrín combustible quedan ' +
+   'fuera, y se cuentan',
    leido.otrosProductos);
 ok(leido.sinGuia === 1,
    'la fila de astilla sin guía no se puede cruzar: se cuenta aparte',
@@ -306,7 +320,7 @@ const complemento = complementarCamiones_(INGRESOS, leido.rows);
 const quedan = complemento.rows.map(function(r) { return r.guia; }).sort();
 
 ok(JSON.stringify(quedan) ===
-   JSON.stringify(['17696', '32132', '3500844']),
+   JSON.stringify(['17696', '32132', '3500844', '47209']),
    'solo se complementan las guías que SAP no tiene',
    JSON.stringify(quedan));
 ok(complemento.yaEnSap === 2,
@@ -316,7 +330,7 @@ ok(complemento.porNumero === 1 &&
    complemento.dudosos[0] === 'MADERAS DEL SUR DOS LTDA',
    'el mismo número a nombre de otro proveedor no se complementa: se dice',
    complemento);
-ok(complemento.ts === round_(11 + 10.7 + 15.2, 2),
+ok(complemento.ts === round_(11 + 10.7 + 15.2 + 11, 2),
    'y las TS estimadas son la suma de sus factores', complemento.ts);
 
 // --- 4. Un día que SAP carga después deja de complementarse ------------
@@ -328,7 +342,7 @@ const despues = complementarCamiones_(
   leido.rows
 );
 
-ok(despues.rows.length === 2 &&
+ok(despues.rows.length === 3 &&
    despues.rows.every(function(r) { return r.guia !== '17696'; }),
    'cuando SAP carga esa guía, el estimado desaparece solo',
    despues.rows.map(function(r) { return r.guia; }));
@@ -386,6 +400,58 @@ const sinLibro = readCamiones_(
 ok(sinLibro.faltan.length === 0 || sinLibro.rows.length > 0,
    'leer dos meses no revienta aunque uno no esté',
    sinLibro.faltan);
+
+/* ---------------------------------------------------------------------
+ * Lo que de verdad pesa un camión
+ *
+ * El factor con que se estima es un acuerdo, no una medición. SAP sí
+ * los pesa, y conviene que el panel diga cuándo no se parecen: el
+ * aserrín entró a proceso sin que nadie dijera cuánto pesa el suyo.
+ * ------------------------------------------------------------------ */
+function guias(subproducto, cuantas, ts) {
+  const filas = [];
+
+  for (let i = 0; i < cuantas; i++) {
+    filas.push({
+      fecha: '2026-11-10', source: 'INGRESOS', guia: String(90000 + i),
+      subproducto: subproducto, proveedor: 'X', ts: ts
+    });
+  }
+
+  return filas;
+}
+
+const observados = factoresObservados_(
+  guias('ASTILLA PINO VERDE', 12, 11.2)
+    .concat(guias('ASERRÍN PINO VERDE', 15, 7.5))
+    // Tres camiones no son una medición: no alcanzan para opinar.
+    .concat(guias('ASTILLA EUCALYPTUS NITENS', 3, 2))
+);
+
+const aserrin = observados.filter(function(f) {
+  return f.subproducto === 'ASERRÍN PINO VERDE';
+})[0];
+
+ok(observados.length === 2,
+   'con menos de diez guías no se opina del factor',
+   observados.map(function(f) { return f.subproducto; }));
+ok(aserrin && aserrin.observado === 7.5 && aserrin.usado === 11,
+   'se compara lo que SAP pesa contra lo que el panel estima', aserrin);
+ok(aserrin && aserrin.desvio < -0.3,
+   'y el desvío dice de qué tamaño es el error', aserrin && aserrin.desvio);
+ok(observados[0].subproducto === 'ASERRÍN PINO VERDE',
+   'primero el que más se aparta');
+
+// La misma guía en dos posiciones es UN camión, no dos.
+const partida = factoresObservados_(
+  guias('ASTILLA PINO VERDE', 12, 5.5).concat(
+    guias('ASTILLA PINO VERDE', 12, 5.5)
+  )
+);
+
+ok(partida[0].camiones === 12 && partida[0].observado === 11,
+   'una guía partida en dos filas sigue siendo un camión',
+   partida[0]);
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

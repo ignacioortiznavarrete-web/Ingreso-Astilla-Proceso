@@ -225,8 +225,10 @@ ok(sinCabecera.reconocida === true,
    'la planilla sin encabezados se reconoce igual');
 ok(sinCabecera.fecha === '2026-10-06',
    'con la fecha de la primera columna', sinCabecera.fecha);
-ok(sinCabecera.rows.length === 3,
-   'y solo las filas de astilla de proceso', sinCabecera.rows);
+ok(sinCabecera.rows.length === 7,
+   'y solo las filas que entran a proceso: las tres astillas y el ' +
+   'aserrín de pino verde',
+   sinCabecera.rows.length);
 
 const porProveedor = {};
 sinCabecera.rows.forEach(function(r) { porProveedor[r.proveedor] = r; });
@@ -247,10 +249,13 @@ ok(!!porProveedor['AGRICOLA Y FORESTAL AITUE'] &&
      'ASTILLA EUCALYPTUS NITENS',
    'y el nitens se lee como nitens',
    porProveedor['AGRICOLA Y FORESTAL AITUE']);
-ok(!porProveedor['COMERCIAL EL CHACAY LTDA.'] &&
-   !porProveedor['BIOMASA SUR'],
-   'el aserrín no entra: no es astilla de proceso',
+ok(!porProveedor['COMERCIAL EL CHACAY LTDA.'],
+   'el aserrín COMBUSTIBLE no entra: ese va a NEOMAS, no al tablero',
    Object.keys(porProveedor));
+ok(!!porProveedor['BIOMASA SUR'] &&
+   porProveedor['BIOMASA SUR'].subproducto === 'ASERRÍN PINO VERDE',
+   'el aserrín de pino verde sí: también es materia prima del proceso',
+   porProveedor['BIOMASA SUR']);
 
 // --- 9. El correo completo del 6 de octubre ---------------------------
 const SEIS = parsePlanillaEmail_(
@@ -263,8 +268,8 @@ const SEIS = parsePlanillaEmail_(
   CONFIG.TIMEZONE
 );
 
-ok(SEIS.fecha === '2026-10-06' && SEIS.rows.length === 3,
-   'el correo del 6 de octubre entra completo', SEIS);
+ok(SEIS.fecha === '2026-10-06' && SEIS.rows.length === 7,
+   'el correo del 6 de octubre entra completo', SEIS.rows.length);
 ok(SEIS.method === 'Tabla HTML del correo',
    'por la tabla del cuerpo', SEIS.method);
 ok(!SEIS.sinDespacho, 'y no se marca sin despacho');
@@ -279,7 +284,7 @@ const conFirma = parseGridRows_(
 
 ok(conFirma.reconocida === true &&
    conFirma.fecha === '2026-10-06' &&
-   conFirma.rows.length === 3,
+   conFirma.rows.length === 7,
    'una tabla antes de la planilla no la tapa', conFirma.rows.length);
 
 // --- 11. La guardia: tres condiciones, no una ------------------------
@@ -315,7 +320,7 @@ const otroRotulo = parseGridRows_(
 
 ok(otroRotulo.reconocida === true &&
    otroRotulo.fecha === '2026-10-06' &&
-   otroRotulo.rows.length === 3,
+   otroRotulo.rows.length === 7,
    'un encabezado con otros rótulos ya no tira la tabla entera',
    otroRotulo.rows.length);
 

@@ -34,6 +34,30 @@ En los días anteriores al libro —los que cubría la planilla del
 correo— sigue valiendo la regla vieja, que es de día completo y está
 explicada más abajo.
 
+### El panel se relee solo
+
+El libro de camiones se escribe **mientras el panel está abierto**: una
+fila cada vez que entra un camión. Si el panel leyera solo al abrirse, a
+media mañana estaría mostrando lo de hace dos horas.
+
+El libro es ajeno y no se le puede poner un disparador que avise, así
+que el panel vuelve a preguntar **cada tres minutos**. Al lado del botón
+Actualizar queda dicho cuándo fue la última vez: `en vivo · hace 2 min`,
+y en rojo si pasaron diez o si la relectura falló.
+
+Tres reglas para que eso no estorbe:
+
+| Regla | Por qué |
+|---|---|
+| Solo con la pestaña a la vista | Un panel en segundo plano no lo mira nadie, y cada relectura son segundos de Apps Script que salen de la cuota del día |
+| Sin el velo de «cargando» | Un parpadeo cada tres minutos molesta más que el dato viejo |
+| Nunca encima de algo que se esté haciendo | Si hay una asignación en curso o el foco está en un selector, se espera al turno siguiente |
+
+Y lo que se está mirando no se pierde: el rango de fechas elegido se
+guarda y se devuelve —`configureDashboard` lo reescribe con el mes en
+curso—, los filtros se conservan solos, y una relectura que **falla** no
+borra la pantalla: deja el dato viejo y lo dice en el sello.
+
 ### El libro de camiones: el registro en vivo
 
 Una fila por camión, con su guía, el proveedor, el producto, el destino
@@ -178,13 +202,51 @@ La lista muestra el mes en curso, lo más nuevo primero —el error de ayer
 todavía se puede conversar—, y dice cuántos casos quedaron en meses
 anteriores.
 
-### Factor por material
+### Qué entra a proceso
+
+Cuatro materiales, y la lista es exactamente esa:
 
 | Código SAP | Subproducto                | TS por camión |
 |-----------:|----------------------------|--------------:|
 |    3009003 | ASTILLA EUCALYPTUS NITENS  |          15,2 |
 |    3009002 | AST. PINO VERDE C/ CORTEZA |          10,7 |
 |    3000039 | ASTILLA PINO VERDE         |            11 |
+|          — | ASERRÍN PINO VERDE         |   11 *(provisorio)* |
+
+El **aserrín de pino verde** entró después, y por eso tiene dos cosas
+distintas:
+
+- **No se reconoce por código sino por descripción.** Su código de
+  material todavía no está escrito en ninguna parte, así que el panel lo
+  identifica por el texto: lleva `ASERRÍN`, lleva `VERDE` y no lleva
+  `COMBUSTIBLE`. Eso hace que cruce desde el primer día y no estorba el
+  día que alguien agregue el código a `MATERIAL_MAP`.
+- **Su factor es provisorio.** Nadie ha dicho cuánto pesa su camión, así
+  que usa el factor general (11 TS). Mientras no se corrija, lo estimado
+  de ese material queda corrido.
+
+El **aserrín combustible no entra**: ese va a NEOMAS y no es materia
+prima del tablero. Lo mismo el trozo aserrable, el MR y la astilla
+combustible, que el libro de camiones también trae.
+
+### El factor que se estima contra la balanza
+
+Los factores de arriba son un **acuerdo**, no una medición. SAP sí los
+mide: cada guía cargada trae su peso real.
+
+El panel los compara. Por cada material cuenta **guías distintas** —la
+misma guía puede venir partida en dos posiciones, y contarla dos veces
+bajaría el promedio a la mitad—, saca las TS por camión que muestra
+Ingresos y, cuando se aparta más de un 8% del factor configurado, lo
+dice en el aviso de Suministro:
+
+> El factor con que se estiman los camiones no se parece a lo que pesa
+> Ingresos: **Aserrín pino verde** 7,5 TS por camión en 15 guías, y se
+> está estimando con 11.
+
+No cambia ninguna cifra: solo deja a la vista el número que hay que ir a
+corregir en `CONFIG.FACTOR_POR_MATERIAL`. Con menos de diez guías no
+opina, porque con tres camiones un promedio dice cualquier cosa.
 
 ## Archivos
 

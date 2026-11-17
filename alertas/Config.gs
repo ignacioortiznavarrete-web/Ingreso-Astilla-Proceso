@@ -123,6 +123,7 @@ const CONFIG = Object.freeze({
   // los encabezados no se reconocen por nombre.
   INGRESOS_COLUMNS: Object.freeze({
     MATERIAL: 2,
+    DESCRIPCION: 3,
     FECHA_CONTABLE: 4,
     CANTIDAD: 8,
     PROVEEDOR: 11,

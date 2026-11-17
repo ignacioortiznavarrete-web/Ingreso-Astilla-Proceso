@@ -593,6 +593,27 @@ function leerNombresSap_(planilla) {
 }
 
 /**
+ * ¿Este material entra a proceso?
+ *
+ * Por código cuando está en la tabla, y por descripción para el
+ * aserrín de pino verde, que entró a proceso después y cuyo código
+ * todavía no está escrito en ninguna parte. El aserrín combustible no
+ * cuenta: ese va a NEOMAS.
+ *
+ * Es la misma regla del panel, y tiene que serlo: si allá un camión
+ * cuenta y acá no, el correo reclama despachos que sí llegaron.
+ */
+function esDeProceso_(codigo, descripcion) {
+  if (CONFIG.MATERIAL_MAP[codigo]) { return true; }
+
+  const texto = normalizeKey_(descripcion);
+
+  return texto.indexOf('ASERRIN') !== -1 &&
+    texto.indexOf('COMBUSTIBLE') === -1 &&
+    texto.indexOf('VERDE') !== -1;
+}
+
+/**
  * Lo que despachó cada proveedor en la ventana, mes por mes, y cuándo
  * fue la última vez.
  *
@@ -657,6 +678,10 @@ function leerDespachos_(planilla, ctx) {
     }
 
     const cMaterial = col(['material', 'cod material'], d.MATERIAL);
+    const cDescripcion = col(
+      ['des material', 'descripcion material', 'desc material'],
+      d.DESCRIPCION
+    );
     const cFecha = col(
       ['fecha contab', 'fecha contable', 'fecha contabilizacion'],
       d.FECHA_CONTABLE
@@ -672,9 +697,14 @@ function leerDespachos_(planilla, ctx) {
 
       if (!fecha || fecha < desde) { continue; }
 
-      const codigo = text_(valores[i][cMaterial]).replace(/\D/g, '');
-
-      if (!CONFIG.MATERIAL_MAP[codigo]) { continue; }
+      if (
+        !esDeProceso_(
+          text_(valores[i][cMaterial]).replace(/\D/g, ''),
+          valores[i][cDescripcion]
+        )
+      ) {
+        continue;
+      }
 
       const ts = aNumero_(
         mostrados[i][cCantidad] !== ''

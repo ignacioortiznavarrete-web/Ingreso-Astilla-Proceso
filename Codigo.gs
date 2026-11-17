@@ -253,7 +253,13 @@ const CONFIG = Object.freeze({
   FACTOR_POR_MATERIAL: Object.freeze({
     'ASTILLA EUCALYPTUS NITENS': 15.2,
     'AST. PINO VERDE C/ CORTEZA': 10.7,
-    'ASTILLA PINO VERDE': 11
+    'ASTILLA PINO VERDE': 11,
+    // PROVISORIO. El aserrín entró después y nadie ha dicho cuánto
+    // pesa su camión, así que por ahora usa el factor general. El
+    // panel compara estos factores contra lo que SAP pesa de verdad y
+    // avisa cuando no se parecen: ahí está el número que hay que
+    // poner acá.
+    'ASERRÍN PINO VERDE': 11
   }),
   UNIDAD: 'TS',
 
@@ -368,7 +374,10 @@ const CONFIG = Object.freeze({
 const SUBPRODUCTOS_OBJETIVO = Object.freeze([
   'ASTILLA EUCALYPTUS NITENS',
   'AST. PINO VERDE C/ CORTEZA',
-  'ASTILLA PINO VERDE'
+  'ASTILLA PINO VERDE',
+  // El aserrín de pino verde también entra a proceso. El de
+  // combustible no: ese va a NEOMAS y no es materia prima del tablero.
+  'ASERRÍN PINO VERDE'
 ]);
 
 /**
@@ -715,6 +724,9 @@ function getDashboardData() {
           fechaLabel: formatDateKey_(x.fecha)
         };
       }),
+      // Cuánto pesa de verdad un camión de cada material, según las
+      // guías que SAP ya tiene pesadas.
+      factoresObservados: factoresObservados_(ingresos.rows),
       // El libro de camiones: de dónde salió, qué alcanzó a ver y
       // cuántos de sus camiones ya estaban en SAP.
       camiones: {
@@ -1044,6 +1056,19 @@ function resolveIngresosSubproducto_(material, descripcion, textoPosicion) {
   const key = normalizeKey_(
     [descripcion, textoPosicion].join(' ')
   );
+
+  // Por descripción y no solo por código: el aserrín entró a proceso
+  // después, y su código de material todavía no está en MATERIAL_MAP.
+  // Reconocerlo por el texto hace que cruce desde el primer día, y el
+  // día que alguien agregue el código tampoco estorba.
+  if (key.indexOf('ASERRIN') !== -1) {
+    return key.indexOf('COMBUSTIBLE') === -1 && key.indexOf('VERDE') !== -1
+      ? {
+          subproducto: 'ASERRÍN PINO VERDE',
+          method: 'Descripción material'
+        }
+      : { subproducto: '', method: '' };
+  }
 
   if (
     key.indexOf('OTRA ESPECIE') !== -1 ||
@@ -6179,6 +6204,57 @@ function complementarCamiones_(ingresosRows, camionesRows) {
   };
 }
 
+/**
+ * Lo que de verdad pesa un camión, según SAP.
+ *
+ * Los factores con que se estima —15,2 el nitens, 10,7 el corteza, 11
+ * el pino verde— son un acuerdo, no una medición, y el aserrín entró a
+ * proceso sin que nadie dijera el suyo. SAP sí los mide: cada guía
+ * cargada trae su peso real.
+ *
+ * Se cuentan guías distintas y no filas: la misma guía puede venir
+ * partida en dos posiciones, y contarla dos veces bajaría el promedio
+ * a la mitad.
+ *
+ * Esto no cambia ninguna cifra. Solo deja dicho cuánto se aparta el
+ * factor configurado de la balanza, que es el número que hay que ir a
+ * corregir en CONFIG.
+ */
+function factoresObservados_(ingresosRows) {
+  const porSub = {};
+
+  (ingresosRows || []).forEach(function(row) {
+    const sub = text_(row.subproducto);
+    const guia = normalizaGuia_(row.guia);
+
+    if (!sub || !guia) { return; }
+
+    if (!porSub[sub]) { porSub[sub] = { ts: 0, guias: {} }; }
+
+    porSub[sub].ts += Number(row.ts) || 0;
+    porSub[sub].guias[guia] = true;
+  });
+
+  return Object.keys(porSub).map(function(sub) {
+    const camiones = Object.keys(porSub[sub].guias).length;
+    const observado = camiones ? porSub[sub].ts / camiones : 0;
+    const usado = factorDe_(sub);
+
+    return {
+      subproducto: sub,
+      camiones: camiones,
+      observado: round_(observado, 2),
+      usado: usado,
+      desvio: usado ? round_(observado / usado - 1, 3) : 0
+    };
+  }).filter(function(x) {
+    // Con tres camiones el promedio dice cualquier cosa.
+    return x.camiones >= 10;
+  }).sort(function(a, b) {
+    return Math.abs(b.desvio) - Math.abs(a.desvio);
+  });
+}
+
 /** El mes en curso y el anterior, como claves 'yyyy-MM'. */
 function mesesDelLibro_(month) {
   const meses = [month.prefix];
@@ -7030,6 +7106,16 @@ function canonicalSubproducto_(value) {
 
   if (!key || key.indexOf('TOTAL') === 0) {
     return '';
+  }
+
+  // El aserrín de pino verde entra a proceso igual que la astilla. El
+  // de combustible no: ese va a NEOMAS y no es materia prima del
+  // tablero, así que se descarta aunque empiece igual.
+  if (/^(ASERRIN|ASERRINES)\b/.test(key)) {
+    return key.indexOf('COMBUSTIBLE') === -1 &&
+      key.indexOf('VERDE') !== -1
+      ? 'ASERRÍN PINO VERDE'
+      : '';
   }
 
   if (!/^(AST|ASTILLA|ASTILLAS)\b/.test(key)) {

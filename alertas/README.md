@@ -153,6 +153,13 @@ dos. Mientras la columna era solo informativa se notaba poco; con el
 ritmo encima, habría dicho que un proveedor va al día cuando viene
 cayendo.
 
+**Qué cuenta como proceso.** Los tres materiales de astilla por su
+código, y el **aserrín de pino verde** por su descripción: entró a
+proceso después y su código todavía no está escrito en ninguna parte.
+El aserrín combustible no cuenta. Es la misma regla del panel, y tiene
+que serlo: si allá un camión cuenta y acá no, el correo reclama
+despachos que sí llegaron.
+
 Lo que **sí** está duplicado del dashboard son constantes y funciones
 puras: códigos de material, días hábiles y la normalización de nombres
 de proveedor. Están todas juntas en `Config.gs` y `comparable_()` para

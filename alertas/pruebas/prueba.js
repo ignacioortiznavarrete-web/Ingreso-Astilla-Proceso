@@ -310,5 +310,33 @@ ok(/a las 9:00/.test(registro.join(' ')),
    'y queda dicho a qué hora sale',
    registro.filter(r => /instalado/.test(r))[0]);
 
+// --- 11. El aserrín de pino verde también entra a proceso -------------
+function soloIngreso(material, descripcion, proveedor) {
+  return cargar(Object.assign({}, hojas, {
+    Ingresos: hoja('Ingresos', [
+      CABECERA_INGRESOS,
+      ['', '', material, descripcion, new Date(Date.UTC(2026, 8, 16)),
+       '', '', '', '120', '', 'TS', 'P', proveedor, 'TABLEROS']
+    ])
+  }), '2026-09-16').ctx.construirAviso_();
+}
+
+const conAserrin = soloIngreso(
+  '3009777', 'ASERRIN PINO VERDE (TS)', 'OMEGA SPA'
+).proveedores.filter(p => p.proveedor === 'OMEGA SPA')[0];
+
+ok(conAserrin && conAserrin.dias === 0 && conAserrin.ingresado === 120,
+   'el aserrín de pino verde cuenta como despacho aunque su código no ' +
+   'esté en la tabla: se reconoce por la descripción',
+   conAserrin && [conAserrin.dias, conAserrin.ingresado]);
+
+const conCombustible = soloIngreso(
+  '3009778', 'ASERRIN COMBUSTIBLE', 'OMEGA SPA'
+).proveedores.filter(p => p.proveedor === 'OMEGA SPA')[0];
+
+ok(conCombustible && conCombustible.dias === null,
+   'y el aserrín combustible no: ese va a NEOMAS, no al tablero',
+   conCombustible && conCombustible.dias);
+
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

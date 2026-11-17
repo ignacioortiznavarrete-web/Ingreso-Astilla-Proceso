@@ -33,12 +33,24 @@ function caja(id) {
   if (!CAJAS[id]) {
     CAJAS[id] = {
       id: id, innerHTML: '', textContent: '', hidden: false,
-      classList: { toggle: function() {}, add: function() {} }
+      clases: {},
+      classList: {
+        toggle: function(n, on) { CAJAS[id].clases[n] = !!on; },
+        add: function(n) { CAJAS[id].clases[n] = true; },
+        contains: function(n) { return !!CAJAS[id].clases[n]; }
+      }
     };
   }
   return CAJAS[id];
 }
-const document = { getElementById: caja };
+const document = {
+  getElementById: caja,
+  hidden: false,
+  activeElement: null
+};
+
+var HOMO_OCUPADO = false;
+var VIVO = { cada: 3 * 60 * 1000, ultima: 0, fallo: false };
 
 // --- Ayudantes del panel, tal como están ----------------------------
 function setText(id, t) { caja(id).textContent = String(t); }
@@ -70,7 +82,7 @@ eval([
   'normalizaNombre', 'celdaNombres', 'homoMapa',
   'dibujarHomoMapa', 'homoProvisorios', 'homoTabla',
   'dibujarDescuadres', 'esDelMes', 'homoGrupos', 'sellosDeHoja',
-  'dibujarHomoGrupos'
+  'dibujarHomoGrupos', 'marcarVivo', 'puedeRefrescar', 'esEstimado'
 ].map(recortar).join('\n'));
 
 // --- Datos como los manda el servidor -------------------------------
@@ -305,6 +317,77 @@ const recortado = homoGrupos()[0];
 ok(recortado.cuantos === 1 && recortado.ts === 33,
    'un nombre de otro mes sale del grupo, y las cifras se rehacen',
    [recortado.cuantos, recortado.ts]);
+
+/* ---------------------------------------------------------------------
+ * EN VIVO
+ *
+ * El panel vuelve a leer solo cada pocos minutos, porque el libro de
+ * camiones se escribe mientras está abierto. Lo que cuida esta prueba
+ * son las guardas: que esa relectura no caiga encima de alguien que
+ * está trabajando.
+ * ------------------------------------------------------------------ */
+const MINUTO = 60 * 1000;
+
+VIVO.ultima = 0;
+marcarVivo();
+ok(caja('selloVivo').textContent === '',
+   'antes de la primera carga no dice nada',
+   caja('selloVivo').textContent);
+
+VIVO.ultima = Date.now();
+marcarVivo();
+ok(caja('selloVivo').textContent === 'en vivo · recién',
+   'recién leído lo dice', caja('selloVivo').textContent);
+
+VIVO.ultima = Date.now() - 5 * MINUTO;
+marcarVivo();
+ok(caja('selloVivo').textContent === 'en vivo · hace 5 min',
+   'y después dice cuánto hace', caja('selloVivo').textContent);
+
+VIVO.ultima = Date.now() - 12 * MINUTO;
+marcarVivo();
+ok(caja('selloVivo').classList.contains('es-flojo'),
+   'pasados diez minutos el sello se apaga: el dato ya no es de ahora');
+
+VIVO.fallo = true;
+marcarVivo();
+ok(caja('selloVivo').textContent === 'sin conexión',
+   'si la relectura falla se dice, en vez de borrar la pantalla',
+   caja('selloVivo').textContent);
+VIVO.fallo = false;
+
+// --- Las guardas ------------------------------------------------------
+VIVO.ultima = Date.now() - 4 * MINUTO;
+ok(puedeRefrescar() === true,
+   'pasados los minutos del intervalo, se relee');
+
+VIVO.ultima = Date.now() - 30 * 1000;
+ok(puedeRefrescar() === false,
+   'pero no antes de tiempo: cada relectura cuesta cuota');
+
+VIVO.ultima = Date.now() - 4 * MINUTO;
+document.hidden = true;
+ok(puedeRefrescar() === false,
+   'con la pestaña escondida no se relee: nadie la está mirando');
+document.hidden = false;
+
+HOMO_OCUPADO = true;
+ok(puedeRefrescar() === false,
+   'ni encima de una asignación en curso');
+HOMO_OCUPADO = false;
+
+document.activeElement = { tagName: 'SELECT' };
+ok(puedeRefrescar() === false,
+   'ni con un selector abierto: redibujar se lo cerraría en la cara');
+document.activeElement = null;
+
+ok(puedeRefrescar() === true, 'y despejado todo, vuelve a leer');
+
+// --- Qué fila es estimada --------------------------------------------
+ok(esEstimado({ source: 'CAMIONES' }) === true &&
+   esEstimado({ source: 'PLANILLA' }) === true &&
+   esEstimado({ source: 'INGRESOS' }) === false,
+   'lo real es SAP; el libro y la planilla son estimación');
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;
