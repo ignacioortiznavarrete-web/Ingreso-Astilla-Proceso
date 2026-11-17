@@ -4972,6 +4972,7 @@
       var lista = (DATA.source || {}).camionesPlan || [];
       var caja = document.getElementById('planCamionesTabla');
       var faltan = lista.reduce(function(t, x) { return t + x.faltan; }, 0);
+      var sinPlan = lista.filter(function(x) { return x.sinPlan; });
 
       setText('planCamionesConteo', lista.length
         ? formatInteger(faltan) + ' camiones por entrar'
@@ -4991,17 +4992,29 @@
         // atrasado y hay que apretar.
         var apretado = x.porDiaPlan > 0 && x.porDia > x.porDiaPlan * 1.05;
 
+        // Escrito en el Plan pero sin toneladas este mes. Mostrarlo en
+        // cero diría que su compromiso es cero, y no es eso: es que
+        // falta escribirlo.
+        var pie = x.sinPlan
+          ? '<div class="homo-hoy es-sin-sap">sin toneladas para este ' +
+            'mes en la hoja Plan (' + x.filasPlan +
+            (x.filasPlan === 1 ? ' fila escrita' : ' filas escritas') +
+            ')</div>'
+          : '<div class="homo-hoy">' + formatQuantity(x.factor) + ' ' +
+            unidad() + ' por camión</div>';
+
         return '<tr>' +
           '<td><strong>' + esc(shortProduct(x.subproducto)) + '</strong>' +
-            '<div class="homo-hoy">' + formatQuantity(x.factor) + ' ' +
-            unidad() + ' por camión</div></td>' +
-          celdaN(formatQuantity(x.planTs)) +
-          celdaN(formatInteger(x.camionesPlan)) +
+            pie + '</td>' +
+          celdaN(x.sinPlan ? '—' : formatQuantity(x.planTs)) +
+          celdaN(x.sinPlan ? '—' : formatInteger(x.camionesPlan)) +
           celdaN(formatInteger(x.camionesMes)) +
-          celdaN('<b>' + formatInteger(x.faltan) + '</b>') +
-          celdaN('<b class="' + (apretado ? 'baja' : '') + '">' +
-            formatQuantity(x.porDia) + '</b>') +
-          celdaN(formatQuantity(x.porDiaPlan)) +
+          celdaN(x.sinPlan ? '—' : '<b>' + formatInteger(x.faltan) + '</b>') +
+          celdaN(x.sinPlan
+            ? '—'
+            : '<b class="' + (apretado ? 'baja' : '') + '">' +
+              formatQuantity(x.porDia) + '</b>') +
+          celdaN(x.sinPlan ? '—' : formatQuantity(x.porDiaPlan)) +
           '</tr>';
       }).join('');
 
@@ -5021,6 +5034,15 @@
           ? 'Repartido en los <b>' + lista[0].diasRestantes +
             '</b> días hábiles que quedan del mes.'
           : 'No quedan días hábiles en el mes: lo que falta ya no entra.') +
+        (sinPlan.length
+          ? ' <b>' + sinPlan.map(function(x) {
+              return esc(shortProduct(x.subproducto));
+            }).join(', ') + '</b> ' +
+            (sinPlan.length === 1 ? 'está escrito' : 'están escritos') +
+            ' en la hoja Plan con su precio, pero sin toneladas para ' +
+            'este mes: mientras no las tenga no hay contra qué contar ' +
+            'camiones.'
+          : '') +
         '</p></div>';
     }
 

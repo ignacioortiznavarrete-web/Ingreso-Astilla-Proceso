@@ -80,6 +80,13 @@ dividir de cabeza. La tabla lo deja escrito, material por material:
 Cada material con **su** factor: el corteza pide 26 camiones al día
 donde el pino verde pide 21, porque sus camiones pesan distinto.
 
+**Un material escrito en el Plan sin toneladas para el mes no se
+muestra en cero.** Así llegó el aserrín: once filas con su precio y la
+columna del mes en blanco. Cero diría que su compromiso es cero, y no
+es eso —es que falta escribirlo—, así que esas celdas van con un guion
+y el panel dice cuántas filas tiene escritas. Lo que entró se cuenta
+igual; lo que falta no se inventa.
+
 La última columna es la que da el contexto: el ritmo que el plan pedía
 **desde el primer día**. Sin ella no se sabe si el número de hoy es el
 de siempre o uno que se disparó porque el mes viene atrasado —cuando el

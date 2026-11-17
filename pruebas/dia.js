@@ -242,5 +242,46 @@ ok(yaCumplio.faltan === 0 && yaCumplio.porDia === 0,
    'y al que ya cumplió no le faltan camiones negativos',
    yaCumplio);
 
+// --- Escrito en el Plan, pero sin toneladas este mes ------------------
+//
+// Así llegó el aserrín: once filas con su precio y la columna del mes
+// en blanco. Mostrarlo en cero diría que su compromiso es cero, y no
+// es eso: es que falta escribirlo.
+const SIN_TONELADAS = PLAN.concat([
+  { subproducto: 'ASERRÍN PINO VERDE', proveedorPlan: 'PROMASA SPA.',
+    precio: 55400, plan: 0 },
+  { subproducto: 'ASERRÍN PINO VERDE', proveedorPlan: 'BIOMASAS SUR SPA',
+    precio: 58000, plan: 0 }
+]);
+
+const conAserrin = camionesDelPlan_(
+  SIN_TONELADAS,
+  DEL_MES.concat([
+    { fecha: '2026-11-14', subproducto: 'ASERRÍN PINO VERDE', ts: 110 }
+  ]),
+  MES,
+  HABILES
+);
+
+const aserrin = conAserrin.filter(function(x) {
+  return x.subproducto === 'ASERRÍN PINO VERDE';
+})[0];
+
+ok(!!aserrin, 'el material aparece aunque su plan venga sin toneladas',
+   conAserrin.map(function(x) { return x.subproducto; }));
+ok(aserrin.sinPlan === true && aserrin.filasPlan === 2,
+   'y queda dicho: está escrito, con dos filas, pero sin toneladas',
+   aserrin);
+ok(aserrin.camionesMes === 10 && aserrin.faltan === 0,
+   'lo que entró se cuenta igual; lo que falta no se inventa', aserrin);
+
+const noEstaEnElPlan = camionesDelPlan_(
+  PLAN, DEL_MES, MES, HABILES
+).filter(function(x) { return x.subproducto === 'ASERRÍN PINO VERDE'; })[0];
+
+ok(!noEstaEnElPlan,
+   'y el material que no está en el Plan ni entró no ocupa una fila',
+   noEstaEnElPlan);
+
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

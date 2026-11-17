@@ -6681,12 +6681,17 @@ function camionesDelPlan_(planDetails, rows, month, workdays) {
   const porSub = {};
 
   SUBPRODUCTOS_OBJETIVO.forEach(function(sub) {
-    porSub[sub] = { planTs: 0, tsMes: 0 };
+    porSub[sub] = { planTs: 0, tsMes: 0, filas: 0 };
   });
 
   (planDetails || []).forEach(function(item) {
     if (!porSub[item.subproducto]) { return; }
 
+    // Las filas se cuentan aunque no traigan toneladas. Un material
+    // escrito en el Plan con la celda del mes en blanco no es lo mismo
+    // que uno que no está en el Plan: el primero es un plan que falta
+    // llenar, y mostrarlo en cero diría que su compromiso es cero.
+    porSub[item.subproducto].filas++;
     porSub[item.subproducto].planTs += Number(item.plan) || 0;
   });
 
@@ -6709,6 +6714,9 @@ function camionesDelPlan_(planDetails, rows, month, workdays) {
     return {
       subproducto: sub,
       factor: factor,
+      // Está escrito en el Plan, pero sin toneladas para este mes.
+      sinPlan: item.filas > 0 && item.planTs <= 0,
+      filasPlan: item.filas,
       planTs: round_(item.planTs, 2),
       tsMes: round_(item.tsMes, 2),
       camionesPlan: Math.round(camionesPlan),
@@ -6727,7 +6735,7 @@ function camionesDelPlan_(planDetails, rows, month, workdays) {
         : null
     };
   }).filter(function(x) {
-    return x.planTs > 0 || x.camionesMes > 0;
+    return x.planTs > 0 || x.camionesMes > 0 || x.filasPlan > 0;
   });
 }
 
