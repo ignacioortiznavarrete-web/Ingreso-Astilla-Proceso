@@ -249,6 +249,13 @@ const CONFIG = Object.freeze({
   HTML_FILE: 'Index',
   TIMEZONE: 'America/Santiago',
 
+  /**
+   * La jornada de recepción de la planta. De esto sale la proyección
+   * de cierre del día: sin saber cuánto falta para cerrar, "llevamos
+   * 14 camiones" no dice nada.
+   */
+  JORNADA: Object.freeze({ DESDE: '08:30', HASTA: '23:00' }),
+
   // Toneladas secas por camión, POR MATERIAL. No es un promedio de
   // oficina: un camión de nitens carga más seco que uno de pino con
   // corteza, y usar 11 para todo desinflaba el nitens y sobrestimaba
@@ -797,6 +804,21 @@ function getDashboardData() {
           fechaLabel: formatDateKey_(x.fecha)
         };
       }),
+      // Qué entró hoy, camión por camión, y con cuánto cerraría el
+      // día si sigue a este ritmo.
+      hoy: resumenDelDia_(
+        camiones.rows,
+        ingresos.rows,
+        workdays.todayKey,
+        timezone
+      ),
+      // Cuántos camiones faltan para cumplir el plan de cada material.
+      camionesPlan: camionesDelPlan_(
+        plan.details,
+        rows,
+        month,
+        workdays
+      ),
       // Quién está mirando y si puede escribir. El panel esconde lo
       // que no va a poder hacer, para no ofrecer un botón que después
       // responde que no.
@@ -6491,6 +6513,222 @@ function escribirFuente_(spreadsheet, mes, libro) {
   ]]);
 
   return fila;
+}
+
+
+/* =====================================================================
+ * EL DÍA EN CURSO
+ *
+ * El libro de camiones se escribe mientras pasa el día, así que por
+ * primera vez se puede responder lo que antes había que esperar al
+ * correo de la noche: qué entró hoy, camión por camión, y cómo va a
+ * cerrar el día si sigue a este ritmo.
+ *
+ * La planta recibe entre las 08:30 y las 23:00. Esa jornada es lo que
+ * convierte "llevamos 14 camiones" en "vamos a cerrar con 22": sin
+ * saber cuánto falta para cerrar, el número de media mañana no dice
+ * nada.
+ * ===================================================================== */
+
+/** Minutos desde medianoche de un 'HH:MM'. -1 si no se entiende. */
+function minutosDeHora_(valor) {
+  const m = String(valor === null || valor === undefined ? '' : valor)
+    .trim()
+    .match(/^(\d{1,2})[:.](\d{2})/);
+
+  if (!m) { return -1; }
+
+  const hora = Number(m[1]);
+  const minuto = Number(m[2]);
+
+  if (hora > 23 || minuto > 59) { return -1; }
+
+  return hora * 60 + minuto;
+}
+
+/** La hora de ahora en la planta, en minutos. */
+function ahoraEnMinutos_(timezone) {
+  return minutosDeHora_(
+    Utilities.formatDate(
+      new Date(),
+      timezone || CONFIG.TIMEZONE,
+      'HH:mm'
+    )
+  );
+}
+
+/**
+ * Lo que entró hoy, y con qué va a cerrar el día.
+ *
+ * La proyección es una regla de tres sobre la jornada: si en las
+ * primeras horas entraron N camiones, al cierre entrarán los que da
+ * ese mismo ritmo. No pretende ser un pronóstico —los camiones no
+ * llegan parejo— y por eso se dice "a este ritmo" y no "van a entrar".
+ *
+ * Antes de hora y media no se proyecta: con dos camiones a las nueve
+ * de la mañana, la regla de tres dice cualquier cosa.
+ */
+function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
+  const enSap = {};
+
+  (ingresosRows || []).forEach(function(row) {
+    const guia = normalizaGuia_(row.guia);
+
+    if (guia) {
+      enSap[guia + '||' + normalizeKey_(row.proveedor)] = true;
+    }
+  });
+
+  const filas = (camionesRows || []).filter(function(row) {
+    return row.fecha === hoy;
+  }).map(function(row) {
+    return {
+      hora: row.llegada || '',
+      minutos: minutosDeHora_(row.llegada),
+      guia: row.guia,
+      proveedor: row.proveedor,
+      proveedorRaw: row.proveedorRaw,
+      subproducto: row.subproducto,
+      destino: row.destino,
+      ts: row.ts,
+      enCurso: !!row.enCurso,
+      // Ya cargado en SAP con su peso real. Hoy casi nunca pasa —SAP
+      // va días atrás— pero cuando pasa conviene verlo.
+      enSap: !!enSap[row.guia + '||' + normalizeKey_(row.proveedor)]
+    };
+  }).sort(function(a, b) {
+    return (b.minutos || 0) - (a.minutos || 0);
+  });
+
+  const porSub = {};
+
+  filas.forEach(function(fila) {
+    if (!porSub[fila.subproducto]) {
+      porSub[fila.subproducto] = { camiones: 0, ts: 0 };
+    }
+
+    porSub[fila.subproducto].camiones++;
+    porSub[fila.subproducto].ts += Number(fila.ts) || 0;
+  });
+
+  const desde = minutosDeHora_(CONFIG.JORNADA.DESDE);
+  const hasta = minutosDeHora_(CONFIG.JORNADA.HASTA);
+  const jornada = Math.max(1, hasta - desde);
+  const ahora = ahoraEnMinutos_(timezone);
+  const transcurridos = Math.max(0, Math.min(jornada, ahora - desde));
+
+  // Antes de hora y media, o después de cerrar, no hay regla de tres
+  // que valga: en el primer caso porque no hay con qué, en el segundo
+  // porque el día ya está.
+  const alRitmo = transcurridos >= 90 && transcurridos < jornada;
+  const factor = alRitmo ? jornada / transcurridos : 1;
+
+  const subproductos = Object.keys(porSub).sort().map(function(sub) {
+    return {
+      subproducto: sub,
+      camiones: porSub[sub].camiones,
+      ts: round_(porSub[sub].ts, 2),
+      camionesCierre: Math.round(porSub[sub].camiones * factor),
+      tsCierre: round_(porSub[sub].ts * factor, 2)
+    };
+  });
+
+  const camiones = filas.length;
+  const ts = filas.reduce(function(total, fila) {
+    return total + (Number(fila.ts) || 0);
+  }, 0);
+
+  return {
+    fecha: hoy,
+    fechaLabel: formatDateKey_(hoy),
+    filas: filas,
+    camiones: camiones,
+    ts: round_(ts, 2),
+    enCurso: filas.filter(function(f) { return f.enCurso; }).length,
+    enSap: filas.filter(function(f) { return f.enSap; }).length,
+    porSubproducto: subproductos,
+    jornada: {
+      desde: CONFIG.JORNADA.DESDE,
+      hasta: CONFIG.JORNADA.HASTA,
+      minutos: jornada,
+      transcurridos: transcurridos,
+      parte: round_(transcurridos / jornada, 4),
+      abierta: transcurridos > 0 && transcurridos < jornada
+    },
+    cierre: {
+      alRitmo: alRitmo,
+      camiones: Math.round(camiones * factor),
+      ts: round_(ts * factor, 2),
+      // Cuántos faltarían por entrar de aquí al cierre.
+      faltan: Math.max(0, Math.round(camiones * factor) - camiones)
+    }
+  };
+}
+
+/**
+ * Cuántos camiones hacen falta para cumplir el plan de cada material.
+ *
+ * El plan está en toneladas y la planta se maneja en camiones, así que
+ * la pregunta de todos los días —«¿cuántos camiones tengo que pedir?»—
+ * obligaba a dividir de cabeza. Esto lo deja escrito: lo que falta del
+ * plan, en camiones, y repartido en los días hábiles que quedan.
+ *
+ * El ritmo que el plan pedía desde el primer día va al lado a
+ * propósito: sin él no se sabe si el número de hoy es el de siempre o
+ * uno que se disparó porque el mes viene atrasado.
+ */
+function camionesDelPlan_(planDetails, rows, month, workdays) {
+  const porSub = {};
+
+  SUBPRODUCTOS_OBJETIVO.forEach(function(sub) {
+    porSub[sub] = { planTs: 0, tsMes: 0 };
+  });
+
+  (planDetails || []).forEach(function(item) {
+    if (!porSub[item.subproducto]) { return; }
+
+    porSub[item.subproducto].planTs += Number(item.plan) || 0;
+  });
+
+  (rows || []).forEach(function(row) {
+    if (String(row.fecha).slice(0, 7) !== month.prefix) { return; }
+    if (!porSub[row.subproducto]) { return; }
+
+    porSub[row.subproducto].tsMes += Number(row.ts) || 0;
+  });
+
+  const dias = Math.max(0, workdays.remaining || 0);
+
+  return SUBPRODUCTOS_OBJETIVO.map(function(sub) {
+    const item = porSub[sub];
+    const factor = factorDe_(sub);
+    const camionesPlan = factor ? item.planTs / factor : 0;
+    const camionesMes = factor ? item.tsMes / factor : 0;
+    const faltan = Math.max(0, camionesPlan - camionesMes);
+
+    return {
+      subproducto: sub,
+      factor: factor,
+      planTs: round_(item.planTs, 2),
+      tsMes: round_(item.tsMes, 2),
+      camionesPlan: Math.round(camionesPlan),
+      camionesMes: Math.round(camionesMes),
+      faltan: Math.round(faltan),
+      diasRestantes: dias,
+      // El número que se iba a buscar: camiones por día hábil de aquí
+      // al cierre del mes.
+      porDia: dias ? round_(faltan / dias, 1) : 0,
+      // Y el que el plan pedía desde el principio.
+      porDiaPlan: workdays.total
+        ? round_(camionesPlan / workdays.total, 1)
+        : 0,
+      cumple: camionesPlan > 0
+        ? round_(camionesMes / camionesPlan, 4)
+        : null
+    };
+  }).filter(function(x) {
+    return x.planTs > 0 || x.camionesMes > 0;
+  });
 }
 
 /* =====================================================================

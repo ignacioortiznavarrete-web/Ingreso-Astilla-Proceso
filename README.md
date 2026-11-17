@@ -34,6 +34,65 @@ En los días anteriores al libro —los que cubría la planilla del
 correo— sigue valiendo la regla vieja, que es de día completo y está
 explicada más abajo.
 
+### Hoy: lo que va entrando, y con qué cierra
+
+Es lo que el libro de camiones vino a hacer posible. Antes esta
+pregunta —qué entró hoy— se respondía al día siguiente, cuando llegaba
+el correo.
+
+Arriba de Suministro, y sin depender de los filtros de abajo —hoy es
+hoy, se esté mirando el mes o el año—:
+
+| Tarjeta | Qué dice |
+|---|---|
+| **Entraron hoy** | Camiones y TS, y cuántos de ellos ya están cargados en Ingresos |
+| **Cierre a las 23:00** | Con cuántos cerraría el día **a este ritmo**, y cuántos faltarían por entrar |
+| **En patio ahora** | Los que llegaron y todavía no terminan de descargar. Cuentan igual: entraron |
+
+Y debajo, la tabla del día: hora de llegada, guía, proveedor, material,
+destino y estado —en patio, descargado, o ya en Ingresos—. Lo último
+arriba, que es lo que se viene a mirar.
+
+**La proyección es una regla de tres, no un pronóstico.** La planta
+recibe de **08:30 a 23:00** (`CONFIG.JORNADA`): si en las primeras horas
+entraron N camiones, al cierre entrarán los que da ese mismo ritmo. Los
+camiones no llegan parejo, así que el panel dice «a este ritmo» y no
+«van a entrar».
+
+Dos momentos en que **no** proyecta, y lo dice:
+
+- **Antes de hora y media** de jornada corrida. Con dos camiones a las
+  nueve de la mañana, la regla de tres dice cualquier cosa.
+- **Después de las 23:00**: el día ya está, no hay nada que proyectar.
+
+### Camiones para cumplir el plan
+
+El plan está en toneladas y la planta se maneja en camiones, así que la
+pregunta de todos los días —«¿cuántos camiones pido?»— obligaba a
+dividir de cabeza. La tabla lo deja escrito, material por material:
+
+| Material | Plan del mes | Camiones del plan | Entraron | Faltan | Por día hábil | Ritmo del plan |
+|---|---:|---:|---:|---:|---:|---:|
+| Pino verde | 4.620 | 420 | 210 | **210** | **21** | 21 |
+| Pino verde c/corteza | 5.350 | 500 | 240 | **260** | **26** | 25 |
+| Eucalyptus Nitens | 1.824 | 120 | 0 | **120** | **12** | 6 |
+
+Cada material con **su** factor: el corteza pide 26 camiones al día
+donde el pino verde pide 21, porque sus camiones pesan distinto.
+
+La última columna es la que da el contexto: el ritmo que el plan pedía
+**desde el primer día**. Sin ella no se sabe si el número de hoy es el
+de siempre o uno que se disparó porque el mes viene atrasado —cuando el
+de ahora es mayor, va marcado—.
+
+### Las notas de la carga, plegadas
+
+De dónde salió cada cifra y qué hay que ir a arreglar seguía siendo
+útil, pero eran **dos muros de texto** arriba de todo que había que
+saltarse para llegar a los datos. Ahora van al final de Suministro,
+dentro de un `Notas de la carga`, y el título dice cuántas cosas hay
+que mirar: nada se esconde en silencio, pero tampoco estorba.
+
 ### El panel se relee solo
 
 El libro de camiones se escribe **mientras el panel está abierto**: una

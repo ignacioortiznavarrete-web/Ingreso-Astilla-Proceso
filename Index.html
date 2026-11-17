@@ -2380,6 +2380,41 @@
     .sello-vivo.es-flojo::before { background: var(--ladrillo); }
     .sello-vivo.es-flojo { color: var(--ladrillo); background: none; }
 
+    /* El día en curso: la fecha al lado del título y los materiales
+       en una línea, que son cuatro y cuatro tarjetas más taparían la
+       tabla, que es lo que se viene a ver. */
+    .panel-fecha {
+      font-family: var(--mono); font-size: var(--t-mini);
+      font-weight: normal; color: var(--ink-3); margin-left: 6px;
+    }
+
+    .hoy-subs { display: inline-flex; flex-wrap: wrap; gap: 10px; }
+
+    .hoy-sub {
+      display: inline-flex; align-items: center; gap: 5px;
+      white-space: nowrap;
+    }
+
+    .hoy-sub i {
+      display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    }
+
+    /* Las notas de la carga, plegadas al final. Nada se esconde en
+       silencio: el título dice cuántas hay. */
+    .notas-carga { margin-top: var(--s4); }
+
+    .notas-carga > summary {
+      cursor: pointer; list-style: none;
+      padding: var(--s2) 0;
+      font-family: var(--mono); font-size: var(--t-mini);
+      color: var(--ink-3);
+    }
+
+    .notas-carga > summary::-webkit-details-marker { display: none; }
+    .notas-carga > summary::before { content: '▸  '; }
+    .notas-carga[open] > summary::before { content: '▾  '; }
+    .notas-carga > summary:hover { color: var(--ink-2); }
+
     .es-real { color: var(--verde); background: var(--verde-soft); }
     .es-est { color: var(--madera); background: var(--madera-soft); }
     .es-flojo { color: var(--ladrillo); background: var(--ladrillo-soft); }
@@ -3069,8 +3104,44 @@
 
       <div class="pila">
         <div class="aviso aviso-mal" id="avisoMal"></div>
-        <div class="aviso aviso-ojo" id="avisoOjo"></div>
-        <div class="aviso aviso-nota se-ve" id="avisoNota">Cargando…</div>
+
+        <article class="panel" id="panelHoy">
+          <div class="panel-cab">
+            <div>
+              <h2>Hoy <span class="panel-fecha" id="hoyFecha"></span></h2>
+              <p class="panel-nota">
+                Lo que va entrando hoy, camión por camión, según el
+                libro de la portería. La planta recibe de <b>08:30</b> a
+                <b>23:00</b>: la proyección de cierre es una regla de
+                tres sobre lo que lleva corrido de esa jornada, no un
+                pronóstico.
+                <span id="hoyNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="hoyConteo">—</div>
+          </div>
+
+          <section class="lectura" id="hoyCifras"></section>
+          <div id="hoyTabla"></div>
+        </article>
+
+        <article class="panel" id="panelPlanCamiones">
+          <div class="panel-cab">
+            <div>
+              <h2>Camiones para cumplir el plan</h2>
+              <p class="panel-nota">
+                El plan está en toneladas y la planta se maneja en
+                camiones. Esto es lo que falta de cada material, en
+                camiones, repartido en los días hábiles que quedan del
+                mes. Al lado va el ritmo que el plan pedía desde el
+                primer día: sin eso no se sabe si el número de hoy es el
+                de siempre o uno que se disparó.
+              </p>
+            </div>
+            <div class="conteo" id="planCamionesConteo">—</div>
+          </div>
+          <div id="planCamionesTabla"></div>
+        </article>
 
         <section class="filtros">
           <div class="campo">
@@ -3546,6 +3617,18 @@
             </table>
           </div>
         </article>
+
+        <!-- Las notas de la carga: de dónde salió cada cifra y qué hay
+             que ir a arreglar. Estaban arriba, como dos muros de texto
+             que había que saltarse para llegar a los datos. Siguen
+             enteras —nada se esconde en silencio— pero plegadas. -->
+        <details class="notas-carga">
+          <summary>
+            <span id="notasTitulo">Notas de la carga</span>
+          </summary>
+          <div class="aviso aviso-ojo" id="avisoOjo"></div>
+          <div class="aviso aviso-nota se-ve" id="avisoNota">Cargando…</div>
+        </details>
       </div>
     </section>
 
@@ -4743,6 +4826,202 @@
       caja.classList.toggle('se-ve', ojo.length > 0);
 
       dibujarDescuadres();
+      dibujarHoy();
+      dibujarCamionesPlan();
+
+      // Las notas quedaron abajo y plegadas: el título dice cuántas
+      // hay para que no haya que abrirlas a ver si pasó algo.
+      setText('notasTitulo', ojo.length
+        ? 'Notas de la carga · ' + ojo.length +
+          (ojo.length === 1 ? ' cosa que mirar' : ' cosas que mirar')
+        : 'Notas de la carga');
+    }
+
+    /** Las tarjetas de siempre, con la forma de siempre. */
+    function cifras(celdas) {
+      return celdas.map(function(c) {
+        return '<div class="cifra">' +
+          '<div class="cifra-tag">' + esc(c.tag) + '</div>' +
+          '<div class="cifra-val ' + (c.clase || '') + '">' + esc(c.val) +
+            (c.uni ? '<small>' + esc(c.uni) + '</small>' : '') +
+          '</div>' +
+          '<div class="cifra-pie">' + esc(c.pie) + '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    /**
+     * El día en curso.
+     *
+     * Es lo que el libro de camiones vino a hacer posible: antes esta
+     * pregunta —qué entró hoy— se respondía al día siguiente, cuando
+     * llegaba el correo. No depende de los filtros de abajo: hoy es
+     * hoy, se esté mirando el mes o el año.
+     */
+    function dibujarHoy() {
+      var hoy = (DATA.source || {}).hoy || {};
+      var filas = hoy.filas || [];
+      var cierre = hoy.cierre || {};
+      var jornada = hoy.jornada || {};
+
+      setText('hoyFecha', hoy.fechaLabel || '');
+      setText('hoyConteo', filas.length
+        ? filas.length + (filas.length === 1 ? ' camión' : ' camiones')
+        : 'sin camiones');
+
+      // Por material, lo que lleva y con cuánto cerraría. Va en una
+      // línea y no en tarjetas: son cuatro materiales y cuatro
+      // tarjetas más taparían la tabla, que es lo que se viene a ver.
+      var porSub = (hoy.porSubproducto || []).map(function(s) {
+        return '<span class="hoy-sub">' +
+          '<i style="background:' + colorProducto(s.subproducto) + '"></i>' +
+          esc(shortProduct(s.subproducto)) + ' <b>' +
+          formatInteger(s.camiones) + '</b>' +
+          (cierre.alRitmo && s.camionesCierre > s.camiones
+            ? ' → ' + formatInteger(s.camionesCierre)
+            : '') +
+          '</span>';
+      }).join('');
+
+      document.getElementById('hoyNota').innerHTML = porSub
+        ? ' <span class="hoy-subs">' + porSub + '</span>'
+        : '';
+
+      document.getElementById('hoyCifras').innerHTML = cifras([
+        {
+          tag: 'Entraron hoy',
+          val: formatInteger(filas.length), uni: 'camiones',
+          pie: formatQuantity(hoy.ts || 0) + ' ' + unidad() +
+            (hoy.enSap
+              ? ' · ' + formatInteger(hoy.enSap) + ' ya en Ingresos'
+              : ' · estimadas con el factor de cada material')
+        },
+        {
+          tag: 'Cierre a las ' + (jornada.hasta || '23:00'),
+          val: cierre.alRitmo
+            ? formatInteger(cierre.camiones)
+            : formatInteger(filas.length),
+          uni: 'camiones',
+          clase: cierre.alRitmo ? 'val-madera' : '',
+          pie: cierre.alRitmo
+            ? 'a este ritmo faltarían ' + formatInteger(cierre.faltan) +
+              ' por entrar · ' + formatQuantity(cierre.ts) + ' ' + unidad()
+            : (jornada.transcurridos >= jornada.minutos
+                ? 'la jornada ya cerró'
+                : 'muy temprano para proyectar')
+        },
+        {
+          tag: 'En patio ahora',
+          val: formatInteger(hoy.enCurso || 0), uni: 'camiones',
+          clase: hoy.enCurso ? 'val-madera' : '',
+          pie: hoy.enCurso
+            ? 'llegaron y no terminan de descargar'
+            : 'ninguno a medio descargar'
+        }
+      ]);
+
+      var caja = document.getElementById('hoyTabla');
+
+      if (!filas.length) {
+        caja.innerHTML = vacio(
+          jornada.transcurridos > 0
+            ? 'Todavía no entra ningún camión de proceso hoy.'
+            : 'La jornada todavía no empieza.'
+        );
+        return;
+      }
+
+      var cuerpo = filas.map(function(f) {
+        var sello = f.enSap
+          ? '<span class="sello-fuente es-real">EN INGRESOS</span>'
+          : (f.enCurso
+              ? '<span class="sello-fuente es-est">EN PATIO</span>'
+              : '<span class="sello-fuente">DESCARGADO</span>');
+
+        return '<tr>' +
+          '<td class="num">' + esc(f.hora || '—') + '</td>' +
+          '<td class="num">' + esc(f.guia) + '</td>' +
+          '<td><strong>' + esc(shortProvider(f.proveedor)) + '</strong>' +
+            (normalizaNombre(f.proveedor) !== normalizaNombre(f.proveedorRaw)
+              ? '<div class="homo-hoy">' +
+                esc(shortProvider(f.proveedorRaw)) + '</div>'
+              : '') +
+            '</td>' +
+          '<td>' + esc(shortProduct(f.subproducto)) + '</td>' +
+          '<td>' + esc(f.destino || '—') + '</td>' +
+          '<td>' + sello + '</td>' +
+          '</tr>';
+      }).join('');
+
+      caja.innerHTML =
+        '<div class="tabla-marco tabla-fija">' +
+        '<table data-tabla="hoy"><thead><tr>' +
+        '<th>Llegó</th><th>Guía</th><th>Proveedor</th>' +
+        '<th>Material</th><th>Destino</th><th>Estado</th>' +
+        '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
+    }
+
+    /**
+     * Cuántos camiones faltan para cumplir el plan de cada material.
+     *
+     * El plan está en toneladas y la planta se maneja en camiones.
+     * Esta tabla hace esa división de una vez, que era la cuenta que
+     * había que hacer de cabeza todos los días.
+     */
+    function dibujarCamionesPlan() {
+      var lista = (DATA.source || {}).camionesPlan || [];
+      var caja = document.getElementById('planCamionesTabla');
+      var faltan = lista.reduce(function(t, x) { return t + x.faltan; }, 0);
+
+      setText('planCamionesConteo', lista.length
+        ? formatInteger(faltan) + ' camiones por entrar'
+        : 'sin plan del mes');
+
+      if (!lista.length) {
+        caja.innerHTML = vacio(
+          'La hoja Plan no tiene columna para este mes, así que no hay ' +
+          'contra qué contar camiones.'
+        );
+        return;
+      }
+
+      var cuerpo = lista.map(function(x) {
+        // El ritmo que hay que tomar ahora contra el que el plan pedía
+        // desde el principio: si el de ahora es mayor, el mes viene
+        // atrasado y hay que apretar.
+        var apretado = x.porDiaPlan > 0 && x.porDia > x.porDiaPlan * 1.05;
+
+        return '<tr>' +
+          '<td><strong>' + esc(shortProduct(x.subproducto)) + '</strong>' +
+            '<div class="homo-hoy">' + formatQuantity(x.factor) + ' ' +
+            unidad() + ' por camión</div></td>' +
+          celdaN(formatQuantity(x.planTs)) +
+          celdaN(formatInteger(x.camionesPlan)) +
+          celdaN(formatInteger(x.camionesMes)) +
+          celdaN('<b>' + formatInteger(x.faltan) + '</b>') +
+          celdaN('<b class="' + (apretado ? 'baja' : '') + '">' +
+            formatQuantity(x.porDia) + '</b>') +
+          celdaN(formatQuantity(x.porDiaPlan)) +
+          '</tr>';
+      }).join('');
+
+      caja.innerHTML =
+        '<div class="tabla-marco tabla-fija">' +
+        '<table data-tabla="planCamiones"><thead><tr>' +
+        '<th>Material</th>' +
+        '<th class="number">Plan del mes</th>' +
+        '<th class="number">Camiones del plan</th>' +
+        '<th class="number">Entraron</th>' +
+        '<th class="number">Faltan</th>' +
+        '<th class="number">Por día hábil</th>' +
+        '<th class="number">Ritmo del plan</th>' +
+        '</tr></thead><tbody>' + cuerpo + '</tbody></table>' +
+        '<p class="panel-nota">' +
+        (lista[0] && lista[0].diasRestantes
+          ? 'Repartido en los <b>' + lista[0].diasRestantes +
+            '</b> días hábiles que quedan del mes.'
+          : 'No quedan días hábiles en el mes: lo que falta ya no entra.') +
+        '</p></div>';
     }
 
     /**
