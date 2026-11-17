@@ -4267,17 +4267,50 @@
       fillSelect('proveedorFilter', DATA.filters.proveedores || [], 'Todos');
       fillSelect('destinoFilter', DATA.filters.destinos || [], 'Todos');
 
-      var nota = source.supplementRows
-        ? 'Ingresos reales hasta <b>' + esc(source.lastActualDateLabel) +
-          '</b>. Del <b>' + esc(source.supplementStartLabel) + '</b> al <b>' +
-          esc(source.latestReportDateLabel) + '</b> se complementan <b>' +
-          formatInteger(source.supplementCamiones) + ' camiones</b>, ' +
-          'convertidos a TS con el factor de cada material (' +
+      var cam = source.camiones || {};
+
+      var nota = 'Ingresos reales hasta <b>' +
+        esc(source.lastActualDateLabel) + '</b>.';
+
+      // El libro de camiones: la fuente en vivo, y la que explica la
+      // diferencia entre lo que muestra el panel y lo que hay en SAP.
+      if (cam.filas) {
+        nota += ' El <b>libro de camiones</b> ' +
+          (cam.libros || []).map(function(l) {
+            return '(' + esc(l.nombre) +
+              (l.hoja ? ' · ' + esc(l.hoja) : '') + ')';
+          }).join(' ') +
+          ' llega hasta el <b>' + esc(cam.ultimaFechaLabel) +
+          '</b>. De sus <b>' + formatInteger(cam.filas) +
+          '</b> camiones de astilla, <b>' + formatInteger(cam.yaEnSap) +
+          '</b> ya están cargados en Ingresos y <b>' +
+          formatInteger(cam.complementados) + '</b> se complementan (' +
+          formatQuantity(cam.ts) + ' TS con el factor de cada material: ' +
           esc(factoresLegibles()) + '). ' +
-          'El estimado desaparece solo cuando la fecha aparece en ' +
-          'Ingresos con TS.'
-        : 'No hay días pendientes: todo lo que se ve está confirmado en ' +
-          'la hoja Ingresos.';
+          'El cruce es por <b>número de guía</b>, camión por camión: ' +
+          'cada estimado desaparece solo el día que SAP carga esa guía.';
+
+        if (cam.enCurso) {
+          nota += ' <b>' + formatInteger(cam.enCurso) +
+            (cam.enCurso === 1
+              ? '</b> camión llegó y todavía no termina'
+              : '</b> camiones llegaron y todavía no terminan') +
+            ' de descargar: cuentan igual, porque entraron.';
+        }
+      }
+
+      if (source.supplementRows) {
+        nota += ' La <b>planilla del correo</b> completa los días ' +
+          'anteriores al libro: del <b>' +
+          esc(source.supplementStartLabel) + '</b> al <b>' +
+          esc(source.latestReportDateLabel) + '</b>, <b>' +
+          formatInteger(source.supplementCamiones) + ' camiones</b>.';
+      }
+
+      if (!cam.filas && !source.supplementRows) {
+        nota += ' No hay días pendientes: todo lo que se ve está ' +
+          'confirmado en la hoja Ingresos.';
+      }
 
       // Un día anterior al último registro real que igual hubo que
       // completar es un hueco en Ingresos, no un desfase. Se dice,
@@ -4489,6 +4522,35 @@
           '. Están más abajo, en «La planilla y SAP no cuentan lo ' +
           'mismo».'
         );
+      }
+
+      // Lo que hay que ir a arreglar en el libro o en la homologación.
+      //
+      // Solo se reclama el libro del MES EN CURSO: es el que sostiene
+      // la vista en vivo. El del mes anterior se lee por si SAP viene
+      // atrasado, y si no aparece no hay nada que hacer —ese mes ya
+      // está cargado— así que reclamarlo sería ruido todos los días.
+      if ((cam.faltan || []).indexOf(cam.mes) !== -1) {
+        ojo.push('No encontré el <b>libro de camiones</b> de este mes. ' +
+          'Corre «Buscar el libro de camiones del mes», o pega su ' +
+          'enlace en la hoja <b>Fuentes</b>.');
+      }
+
+      if (cam.porNumero) {
+        ojo.push('<b>' + formatInteger(cam.porNumero) + '</b> ' +
+          (cam.porNumero === 1 ? 'guía tiene' : 'guías tienen') +
+          ' su número en Ingresos pero a nombre de otro proveedor (' +
+          esc((cam.dudosos || []).slice(0, 3).map(shortProvider).join(', ')) +
+          ((cam.dudosos || []).length > 3 ? '…' : '') +
+          '). No se complementan —contar un camión dos veces es peor—: ' +
+          'se arregla homologando ese nombre.');
+      }
+
+      if (cam.sinGuia) {
+        ojo.push('<b>' + formatInteger(cam.sinGuia) + '</b> ' +
+          (cam.sinGuia === 1 ? 'camión de astilla no trae' : 'camiones de astilla no traen') +
+          ' número de guía en el libro: sin guía no hay con qué ' +
+          'cruzarlos contra Ingresos, así que no se complementan.');
       }
 
       var caja = document.getElementById('avisoOjo');
@@ -4961,7 +5023,7 @@
 
       const estimate = sum(
         rows.filter(function(row) {
-          return row.source === 'PLANILLA';
+          return esEstimado(row);
         }).map(function(row) {
           return row.ts;
         })
@@ -4969,7 +5031,7 @@
 
       const trucks = sum(
         rows.filter(function(row) {
-          return row.source === 'PLANILLA';
+          return esEstimado(row);
         }).map(function(row) {
           return row.camiones;
         })
@@ -5114,7 +5176,7 @@
 
         const item = aggregate[row.subproducto];
 
-        if (row.source === 'PLANILLA') {
+        if (esEstimado(row)) {
           item.estimate += Number(row.ts) || 0;
           item.trucks += Number(row.camiones) || 0;
         } else {
@@ -5196,7 +5258,7 @@
 
         const item = aggregate[key];
 
-        if (row.source === 'PLANILLA') {
+        if (esEstimado(row)) {
           item.estimate += Number(row.ts) || 0;
           item.trucks += Number(row.camiones) || 0;
         } else {
@@ -5220,7 +5282,7 @@
 
         if (!item.dias[row.fecha]) { item.dias[row.fecha] = { r: 0, e: 0 }; }
 
-        if (row.source === 'PLANILLA') {
+        if (esEstimado(row)) {
           item.dias[row.fecha].e += rowTs;
         } else {
           item.dias[row.fecha].r += rowTs;
@@ -5372,7 +5434,7 @@
         const item = aggregate[key];
         const ts = Number(row.ts) || 0;
 
-        if (row.source === 'PLANILLA') {
+        if (esEstimado(row)) {
           item.estimate += ts;
         } else {
           item.real += ts;
@@ -6499,7 +6561,7 @@
           agrupado[dia] = { real: 0, est: 0, camiones: 0, arrastra: false };
         }
 
-        if (f.source === 'PLANILLA') {
+        if (esEstimado(f)) {
           agrupado[dia].est += Number(f.ts) || 0;
           agrupado[dia].camiones += Number(f.camiones) || 0;
         } else {
@@ -6987,7 +7049,7 @@
           porFecha[destino] = { real: 0, est: 0 };
         }
 
-        if (f.source === 'PLANILLA') {
+        if (esEstimado(f)) {
           porFecha[destino].est += Number(f.ts) || 0;
         } else {
           porFecha[destino].real += Number(f.ts) || 0;
@@ -10723,7 +10785,7 @@
       }
 
       cuerpo.innerHTML = orden.slice(0, 600).map(function(f) {
-        var esEst = f.source === 'PLANILLA';
+        var esEst = esEstimado(f);
         var sinPrecio =
           f.precioUnitario === null || f.precioUnitario === undefined;
 
@@ -13345,7 +13407,7 @@
         var c = cubo(f.fecha.slice(0, 7));
         var ts = Number(f.ts) || 0;
 
-        if (f.source === 'PLANILLA') {
+        if (esEstimado(f)) {
           c.est += ts;
           c.camiones += Number(f.camiones) || 0;
         } else {
@@ -14123,6 +14185,22 @@
 
     function mensaje(err) {
       return err && err.message ? err.message : String(err);
+    }
+
+    /**
+     * ¿Esta fila es una estimación?
+     *
+     * Lo real es SAP y nada más. El libro de camiones y la planilla
+     * vieja del correo son camiones contados y convertidos a TS con el
+     * factor del material, así que se pintan igual: madera, no verde.
+     *
+     * Está en una función y no repetido en cada gráfico porque la
+     * lista de fuentes creció: preguntar "¿viene de la planilla?"
+     * dejaba fuera al libro en cada lugar donde alguien olvidara
+     * agregarlo, y esa fila habría pasado por real.
+     */
+    function esEstimado(fila) {
+      return !!fila && fila.source !== 'INGRESOS';
     }
 
     function shortProduct(name) {

@@ -55,7 +55,7 @@ eval([
   'declararProveedor', 'asignarProveedor', 'reasignarProveedor',
   'escribirFilaProveedor_', 'leerProveedores_', 'columnasProveedores_',
   'buildHomologacionPendiente_', 'buildHomologacionMapa_',
-  'agruparPendientes_', 'resolverGrupo',
+  'agruparPendientes_', 'resolverGrupo', 'esEstimada_',
   'gruposProvisorios_', 'candidatosSap_', 'resolveProveedor_',
   'homologarProveedor_', 'proveedorComparable_', 'proveedorSimilitud_',
   'candidatosDelCruce_', 'uniqueTokens_', 'levenshtein_',
@@ -522,6 +522,39 @@ ok(trasSinSap.porAlias[normalizeKey_('Aitue nitens')] ===
    'con la cabeza declarada como proveedor', trasSinSap.porAlias);
 ok(String(HOJA.datos[1][3]).indexOf('Todavía no está en SAP') === 0,
    'y con la nota de que todavía falta SAP', HOJA.datos[1][3]);
+
+/* ---------------------------------------------------------------------
+ * Los nombres del libro de camiones también se homologan.
+ *
+ * Es la misma pregunta de siempre con una fuente nueva: si el nombre
+ * que escribe la portería no cruza con SAP, ese proveedor se duplica
+ * en el panel igual que se duplicaba con la planilla del correo.
+ * ------------------------------------------------------------------ */
+HOJA = hojaFalsa([CABECERA]);
+
+const delLibro = buildHomologacionPendiente_(
+  [{
+    fecha: '2026-11-17', source: 'CAMIONES', guia: '17696',
+    subproducto: 'ASTILLA PINO VERDE',
+    proveedor: 'Biomasa Sur del Maule',
+    proveedorRaw: 'Biomasa Sur del Maule',
+    matchMethod: 'Solo en planilla', camiones: 1, ts: 11
+  }],
+  SAP,
+  homologacion(),
+  { porProveedor: [] },
+  []
+);
+
+ok(delLibro.sinPar === 1 &&
+   delLibro.lista[0].alias === 'Biomasa Sur del Maule',
+   'un nombre del libro que no cruza entra a la lista de revisión',
+   delLibro.lista);
+ok(delLibro.lista[0].origen === 'Libro',
+   'y se dice que viene del libro, no de la planilla',
+   delLibro.lista[0].origen);
+ok(delLibro.lista[0].ts === 11,
+   'con lo que ese camión trajo', delLibro.lista[0].ts);
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

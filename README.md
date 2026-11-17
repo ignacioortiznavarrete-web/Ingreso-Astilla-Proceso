@@ -6,10 +6,16 @@ Google Apps Script sobre un spreadsheet. La unidad de trabajo es la
 
 ## Qué hace
 
-- **Ingresos** (hoja) es la fuente válida: el registro real de recepción.
-- **InformeAstilla** (hoja) guarda las planillas diarias del reservador,
-  importadas desde Gmail. Completa los días que Ingresos todavía no
-  tiene, con `camiones × factor del material`.
+- **Ingresos** (hoja) es la fuente válida: el registro real de recepción
+  de SAP, con el peso de cada camión y su **número de guía**.
+- **El libro de camiones** es el registro **en vivo**: una fila por
+  camión, con su guía, escrita en la portería. No es una hoja de este
+  libro —es de otra área, no se toca y cambia de archivo cada mes— y
+  completa lo que SAP todavía no carga, con
+  `camiones × factor del material`. Ver más abajo.
+- **InformeAstilla** (hoja) guarda las planillas diarias que el
+  reservador mandaba por correo. Quedó como **historia**: completa los
+  días anteriores a donde empieza el libro.
 - **Plan** (hoja) aporta precio unitario y volumen mensual comprometido
   por proveedor y material.
 - **Proyeccion** (hoja) son los camiones que cada proveedor se
@@ -19,20 +25,82 @@ Google Apps Script sobre un spreadsheet. La unidad de trabajo es la
 - **Mapeos**, **Rutas** y **Apuntes** cubren la gestión de terreno y las
   reuniones semanales.
 
-**La decisión es día por día, no una fecha de corte.** Un día con TS en
-Ingresos manda entero y su estimado se descarta; un día que en Ingresos
-suma cero —porque aún no se carga, o quedó como hueco entre dos días ya
-cargados— se completa con la planilla. Antes había una sola fecha de
-corte, y eso daba por supuesto que Ingresos viene sin huecos: cuando uno
-aparecía, el día salía en cero en el panel aunque la planilla tuviera
-camiones esa fecha. El aviso de arriba dice qué días se completaron así,
-porque son los que hay que ir a cargar.
+**La decisión es camión por camión, por su guía.** Si la guía del libro
+está en Ingresos, ese camión ya está contado con su peso real; si no
+está, entra estimado. Nada de fechas de corte, nada de reglas de día: el
+estimado de un camión desaparece solo el día que SAP carga **esa** guía.
 
-La unidad es el día completo y no el proveedor: dentro de una misma
-fecha, mezclar las dos fuentes contaría dos veces los camiones que ya
-llegaron a SAP.
+En los días anteriores al libro —los que cubría la planilla del
+correo— sigue valiendo la regla vieja, que es de día completo y está
+explicada más abajo.
+
+### El libro de camiones: el registro en vivo
+
+Una fila por camión, con su guía, el proveedor, el producto, el destino
+y la hora en que llegó. La escribe la portería de la planta en una
+planilla que **no es de este proyecto**: es de otra área, no se puede
+tocar y **cambia de archivo todos los meses**.
+
+Reemplazó al correo del reservador por dos razones:
+
+| | Correo del reservador | Libro de camiones |
+|---|---|---|
+| Cuándo se ve | Al día siguiente, cuando llega el correo | **En vivo**: la fila existe cuando el camión entra |
+| Qué trae | Camiones por proveedor y subproducto, del día | **La guía de cada camión** |
+
+La guía es lo que cambia todo. Es **el mismo número** que SAP escribe en
+su columna `Nº Guia`, así que por primera vez se puede saber si un
+camión concreto ya está cargado:
+
+```
+guía 1312  LATSAGUE SAAVEDRA   →  está en Ingresos  →  ya contado, con su peso real
+guía 17696 BIOMASA SUR         →  no está           →  se complementa, 11 TS estimadas
+```
+
+Antes esto se decidía **por día completo**, y hubo que inventarle
+excepciones —el proveedor que SAP no conoce, el día cargado a medias—
+porque no había forma de saber si un camión suelto ya estaba en SAP.
+Con la guía no hacen falta: el cruce es exacto.
+
+**Lo que el panel dice del libro**, en el aviso de Suministro: de qué
+archivo y pestaña salió, hasta qué día alcanzó a ver, cuántos de sus
+camiones ya están en Ingresos, cuántos se complementan, y cuántos
+**llegaron y todavía no terminan de descargar** —esos cuentan igual,
+porque entraron—.
+
+**Tres cosas que no se complementan, y se dicen:**
+
+| Caso | Por qué |
+|---|---|
+| El camión sin número de guía | Sin guía no hay con qué cruzarlo contra Ingresos |
+| La guía cuyo número está en SAP **a nombre de otro proveedor** | O son camiones distintos, o es el mismo con el nombre escrito de otra forma, y no se puede saber cuál. Contar un camión dos veces infla el ingreso y rompe el plan, que es peor que mostrar uno de menos. Se arregla **homologando** ese nombre |
+| Lo que no es astilla de proceso | El libro trae todo lo que entra a la planta: trozo aserrable, MR, aserrín, astilla combustible. Se filtra por producto, igual que siempre |
+
+#### Dónde está el libro cada mes
+
+El archivo se llama `CAMIONES INGRESO <MES> AÑO <AAAA>` y es nuevo cada
+mes, así que no se puede fijar su código en el script. El panel lo
+resuelve en este orden:
+
+1. **La hoja `Fuentes`** de este libro: si hay una fila para ese mes con
+   un enlace pegado, manda esa. Es el respaldo y también la ventana —ahí
+   se ve cuál está usando el panel—.
+2. **Drive, por el nombre del archivo.** Lo busca una vez y se lo
+   guarda unas horas; dentro del mes no cambia.
+
+`Astilla Dashboard › Buscar el libro de camiones del mes` fuerza la
+búsqueda y deja escrito en `Fuentes` lo que encontró. Si algún mes
+cambian el nombre del archivo, basta pegar el enlace en esa hoja.
+
+Se leen **dos** libros: el del mes en curso y el del anterior. SAP se
+atrasa días, no meses, y leer seis libros ajenos en cada carga del panel
+sería pagar mucho por nada.
 
 ### Cuando SAP carga el día a medias
+
+> Esta sección vale para los días que cubre la **planilla del correo**,
+> donde no hay guía con qué cruzar. Donde llega el libro de camiones, el
+> cruce es por guía y estas excepciones no hacen falta.
 
 La base del complemento es el **día completo**: un día con TS en
 Ingresos manda entero. Es así a propósito —mezclar las dos fuentes
@@ -844,6 +912,8 @@ clasp push
 | Ítem                                   | Qué hace                                        |
 |----------------------------------------|-------------------------------------------------|
 | Abrir dashboard                        | Abre el panel en un diálogo modal               |
+| Buscar el libro de camiones del mes    | Busca el archivo del mes en Drive y lo deja escrito en `Fuentes` |
+| Preparar hoja de fuentes               | Crea la hoja `Fuentes` y escribe el libro del mes |
 | Importar nuevas planillas              | Lee Gmail y suma los correos no procesados      |
 | Reconstruir planillas desde Gmail      | Respalda y reimporta todo el historial          |
 | Probar último correo (sin escribir)    | Muestra qué extraería, sin tocar la hoja        |
@@ -854,6 +924,10 @@ clasp push
 | Rellenar proveedores sugeridos         | Vuelca los nombres sin par al final de la hoja  |
 
 ## Origen de la planilla
+
+> El correo del reservador quedó como **historia**. La fuente en vivo
+> es el libro de camiones; esto sigue valiendo para los días que ya
+> están importados y para reconstruirlos si hiciera falta.
 
 Solo se acepta el correo **original** de `reservador.horario@masisa.com`
 cuyo asunto **empieza** con `PLANILLA CUMPLIMIENTO SUB-PRODUCTOS` o

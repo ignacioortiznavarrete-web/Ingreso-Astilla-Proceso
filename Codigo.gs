@@ -226,6 +226,8 @@ function feriadosDelPanel_() {
 const CONFIG = Object.freeze({
   SPREADSHEET_ID: '1PNQToRtF7g-obmmOHuoonNGN5-VhhTYnW6SEhK36EOk',
   SHEET_INGRESOS: 'Ingresos',
+  // Dónde está escrito qué libro de camiones usar cada mes.
+  SHEET_FUENTES: 'Fuentes',
   SHEET_INFORME: 'InformeAstilla',
   SHEET_PLAN: 'Plan',
   SHEET_PROYECCION: 'Proyeccion',
@@ -330,7 +332,25 @@ const CONFIG = Object.freeze({
 
   // Posiciones de respaldo (base cero) de la hoja Ingresos.
   // Si los encabezados están presentes, se detectan por nombre.
+  /**
+   * El libro de camiones: el registro en vivo de la portería.
+   *
+   * Es de otra área y cambia de archivo cada mes, así que no se puede
+   * fijar un id acá. Se busca por el nombre del archivo y, si alguien
+   * lo renombra o quiere fijar uno distinto, manda lo que esté escrito
+   * en la hoja Fuentes.
+   */
+  CAMIONES: Object.freeze({
+    PATRON: 'CAMIONES INGRESO',
+    // Hasta qué columna se lee. La hoja tiene decenas, y las que
+    // importan están todas antes de la 24.
+    COLUMNAS_MAX: 24
+  }),
+
   INGRESOS_COLUMNS: Object.freeze({
+    // La guía es la llave entre SAP y el libro de camiones: el mismo
+    // número está escrito en los dos lados.
+    GUIA: 1,
     MATERIAL: 2,
     DESCRIPCION_MATERIAL: 3,
     FECHA_CONTABLE: 4,
@@ -413,6 +433,11 @@ function onOpen() {
     .addSeparator()
     .addItem('Validar hoja Plan (no modifica)', 'prepararHojaPlan')
     .addSeparator()
+    .addItem('Preparar hoja de fuentes', 'instalarFuentes')
+    .addItem(
+      'Buscar el libro de camiones del mes',
+      'buscarLibroDelMes'
+    )
     .addItem('Preparar hoja de proveedores', 'instalarProveedores')
     .addItem('Rellenar proveedores sugeridos', 'rellenarProveedores')
     .addItem('Preparar hoja de mapeos', 'instalarMapeos')
@@ -550,6 +575,20 @@ function getDashboardData() {
     homologacion
   );
 
+  // El registro en vivo: una fila por camión, con su guía. Se leen el
+  // mes en curso y el anterior; más atrás ya está todo en SAP.
+  const camiones = readCamiones_(
+    spreadsheet,
+    mesesDelLibro_(month),
+    ingresos.proveedores,
+    homologacion,
+    timezone
+  );
+
+  // Y de esos camiones, los que SAP todavía no tiene cargados. El
+  // cruce es por guía: no hace falta ninguna regla de día.
+  const delLibro = complementarCamiones_(ingresos.rows, camiones.rows);
+
   const informe = readInformeRows_(
     spreadsheet,
     timezone,
@@ -558,9 +597,21 @@ function getDashboardData() {
     homologacion
   );
 
+  // El correo del reservador quedó como historia. Donde el libro llega
+  // manda el libro —es la misma información, camión por camión y con
+  // guía—, así que la planilla solo completa los días anteriores a
+  // donde el libro empieza. Sin esto, los dos complementarían el mismo
+  // día y el camión se contaría dos veces.
+  const informeFueraDelLibro = camiones.primeraFecha
+    ? informe.rows.filter(function(row) {
+        return row.fecha < camiones.primeraFecha ||
+          row.fecha > camiones.ultimaFecha;
+      })
+    : informe.rows;
+
   const supplement = buildSupplementRows_(
     ingresos.rows,
-    informe.rows
+    informeFueraDelLibro
   );
 
   // Lo que la planilla registró de menos. No cambia ninguna cifra del
@@ -568,16 +619,22 @@ function getDashboardData() {
   // ir a conversar con quien la escribe.
   const descuadres = buildDescuadres_(
     ingresos.rows,
-    informe.rows
+    informeFueraDelLibro
   );
 
-  const baseRows = ingresos.rows.concat(supplement.rows);
+  const baseRows = ingresos.rows
+    .concat(delLibro.rows)
+    .concat(supplement.rows);
 
   const workdays = buildWorkdaysInfo_(
     timezone,
     month,
     supplement.lastActualDate,
-    supplement.latestReportDate,
+    // Hasta dónde llega lo estimado: hoy lo marca el libro, que va al
+    // día, y no la última planilla que llegó por correo.
+    camiones.ultimaFecha > supplement.latestReportDate
+      ? camiones.ultimaFecha
+      : supplement.latestReportDate,
     historyStart
   );
 
@@ -658,6 +715,31 @@ function getDashboardData() {
           fechaLabel: formatDateKey_(x.fecha)
         };
       }),
+      // El libro de camiones: de dónde salió, qué alcanzó a ver y
+      // cuántos de sus camiones ya estaban en SAP.
+      camiones: {
+        libros: camiones.libros,
+        mes: month.prefix,
+        faltan: camiones.faltan,
+        filas: camiones.rows.length,
+        complementados: delLibro.camiones,
+        ts: delLibro.ts,
+        yaEnSap: delLibro.yaEnSap,
+        // Guías cuyo número está en SAP pero a nombre de otro
+        // proveedor: no se complementan y se dice por qué.
+        porNumero: delLibro.porNumero,
+        dudosos: delLibro.dudosos,
+        sinGuia: camiones.sinGuia,
+        otrosProductos: camiones.otrosProductos,
+        repetidas: camiones.repetidas,
+        // Camiones que llegaron y todavía no terminan de descargar.
+        enCurso: camiones.enCurso,
+        primeraFecha: camiones.primeraFecha,
+        ultimaFecha: camiones.ultimaFecha,
+        ultimaFechaLabel: camiones.ultimaFecha
+          ? formatDateKey_(camiones.ultimaFecha)
+          : ''
+      },
       // Dónde la planilla y SAP no cuentan lo mismo, en los días que
       // cubren las dos.
       descuadres: {
@@ -886,6 +968,11 @@ function readIngresos_(
     rows.push({
       fecha: dateKey,
       source: 'INGRESOS',
+      // Con qué camión entró. Es lo que permite saber si una guía del
+      // libro ya está cargada en SAP sin mirar fechas ni cantidades.
+      guia: columns.GUIA >= 0
+        ? normalizaGuia_(row[columns.GUIA])
+        : '',
       subproducto: resolved.subproducto,
       subproductoRaw: descripcion || text_(material),
       material: normalizeSapMaterialCode_(material) || text_(material),
@@ -997,6 +1084,22 @@ function resolveIngresosSubproducto_(material, descripcion, textoPosicion) {
  * Ubica las columnas de Ingresos por nombre de encabezado y, si la
  * descarga no los trae, cae a las posiciones fijas de CONFIG.
  */
+/**
+ * ¿Esta fila es una estimación?
+ *
+ * Lo real es SAP y nada más. Todo lo demás —el libro de camiones, y
+ * la planilla del correo mientras quede historia suya— son camiones
+ * contados y convertidos a TS con el factor del material, así que el
+ * panel los pinta igual: madera, no verde.
+ *
+ * Va en una función y no repetido en cada sitio porque la lista de
+ * fuentes creció: preguntar "¿es de la planilla?" dejaba fuera al
+ * libro de camiones en cada lugar donde alguien olvidara agregarlo.
+ */
+function esEstimada_(row) {
+  return !!row && row.source !== 'INGRESOS';
+}
+
 function resolveIngresosColumns_(headerRow) {
   const map = buildHeaderMap_(headerRow);
 
@@ -1013,6 +1116,15 @@ function resolveIngresosColumns_(headerRow) {
   const defaults = CONFIG.INGRESOS_COLUMNS;
 
   return {
+    // "Nº Guia" en el export de SAP. Se aceptan las formas en que
+    // suele venir escrito el encabezado.
+    GUIA: pick(
+      [
+        'nº guia', 'n guia', 'no guia', 'nro guia',
+        'numero guia', 'num guia', 'guia'
+      ],
+      defaults.GUIA
+    ),
     MATERIAL: pick(
       ['material', 'cod material', 'codigo material'],
       defaults.MATERIAL
@@ -2355,12 +2467,12 @@ function instalarProveedores() {
 
   (datos.rows || []).forEach(function(row) {
     if (
-      row.source === 'PLANILLA' &&
+      esEstimada_(row) &&
       row.matchMethod === 'Solo en planilla'
     ) {
       proponer(
         row.proveedorRaw,
-        'Planilla',
+        row.source === 'CAMIONES' ? 'Libro' : 'Planilla',
         'Sin par en SAP: escribe a la izquierda el proveedor SAP.'
       );
     }
@@ -2548,7 +2660,7 @@ function buildHomologacionPendiente_(
   }
 
   (rows || []).forEach(function(row) {
-    if (row.source !== 'PLANILLA') { return; }
+    if (!esEstimada_(row)) { return; }
 
     const entregado = suma(row.proveedor);
 
@@ -2571,7 +2683,7 @@ function buildHomologacionPendiente_(
     g.ts += Number(row.ts) || 0;
     g.camiones += Number(row.camiones) || 0;
     g.fechas[row.fecha] = true;
-    g.origenes.Planilla = true;
+    g.origenes[row.source === 'CAMIONES' ? 'Libro' : 'Planilla'] = true;
 
     if (row.subproducto) { g.subproductos[row.subproducto] = true; }
   });
@@ -3094,7 +3206,7 @@ function buildHomologacionMapa_(
 
     f.ts += Number(row.ts) || 0;
 
-    if (row.source === 'PLANILLA') {
+    if (esEstimada_(row)) {
       const crudo = text_(row.proveedorRaw);
 
       if (crudo) { f.planilla[crudo] = true; }
@@ -5435,7 +5547,7 @@ function diagnosticarCruce() {
   const sinPar = data.rows
     .filter(function(row) {
       return (
-        row.source === 'PLANILLA' &&
+        esEstimada_(row) &&
         row.matchMethod === 'Solo en planilla'
       );
     })
@@ -5588,6 +5700,631 @@ function eliminarDisparadores() {
   });
 
   return removed;
+}
+
+/* =====================================================================
+ * EL LIBRO DE CAMIONES
+ *
+ * El registro en vivo. Lo escribe la portería de la planta en una
+ * planilla que NO es de este proyecto —es de otra área, no se puede
+ * tocar, y cambia de archivo todos los meses—, con una fila por
+ * camión: su guía, el proveedor, el producto, el destino y la hora en
+ * que llegó.
+ *
+ * Reemplaza al correo del reservador por dos razones. Se ve EN VIVO:
+ * la fila existe cuando el camión entra, no al día siguiente. Y trae
+ * la GUÍA, que es exactamente el mismo número que SAP escribe en su
+ * columna "Nº Guia".
+ *
+ * Esa guía cambia el complemento de raíz. Antes se decidía por día
+ * completo y hubo que inventarle excepciones —el proveedor que SAP no
+ * conoce, el día cargado a medias— porque no había forma de saber si
+ * un camión concreto ya estaba en SAP. Ahora sí la hay: si la guía
+ * está en SAP, ese camión ya está contado con su peso real; si no
+ * está, se complementa con el factor del material. Camión por camión,
+ * sin reglas de día y sin excepciones.
+ * ===================================================================== */
+
+const MESES_LARGOS = Object.freeze([
+  'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
+  'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'
+]);
+
+/** El nombre del mes de una clave 'yyyy-MM'. */
+function nombreDelMes_(mes) {
+  return MESES_LARGOS[Number(String(mes).split('-')[1]) - 1] || '';
+}
+
+/**
+ * La guía, comparable entre las dos fuentes.
+ *
+ * SAP la escribe como número y el libro como texto; una puede traer
+ * ceros a la izquierda y la otra no. Se comparan solo los dígitos.
+ */
+function normalizaGuia_(valor) {
+  const texto = text_(valor);
+
+  if (!texto) { return ''; }
+
+  const digitos = texto.replace(/\D/g, '').replace(/^0+/, '');
+
+  return digitos || normalizeKey_(texto);
+}
+
+/** El id de un archivo, venga pegado el enlace entero o solo el id. */
+function idDeEnlace_(valor) {
+  const texto = text_(valor);
+  const m = texto.match(/[-\w]{25,}/);
+
+  return m ? m[0] : '';
+}
+
+/**
+ * La hoja Fuentes: qué libro de camiones usar cada mes.
+ *
+ * Existe porque el libro es ajeno y cambia de archivo cada mes. Acá se
+ * puede fijar a mano el de un mes —pegando su enlace— y queda a la
+ * vista cuál está usando el panel, en vez de depender de que el nombre
+ * del archivo siga el mismo patrón para siempre.
+ */
+function leerFuentes_(spreadsheet) {
+  const hoja = spreadsheet.getSheetByName(CONFIG.SHEET_FUENTES);
+
+  if (!hoja || hoja.getLastRow() < 2) { return {}; }
+
+  const valores = hoja.getDataRange().getValues();
+  const mapa = buildHeaderMap_(valores[0]);
+
+  const cMes = mapa['mes'];
+  const cLibro = mapa['libro de camiones'] !== undefined
+    ? mapa['libro de camiones']
+    : mapa['libro'];
+  const cHoja = mapa['hoja'];
+
+  if (cMes === undefined || cLibro === undefined) { return {}; }
+
+  const porMes = {};
+
+  for (let i = 1; i < valores.length; i++) {
+    const id = idDeEnlace_(valores[i][cLibro]);
+
+    if (!id) { continue; }
+
+    const mes = claveDeMes_(valores[i][cMes]);
+
+    if (!mes) { continue; }
+
+    porMes[mes] = {
+      id: id,
+      hoja: cHoja !== undefined ? text_(valores[i][cHoja]) : '',
+      aMano: true
+    };
+  }
+
+  return porMes;
+}
+
+/**
+ * 'yyyy-MM' desde lo que alguien escriba en la columna Mes: una
+ * fecha, '2026-11', 'NOVIEMBRE 2026' o 'nov-2026'.
+ */
+function claveDeMes_(valor) {
+  if (valor instanceof Date && !isNaN(valor.getTime())) {
+    return Utilities.formatDate(valor, CONFIG.TIMEZONE, 'yyyy-MM');
+  }
+
+  const texto = normalizeKey_(valor);
+
+  let m = texto.match(/(\d{4})[-/](\d{1,2})/);
+
+  if (m) {
+    return m[1] + '-' + ('0' + m[2]).slice(-2);
+  }
+
+  m = texto.match(/([A-Z]+)[^A-Z0-9]*(\d{4})/);
+
+  if (!m) { return ''; }
+
+  for (let i = 0; i < MESES_LARGOS.length; i++) {
+    if (MESES_LARGOS[i].indexOf(m[1]) === 0 && m[1].length >= 3) {
+      return m[2] + '-' + ('0' + (i + 1)).slice(-2);
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Busca el libro del mes en Drive, por su nombre.
+ *
+ * El archivo se llama "CAMIONES INGRESO <MES> AÑO <AAAA>". Buscarlo
+ * cada vez que se abre el panel sería caro, así que el id encontrado
+ * se guarda en el caché del script por unas horas: dentro del mes el
+ * archivo no cambia.
+ */
+function buscarLibroEnDrive_(mes) {
+  const nombre = nombreDelMes_(mes);
+  const anio = String(mes).slice(0, 4);
+
+  if (!nombre) { return null; }
+
+  const cache = CacheService.getScriptCache();
+  const llave = 'libro-camiones-' + mes;
+  const guardado = cache.get(llave);
+
+  if (guardado) {
+    return { id: guardado, nombre: '', deCache: true };
+  }
+
+  let mejor = null;
+
+  try {
+    const archivos = DriveApp.searchFiles(
+      "title contains '" + CONFIG.CAMIONES.PATRON +
+      "' and trashed = false"
+    );
+
+    while (archivos.hasNext()) {
+      const archivo = archivos.next();
+      const clave = normalizeKey_(archivo.getName());
+
+      if (
+        clave.indexOf(nombre) === -1 ||
+        clave.indexOf(anio) === -1
+      ) {
+        continue;
+      }
+
+      if (!mejor || archivo.getLastUpdated() > mejor.getLastUpdated()) {
+        mejor = archivo;
+      }
+    }
+  } catch (error) {
+    return null;
+  }
+
+  if (!mejor) { return null; }
+
+  cache.put(llave, mejor.getId(), 6 * 3600);
+
+  return { id: mejor.getId(), nombre: mejor.getName(), deCache: false };
+}
+
+/** La hoja del libro que trae los camiones de ese mes. */
+function hojaDeCamiones_(libro, mes, nombrePedido) {
+  const hojas = libro.getSheets();
+
+  if (nombrePedido) {
+    const pedida = libro.getSheetByName(nombrePedido);
+
+    if (pedida) { return pedida; }
+  }
+
+  const nombre = nombreDelMes_(mes);
+  let conEncabezado = null;
+
+  for (let i = 0; i < hojas.length; i++) {
+    const hoja = hojas[i];
+
+    if (hoja.getLastRow() < 2 || hoja.getLastColumn() < 5) { continue; }
+
+    const encabezado = hoja
+      .getRange(1, 1, 1, Math.min(hoja.getLastColumn(), 40))
+      .getValues()[0];
+
+    const mapa = buildHeaderMap_(encabezado);
+
+    // Se reconoce por los rótulos, no por el nombre de la pestaña:
+    // el nombre lo escribe una persona y puede venir como sea.
+    if (
+      mapa['guia'] === undefined ||
+      mapa['proveedor'] === undefined ||
+      mapa['producto'] === undefined
+    ) {
+      continue;
+    }
+
+    if (!conEncabezado) { conEncabezado = hoja; }
+
+    if (normalizeKey_(hoja.getName()).indexOf(nombre) !== -1) {
+      return hoja;
+    }
+  }
+
+  return conEncabezado;
+}
+
+/**
+ * Los camiones de uno o más meses, ya cruzados contra los proveedores
+ * de SAP.
+ *
+ * Se leen el mes en curso y el anterior, no toda la historia: SAP se
+ * atrasa días, no meses, y un mes cerrado ya está entero en SAP. Leer
+ * seis libros ajenos en cada carga del panel sería pagar mucho por
+ * nada.
+ */
+function readCamiones_(
+  spreadsheet,
+  meses,
+  proveedoresSap,
+  homologacion,
+  timezone
+) {
+  const salida = {
+    rows: [],
+    libros: [],
+    faltan: [],
+    sinGuia: 0,
+    otrosProductos: 0,
+    enCurso: 0,
+    repetidas: 0,
+    primeraFecha: '',
+    ultimaFecha: ''
+  };
+
+  const aMano = leerFuentes_(spreadsheet);
+  const vistas = {};
+
+  (meses || []).forEach(function(mes) {
+    const fuente = aMano[mes] || buscarLibroEnDrive_(mes);
+
+    if (!fuente || !fuente.id) {
+      salida.faltan.push(mes);
+      return;
+    }
+
+    let libro;
+
+    try {
+      libro = SpreadsheetApp.openById(fuente.id);
+    } catch (error) {
+      salida.faltan.push(mes);
+      return;
+    }
+
+    const hoja = hojaDeCamiones_(libro, mes, fuente.hoja);
+
+    if (!hoja) {
+      salida.faltan.push(mes);
+      return;
+    }
+
+    const alto = hoja.getLastRow();
+    const ancho = Math.min(
+      hoja.getLastColumn(),
+      CONFIG.CAMIONES.COLUMNAS_MAX
+    );
+
+    if (alto < 2 || ancho < 5) { return; }
+
+    const rango = hoja.getRange(1, 1, alto, ancho);
+    const valores = rango.getValues();
+    const mostrados = rango.getDisplayValues();
+    const mapa = buildHeaderMap_(valores[0]);
+
+    function col(nombres) {
+      for (let i = 0; i < nombres.length; i++) {
+        if (mapa[nombres[i]] !== undefined) { return mapa[nombres[i]]; }
+      }
+
+      return -1;
+    }
+
+    const cFecha = col(['fecha']);
+    const cGuia = col(['guia', 'n guia', 'nº guia']);
+    const cProveedor = col(['proveedor']);
+    const cProducto = col(['producto', 'material']);
+    const cDestino = col(['destino']);
+    const cEstado = col(['estado']);
+    const cLlegada = col(['hora llegada', 'llegada']);
+
+    if (cFecha < 0 || cGuia < 0 || cProveedor < 0 || cProducto < 0) {
+      salida.faltan.push(mes);
+      return;
+    }
+
+    salida.libros.push({
+      mes: mes,
+      id: fuente.id,
+      nombre: libro.getName(),
+      hoja: hoja.getName(),
+      url: libro.getUrl(),
+      aMano: !!fuente.aMano,
+      filas: alto - 1
+    });
+
+    for (let r = 1; r < valores.length; r++) {
+      const fecha = toDateKey_(
+        valores[r][cFecha],
+        mostrados[r][cFecha],
+        timezone
+      );
+
+      if (!fecha) { continue; }
+
+      const crudo = text_(valores[r][cProveedor]);
+      const producto = text_(valores[r][cProducto]);
+
+      // Fila de un día todavía sin camión: la fecha está escrita de
+      // antemano y el resto en blanco.
+      if (!crudo && !producto) { continue; }
+
+      const subproducto = canonicalSubproducto_(producto);
+
+      if (!subproducto) {
+        salida.otrosProductos++;
+        continue;
+      }
+
+      const guia = normalizaGuia_(valores[r][cGuia]);
+
+      if (!guia) {
+        // Astilla de proceso sin guía: no se puede cruzar contra SAP,
+        // así que no se complementa. Se cuenta para poder decirlo.
+        salida.sinGuia++;
+        continue;
+      }
+
+      const cruce = resolveProveedor_(crudo, proveedoresSap, homologacion);
+      const llave = guia + '||' + normalizeKey_(cruce.proveedor);
+
+      // La misma guía del mismo proveedor dos veces es la misma
+      // guía: un camión no entra dos veces.
+      if (vistas[llave]) {
+        salida.repetidas++;
+        continue;
+      }
+
+      vistas[llave] = true;
+
+      const estado = normalizeKey_(
+        cEstado >= 0 ? valores[r][cEstado] : ''
+      );
+
+      // Sin "OK" todavía: el camión llegó —tiene guía y hora de
+      // llegada— pero aún no termina de descargar. Entró igual, y
+      // poder decir cuántos están en patio ahora es justamente lo
+      // que da ver esto en vivo.
+      const enCurso = estado.indexOf('OK') !== 0;
+
+      if (enCurso) { salida.enCurso++; }
+
+      salida.rows.push({
+        fecha: fecha,
+        source: 'CAMIONES',
+        guia: guia,
+        subproducto: subproducto,
+        subproductoRaw: producto,
+        proveedor: cruce.proveedor,
+        proveedorRaw: crudo,
+        matchMethod: cruce.method,
+        destino: cDestino >= 0 ? text_(valores[r][cDestino]) : '',
+        camiones: 1,
+        ts: factorDe_(subproducto),
+        enCurso: enCurso,
+        llegada: cLlegada >= 0 ? text_(mostrados[r][cLlegada]) : '',
+        predio: '',
+        rol: ''
+      });
+
+      if (!salida.primeraFecha || fecha < salida.primeraFecha) {
+        salida.primeraFecha = fecha;
+      }
+
+      if (fecha > salida.ultimaFecha) { salida.ultimaFecha = fecha; }
+    }
+  });
+
+  return salida;
+}
+
+/**
+ * Qué camiones del libro NO están todavía en SAP.
+ *
+ * La llave es la guía MÁS el proveedor: el número de guía es la
+ * correlativa de cada proveedor, así que dos proveedores distintos
+ * pueden tener la guía 1312 y no son el mismo camión.
+ *
+ * Cuando el número está en SAP pero a nombre de otro proveedor hay dos
+ * explicaciones —son camiones distintos, o es el mismo con el nombre
+ * escrito de otra forma— y no se puede saber cuál. No se complementa:
+ * contar un camión dos veces infla el ingreso y rompe el plan, que es
+ * peor que mostrar uno de menos. Se cuenta aparte y el panel lo dice,
+ * porque se arregla homologando ese nombre.
+ */
+function complementarCamiones_(ingresosRows, camionesRows) {
+  const porGuiaYProveedor = {};
+  const porGuia = {};
+
+  (ingresosRows || []).forEach(function(row) {
+    const guia = normalizaGuia_(row.guia);
+
+    if (!guia) { return; }
+
+    porGuia[guia] = true;
+    porGuiaYProveedor[guia + '||' + normalizeKey_(row.proveedor)] = true;
+  });
+
+  const rows = [];
+  const dudosos = {};
+  let yaEnSap = 0;
+  let porNumero = 0;
+
+  (camionesRows || []).forEach(function(row) {
+    const llave = row.guia + '||' + normalizeKey_(row.proveedor);
+
+    if (porGuiaYProveedor[llave]) {
+      yaEnSap++;
+      return;
+    }
+
+    if (porGuia[row.guia]) {
+      porNumero++;
+      dudosos[row.proveedorRaw] = true;
+      return;
+    }
+
+    rows.push(row);
+  });
+
+  return {
+    rows: rows,
+    yaEnSap: yaEnSap,
+    porNumero: porNumero,
+    dudosos: Object.keys(dudosos).sort(),
+    camiones: rows.length,
+    ts: round_(rows.reduce(function(total, row) {
+      return total + (Number(row.ts) || 0);
+    }, 0), 2)
+  };
+}
+
+/** El mes en curso y el anterior, como claves 'yyyy-MM'. */
+function mesesDelLibro_(month) {
+  const meses = [month.prefix];
+  const d = new Date(Date.UTC(month.year, month.month - 2, 1));
+
+  meses.push(
+    d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2)
+  );
+
+  return meses;
+}
+
+
+const FUENTES_HEADERS = Object.freeze([
+  'Mes',
+  'Libro de camiones',
+  'Hoja',
+  'Encontrado',
+  'Notas'
+]);
+
+/**
+ * Crea o repara la hoja Fuentes y deja escrito el libro del mes.
+ *
+ * El libro de camiones es de otra área y cambia de archivo cada mes.
+ * El panel lo busca solo por el nombre, pero esa búsqueda depende de
+ * que el archivo se siga llamando parecido. Esta hoja es el respaldo y
+ * también la ventana: se ve cuál está usando el panel y se puede fijar
+ * otro pegando su enlace.
+ */
+function instalarFuentes() {
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+
+  let sheet = spreadsheet.getSheetByName(CONFIG.SHEET_FUENTES);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(CONFIG.SHEET_FUENTES);
+  }
+
+  sheet
+    .getRange(1, 1, 1, FUENTES_HEADERS.length)
+    .setValues([FUENTES_HEADERS])
+    .setBackground('#121C17')
+    .setFontColor('#B5793F')
+    .setFontWeight('bold');
+
+  sheet.setFrozenRows(1);
+
+  [110, 420, 180, 140, 380].forEach(function(ancho, indice) {
+    sheet.setColumnWidth(indice + 1, ancho);
+  });
+
+  const encontrado = buscarLibroDelMes();
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      'Hoja "' + CONFIG.SHEET_FUENTES + '" lista.\n\n' +
+      encontrado.mensaje + '\n\n' +
+      'Cada mes aparece un libro nuevo. El panel lo busca solo por su ' +
+      'nombre; si algún mes no lo encuentra, pega acá el enlace del ' +
+      'archivo en la fila de ese mes y listo.'
+    );
+  } catch (ignoredUi) {}
+
+  return encontrado;
+}
+
+/**
+ * Busca el libro del mes en Drive y lo deja escrito en Fuentes.
+ *
+ * Se salta el caché a propósito: esto es justamente lo que hay que
+ * correr cuando el libro cambió de nombre o apareció el del mes nuevo.
+ */
+function buscarLibroDelMes() {
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const timezone =
+    spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
+  const mes = getCurrentMonthWindow_(timezone).prefix;
+
+  CacheService.getScriptCache().remove('libro-camiones-' + mes);
+
+  const hallado = buscarLibroEnDrive_(mes);
+
+  if (!hallado) {
+    return {
+      mes: mes,
+      encontrado: false,
+      mensaje: 'No encontré ningún archivo con "' +
+        CONFIG.CAMIONES.PATRON + '" en el nombre para ' +
+        nombreDelMes_(mes) + ' ' + mes.slice(0, 4) + '. ' +
+        'Pega el enlace del libro en la hoja ' + CONFIG.SHEET_FUENTES +
+        ', en la fila de ese mes.'
+    };
+  }
+
+  const libro = SpreadsheetApp.openById(hallado.id);
+  const hoja = hojaDeCamiones_(libro, mes, '');
+
+  escribirFuente_(spreadsheet, mes, {
+    id: hallado.id,
+    nombre: libro.getName(),
+    url: libro.getUrl(),
+    hoja: hoja ? hoja.getName() : ''
+  });
+
+  return {
+    mes: mes,
+    encontrado: true,
+    id: hallado.id,
+    nombre: libro.getName(),
+    hoja: hoja ? hoja.getName() : '',
+    mensaje: 'Libro de ' + nombreDelMes_(mes) + ': "' + libro.getName() +
+      '"' + (hoja ? ', pestaña "' + hoja.getName() + '"' : '') + '.'
+  };
+}
+
+/** Escribe (o actualiza) la fila de un mes en la hoja Fuentes. */
+function escribirFuente_(spreadsheet, mes, libro) {
+  let sheet = spreadsheet.getSheetByName(CONFIG.SHEET_FUENTES);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(CONFIG.SHEET_FUENTES);
+
+    sheet
+      .getRange(1, 1, 1, FUENTES_HEADERS.length)
+      .setValues([FUENTES_HEADERS]);
+  }
+
+  const valores = sheet.getDataRange().getValues();
+  let fila = 0;
+
+  for (let i = 1; i < valores.length; i++) {
+    if (claveDeMes_(valores[i][0]) === mes) { fila = i + 1; break; }
+  }
+
+  if (!fila) { fila = Math.max(sheet.getLastRow(), 1) + 1; }
+
+  sheet.getRange(fila, 1, 1, FUENTES_HEADERS.length).setValues([[
+    nombreDelMes_(mes) + ' ' + mes.slice(0, 4),
+    libro.url || libro.id,
+    libro.hoja || '',
+    new Date(),
+    libro.nombre || ''
+  ]]);
+
+  return fila;
 }
 
 /* =====================================================================
