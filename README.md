@@ -47,11 +47,17 @@ hoy, se esté mirando el mes o el año—:
 |---|---|
 | **Entraron hoy** | Camiones y TS, y cuántos de ellos ya están cargados en Ingresos |
 | **Cierre a las 23:00** | Con cuántos cerraría el día **a este ritmo**, y cuántos faltarían por entrar |
-| **En patio ahora** | Los que llegaron y todavía no terminan de descargar. Cuentan igual: entraron |
+| **En patio ahora** | Los que llegaron y el libro todavía no cierra. Cuentan igual: entraron |
 
 Y debajo, la tabla del día: hora de llegada, guía, proveedor, material,
-destino y estado —en patio, descargado, o ya en Ingresos—. Lo último
+destino y estado —en patio, salió, o ya en Ingresos—. Lo último
 arriba, que es lo que se viene a mirar.
+
+**El panel no dice "descargado", y es a propósito.** El libro anota la
+llegada y el cierre, y nada entremedio: no hay hora de descarga en
+ninguna de sus columnas. Entonces de un camión se sabe que está en
+patio o que salió, y eso es lo que se escribe. Lo que pasó adentro no
+lo anota nadie.
 
 **La proyección es una regla de tres, no un pronóstico.** La planta
 recibe de **08:30 a 23:00** (`CONFIG.JORNADA`): si en las primeras horas
@@ -155,7 +161,7 @@ Con la guía no hacen falta: el cruce es exacto.
 **Lo que el panel dice del libro**, en el aviso de Suministro: de qué
 archivo y pestaña salió, hasta qué día alcanzó a ver, cuántos de sus
 camiones ya están en Ingresos, cuántos se complementan, y cuántos
-**llegaron y todavía no terminan de descargar** —esos cuentan igual,
+**llegaron y el libro todavía no cierra** —esos cuentan igual,
 porque entraron—.
 
 **Tres cosas que no se complementan, y se dicen:**

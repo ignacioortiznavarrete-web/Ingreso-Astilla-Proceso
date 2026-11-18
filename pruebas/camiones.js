@@ -10,8 +10,8 @@
  * de archivo cada mes—, así que la prueba usa la forma REAL de su
  * hoja: los rótulos como vienen (con espacios de más, una columna sin
  * nombre), productos que no son astilla de proceso, filas de un día
- * todavía sin camión y camiones que llegaron y no terminan de
- * descargar.
+ * todavía sin camión y camiones que llegaron y el libro todavía no
+ * cierra.
  */
 const fs = require('fs');
 const path = require('path');
@@ -208,7 +208,7 @@ const FILAS = [
          'ASTILLA PINO COMBUSTIBLE', 'COGENERACIÓN'),
   camion('ok', '17-11-2026', '17696', 'BIOMASA SUR',
          'ASTILLA PINO VERDE'),
-  // Llegó, tiene guía, y todavía no termina de descargar.
+  // Llegó, tiene guía, y el libro todavía no lo cierra.
   camion('', '17-11-2026', '3500844', 'MASISA S.A. BIOCHIPER',
          'AST.  PINO VERDE C/ CORTEZA'),
   camion('', '17-11-2026', '32132', 'FORESTAL FORESOL SPA',
@@ -295,7 +295,7 @@ ok(leido.repetidas === 1,
    'la misma guía del mismo proveedor dos veces es un solo camión',
    leido.repetidas);
 ok(leido.enCurso === 2,
-   'los que llegaron y no terminan de descargar quedan marcados',
+   'los que llegaron y el libro no cierra quedan marcados',
    leido.enCurso);
 
 // --- 2. Cómo queda cada fila -------------------------------------------

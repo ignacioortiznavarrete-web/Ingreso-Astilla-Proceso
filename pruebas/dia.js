@@ -103,7 +103,7 @@ const DIA = [
   camion('11:00', '1004', 'PROMASA S.A.', 'AST. PINO VERDE C/ CORTEZA'),
   camion('12:20', '1005', 'BIOMASA SUR', 'ASTILLA PINO VERDE'),
   camion('13:40', '1006', 'LAMINADORA LOS ANGELES', 'ASERRÍN PINO VERDE'),
-  // Llegó recién y todavía descarga.
+  // Llegó recién y el libro todavía no lo cierra.
   camion('13:55', '1007', 'PROMASA S.A.', 'ASTILLA PINO VERDE',
          { enCurso: true }),
   // De ayer: no es de hoy y no entra.
@@ -126,7 +126,7 @@ ok(dia.camiones === 7,
 ok(dia.filas[0].hora === '13:55' && dia.filas[6].hora === '8:45',
    'lo último arriba: es lo que se viene a mirar',
    dia.filas.map(function(f) { return f.hora; }));
-ok(dia.enCurso === 1, 'los que todavía descargan se cuentan', dia.enCurso);
+ok(dia.enCurso === 1, 'los que siguen en patio se cuentan', dia.enCurso);
 ok(dia.filas.filter(function(f) { return f.guia === '1001'; })[0].enSap
    === true,
    'y el que SAP ya cargó queda marcado');

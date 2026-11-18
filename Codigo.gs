@@ -846,7 +846,7 @@ function getDashboardData() {
         sinGuia: camiones.sinGuia,
         otrosProductos: camiones.otrosProductos,
         repetidas: camiones.repetidas,
-        // Camiones que llegaron y todavía no terminan de descargar.
+        // Camiones que llegaron y el libro todavía no cierra.
         enCurso: camiones.enCurso,
         primeraFecha: camiones.primeraFecha,
         ultimaFecha: camiones.ultimaFecha,
@@ -6219,9 +6219,10 @@ function readCamiones_(
       );
 
       // Sin "OK" todavía: el camión llegó —tiene guía y hora de
-      // llegada— pero aún no termina de descargar. Entró igual, y
-      // poder decir cuántos están en patio ahora es justamente lo
-      // que da ver esto en vivo.
+      // llegada— y el libro no lo cierra. Está en patio. Lo que pase
+      // entremedio no lo anota nadie, así que el panel no lo afirma:
+      // entró, y eso es lo que se cuenta. Poder decir cuántos están
+      // en patio ahora es justamente lo que da ver esto en vivo.
       const enCurso = estado.indexOf('OK') !== 0;
 
       if (enCurso) { salida.enCurso++; }

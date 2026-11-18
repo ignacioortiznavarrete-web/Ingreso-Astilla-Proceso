@@ -4542,9 +4542,10 @@
         if (cam.enCurso) {
           nota += ' <b>' + formatInteger(cam.enCurso) +
             (cam.enCurso === 1
-              ? '</b> camión llegó y todavía no termina'
-              : '</b> camiones llegaron y todavía no terminan') +
-            ' de descargar: cuentan igual, porque entraron.';
+              ? '</b> camión está en patio: llegó y el libro no lo cierra'
+              : '</b> camiones están en patio: llegaron y el libro no los ' +
+                'cierra') +
+            '. Cuentan igual, porque entraron.';
         }
       }
 
@@ -4915,8 +4916,8 @@
           val: formatInteger(hoy.enCurso || 0), uni: 'camiones',
           clase: hoy.enCurso ? 'val-madera' : '',
           pie: hoy.enCurso
-            ? 'llegaron y no terminan de descargar'
-            : 'ninguno a medio descargar'
+            ? 'llegaron y el libro todavía no los cierra'
+            : 'ninguno esperando'
         }
       ]);
 
@@ -4936,7 +4937,7 @@
           ? '<span class="sello-fuente es-real">EN INGRESOS</span>'
           : (f.enCurso
               ? '<span class="sello-fuente es-est">EN PATIO</span>'
-              : '<span class="sello-fuente">DESCARGADO</span>');
+              : '<span class="sello-fuente">SALIÓ</span>');
 
         return '<tr>' +
           '<td class="num">' + esc(f.hora || '—') + '</td>' +
