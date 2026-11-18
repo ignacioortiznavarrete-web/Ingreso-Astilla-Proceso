@@ -77,6 +77,7 @@ eval([recortarConst('MESES_LARGOS')].concat([
   'proveedorSimilitud_', 'uniqueTokens_', 'levenshtein_',
   'uniqueSorted_', 'buildHeaderMap_', 'normalizeHeader_',
   'toDateKey_', 'parseDateText_', 'buildDateKey_', 'normalizeKey_',
+  'minutosDeHora_', 'tramosDelCamion_', 'estadisticaDeMinutos_',
   'text_', 'round_'
 ].map(recortar)).join('\n'));
 
@@ -190,9 +191,19 @@ const CABECERA = [
   'DESTINO', 'OBSERVACIONES', 'FONO'
 ];
 
-function camion(estado, fecha, guia, proveedor, producto, destino) {
+// Las horas por omisión son las de un camión normal: reservado a las
+// 8:49, llegó 8:43 —antes de su hora— y cerró 8:46. La columna B es
+// la del cierre; vacía significa que sigue en patio.
+function camion(estado, fecha, guia, proveedor, producto, destino, horas) {
+  const h = horas || {};
+
   return [
-    estado, '8:46', '', '', fecha, '8:43', '8:50', '8:49',
+    estado,
+    h.cierre === undefined ? '8:46' : h.cierre,
+    '', '', fecha,
+    h.llegada === undefined ? '8:43' : h.llegada,
+    '8:50',
+    h.reserva === undefined ? '8:49' : h.reserva,
     'LUIS PEREZ PAREDES', 'FGYZ65', 'JK2695', guia, proveedor, '',
     'A', producto, destino || 'TABLEROS'
   ];
@@ -208,11 +219,25 @@ const FILAS = [
          'ASTILLA PINO COMBUSTIBLE', 'COGENERACIÓN'),
   camion('ok', '17-11-2026', '17696', 'BIOMASA SUR',
          'ASTILLA PINO VERDE'),
-  // Llegó, tiene guía, y el libro todavía no lo cierra.
+  // Llegó, tiene guía, y el libro todavía no lo cierra: ni "OK" ni
+  // hora. Esos son los que están en patio.
   camion('', '17-11-2026', '3500844', 'MASISA S.A. BIOCHIPER',
-         'AST.  PINO VERDE C/ CORTEZA'),
+         'AST.  PINO VERDE C/ CORTEZA', 'TABLEROS', { cierre: '' }),
   camion('', '17-11-2026', '32132', 'FORESTAL FORESOL SPA',
-         'ASTILLA EUCALYPTUS NITENS'),
+         'ASTILLA EUCALYPTUS NITENS', 'TABLEROS', { cierre: '' }),
+  // La hora escrita y el "OK" todavía no: la portería anota en ese
+  // orden, así que este camión ya salió.
+  camion('', '17-11-2026', '14255', 'INDUSTRIA LOS CASTAÑOS',
+         'ASTILLA PINO VERDE', 'TABLEROS',
+         { llegada: '9:35', cierre: '9:50' }),
+  // Y al revés: cerraron sin anotar la hora. Salió igual, pero no
+  // hay con qué medir cuánto demoró.
+  camion('OK', '17-11-2026', '26756', 'AGRIFOR',
+         'ASTILLA PINO VERDE', 'TABLEROS', { cierre: '' }),
+  // La hora de cierre antes que la de llegada: está escrita al revés.
+  camion('OK', '16-11-2026', '101505', 'FORESTAL LOS ANDES LTDA.',
+         'ASTILLA PINO VERDE', 'TABLEROS',
+         { llegada: '18:35', cierre: '8:04' }),
   // La misma guía del mismo proveedor, escrita dos veces.
   camion('ok', '17-11-2026', '17696', 'BIOMASA SUR',
          'ASTILLA PINO VERDE'),
@@ -277,7 +302,7 @@ const leido = readCamiones_(
 const porGuia = {};
 leido.rows.forEach(function(r) { porGuia[r.guia] = r; });
 
-ok(leido.rows.length === 7,
+ok(leido.rows.length === 10,
    'entran los camiones que van a proceso, una vez cada uno',
    leido.rows.map(function(r) { return r.guia + ' ' + r.subproducto; }));
 ok(!!porGuia['47209'] &&
@@ -295,8 +320,31 @@ ok(leido.repetidas === 1,
    'la misma guía del mismo proveedor dos veces es un solo camión',
    leido.repetidas);
 ok(leido.enCurso === 2,
-   'los que llegaron y el libro no cierra quedan marcados',
+   'en patio son los que no tienen ni "OK" ni hora de cierre',
    leido.enCurso);
+ok(porGuia['14255'] && porGuia['14255'].enCurso === false,
+   'la hora de cierre cierra el camión aunque falte el "OK"',
+   porGuia['14255'] && porGuia['14255'].enCurso);
+ok(porGuia['26756'] && porGuia['26756'].enCurso === false,
+   'y el "OK" lo cierra aunque falte la hora',
+   porGuia['26756'] && porGuia['26756'].enCurso);
+ok(leido.horasDudosas === 1,
+   'la hora escrita al revés se cuenta y se dice',
+   leido.horasDudosas);
+
+// La demora del mes: de los diez camiones, tres siguen en patio y uno
+// tiene la hora al revés. Quedan seis con tramo medible.
+ok(leido.demora.patio.n === 6 && leido.demora.patio.mediana === 3,
+   'la demora del mes se mide sobre los que cerraron, y nada más',
+   leido.demora.patio);
+ok(leido.demora.patio.max === 15,
+   'con el más largo al lado de la mediana', leido.demora.patio.max);
+// Las horas por omisión son las de la primera fila real del libro:
+// reservado 8:49, llegó 8:43 y cerró 8:46. Salió tres minutos antes
+// de la hora que tenía, y el flujo es negativo de verdad.
+ok(leido.demora.flujo.mediana === -3,
+   'y el flujo desde la reserva puede ser negativo sin que sea un error',
+   leido.demora.flujo);
 
 // --- 2. Cómo queda cada fila -------------------------------------------
 const nitens = porGuia['32132'];
@@ -328,7 +376,8 @@ const complemento = complementarCamiones_(INGRESOS, leido.rows);
 const quedan = complemento.rows.map(function(r) { return r.guia; }).sort();
 
 ok(JSON.stringify(quedan) ===
-   JSON.stringify(['17696', '32132', '3500844', '47209']),
+   JSON.stringify(['101505', '14255', '17696', '26756', '32132',
+                   '3500844', '47209']),
    'solo se complementan las guías que SAP no tiene',
    JSON.stringify(quedan));
 ok(complemento.yaEnSap === 2,
@@ -338,7 +387,7 @@ ok(complemento.porNumero === 1 &&
    complemento.dudosos[0] === 'MADERAS DEL SUR DOS LTDA',
    'el mismo número a nombre de otro proveedor no se complementa: se dice',
    complemento);
-ok(complemento.ts === round_(11 + 10.7 + 15.2 + 11, 2),
+ok(complemento.ts === round_(11 + 10.7 + 15.2 + 11 + 11 + 11 + 11, 2),
    'y las TS estimadas son la suma de sus factores', complemento.ts);
 
 // --- 4. Un día que SAP carga después deja de complementarse ------------
@@ -350,7 +399,7 @@ const despues = complementarCamiones_(
   leido.rows
 );
 
-ok(despues.rows.length === 3 &&
+ok(despues.rows.length === 6 &&
    despues.rows.every(function(r) { return r.guia !== '17696'; }),
    'cuando SAP carga esa guía, el estimado desaparece solo',
    despues.rows.map(function(r) { return r.guia; }));

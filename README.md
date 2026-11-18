@@ -47,17 +47,65 @@ hoy, se esté mirando el mes o el año—:
 |---|---|
 | **Entraron hoy** | Camiones y TS, y cuántos de ellos ya están cargados en Ingresos |
 | **Cierre a las 23:00** | Con cuántos cerraría el día **a este ritmo**, y cuántos faltarían por entrar |
-| **En patio ahora** | Los que llegaron y el libro todavía no cierra. Cuentan igual: entraron |
+| **En patio ahora** | Los que llegaron y el libro todavía no cierra, y cuánto lleva el que más |
+| **Demora en patio** | Lo que demora un camión, de llegada a cierre |
 
-Y debajo, la tabla del día: hora de llegada, guía, proveedor, material,
-destino y estado —en patio, salió, o ya en Ingresos—. Lo último
-arriba, que es lo que se viene a mirar.
+Y debajo, la tabla del día: llegó → salió, guía, proveedor, material
+y destino, **cuánto estuvo en patio** y el estado —en patio, salió, o
+ya en Ingresos—. Lo último arriba, que es lo que se viene a mirar.
 
 **El panel no dice "descargado", y es a propósito.** El libro anota la
 llegada y el cierre, y nada entremedio: no hay hora de descarga en
 ninguna de sus columnas. Entonces de un camión se sabe que está en
 patio o que salió, y eso es lo que se escribe. Lo que pasó adentro no
 lo anota nadie.
+
+### La demora: cuánto se demora un camión
+
+El libro trae cuatro horas y tres sirven para medir:
+
+| Columna | Qué es |
+|---|---|
+| `HORA RESERVA` | la hora que se le dio al camión |
+| `HORA LLEGADA` | cuando llegó a portería |
+| `HORA` | cuando se cerró la fila y se fue |
+
+Con esas tres salen los tramos, y cada uno responde otra pregunta:
+
+| Tramo | Cuenta | Responde |
+|---|---|---|
+| **agenda** | llegada − reserva | si el proveedor llega a la hora que se le dio |
+| **patio** | cierre − llegada | cuánto se demora un camión adentro |
+| **flujo** | cierre − reserva | desde que tenía hora hasta que salió |
+
+En la tabla, el **patio** es el número grande y el **flujo** va abajo;
+la agenda queda bajo las horas, como «10′ tarde» o «5′ antes de su
+hora».
+
+**El flujo puede ser negativo y no es un error.** Un camión que llegó
+antes de su hora reservada y alcanzó a salir antes de ella salió antes
+de que su hora llegara. Pasa seguido.
+
+**Cuatro decisiones que explican los números:**
+
+- **La mediana, no el promedio.** Hay un camión al mes que espera siete
+  horas y media. Ese mueve el promedio y no mueve la mediana, y lo que
+  se quiere saber es cuánto demora un camión normal. El p90 y el más
+  largo van al lado para que el caso raro no desaparezca.
+- **Solo los que ya cerraron.** Al que sigue en patio todavía le
+  falta: meterlo en la mediana la tiraría para abajo justo cuando más
+  interesa. En su fila dice «20′ y sigue», que es otra cosa.
+- **El cierre antes que la llegada no se arregla.** Es la hora escrita
+  al revés. Recortarla a cero sería inventar el dato: la fila dice
+  «hora al revés», no entra en ninguna cuenta, y el aviso de la carga
+  dice cuántas hay.
+- **Las horas vienen sucias y se leen igual.** La portería escribe
+  `8:46`, pero también `08.53`, `21.46`, `18;35` y `9:;40`. Cualquier
+  cosa que no sea dígito separa la hora del minuto. Lo que no es una
+  hora —un número suelto, una celda vacía— no se inventa.
+
+El aviso de la carga, abajo en Suministro, dice la demora **del mes
+entero**: la mediana, el p90 y el más largo.
 
 **La proyección es una regla de tres, no un pronóstico.** La planta
 recibe de **08:30 a 23:00** (`CONFIG.JORNADA`): si en las primeras horas
@@ -162,7 +210,15 @@ Con la guía no hacen falta: el cruce es exacto.
 archivo y pestaña salió, hasta qué día alcanzó a ver, cuántos de sus
 camiones ya están en Ingresos, cuántos se complementan, y cuántos
 **llegaron y el libro todavía no cierra** —esos cuentan igual,
-porque entraron—.
+porque entraron—, y la **demora** del mes entero.
+
+**Cerrar un camión son dos cosas, y basta una.** El libro lo cierra con
+el `OK` de la columna `ESTADO` y con la hora de la columna `HORA`, y la
+portería las escribe en ese orden: primero la hora, después el `OK`.
+Mirar solo el estado va un paso atrás —el camión ya salió y el panel
+lo muestra en patio— y mirar solo la hora deja afuera al que cerraron
+sin anotarla. El panel mira las dos: está en patio mientras no haya
+ninguna.
 
 **Tres cosas que no se complementan, y se dicen:**
 

@@ -2399,6 +2399,11 @@
       display: inline-block; width: 8px; height: 8px; border-radius: 2px;
     }
 
+    /* La flecha entre la hora de llegada y la de salida, y el reloj
+       del material: datos de apoyo, no se pelean con el número. */
+    .hoy-flecha, .hoy-reloj { color: var(--ink-3); }
+    .hoy-reloj { font-variant-numeric: tabular-nums; }
+
     /* Las notas de la carga, plegadas al final. Nada se esconde en
        silencio: el título dice cuántas hay. */
     .notas-carga { margin-top: var(--s4); }
@@ -4547,6 +4552,31 @@
                 'cierra') +
             '. Cuentan igual, porque entraron.';
         }
+
+        var dem = (cam.demora || {}).patio;
+
+        if (dem && dem.n) {
+          nota += ' Un camión demora <b>' + duracion(dem.mediana) +
+            '</b> en patio (mediana de ' + formatInteger(dem.n) +
+            ' cerrados · p90 ' + duracion(dem.p90) + ' · el más largo ' +
+            duracion(dem.max) + ')';
+
+          var flu = (cam.demora || {}).flujo;
+
+          nota += flu && flu.mediana !== null
+            ? ', y <b>' + duracion(flu.mediana) +
+              '</b> desde la hora que tenía reservada.'
+            : '.';
+        }
+
+        if (cam.horasDudosas) {
+          nota += ' <b>' + formatInteger(cam.horasDudosas) +
+            (cam.horasDudosas === 1
+              ? '</b> fila tiene la hora de cierre antes'
+              : '</b> filas tienen la hora de cierre antes') +
+            ' que la de llegada: están escritas al revés y no entran en ' +
+            'la demora.';
+        }
       }
 
       if (source.supplementRows) {
@@ -4839,6 +4869,27 @@
     }
 
     /** Las tarjetas de siempre, con la forma de siempre. */
+    /**
+     * Minutos como los diría una persona: 18′, 1h 20′, 7h 36′.
+     *
+     * Nunca en decimales: "1,6 horas" obliga a traducir de vuelta y
+     * nadie en patio piensa así.
+     */
+    function duracion(min) {
+      if (min === null || min === undefined || !isFinite(min)) {
+        return '—';
+      }
+
+      var signo = min < 0 ? '−' : '';
+      var abs = Math.abs(Math.round(min));
+
+      if (abs < 60) { return signo + abs + '′'; }
+
+      // "1h 0′" no lo dice nadie.
+      return signo + Math.floor(abs / 60) + 'h' +
+        (abs % 60 ? ' ' + (abs % 60) + '′' : '');
+    }
+
     function cifras(celdas) {
       return celdas.map(function(c) {
         return '<div class="cifra">' +
@@ -4864,6 +4915,8 @@
       var filas = hoy.filas || [];
       var cierre = hoy.cierre || {};
       var jornada = hoy.jornada || {};
+      var demora = hoy.demora ||
+        { patio: {}, flujo: {}, masLargo: null, horasDudosas: 0 };
 
       setText('hoyFecha', hoy.fechaLabel || '');
       setText('hoyConteo', filas.length
@@ -4881,6 +4934,9 @@
           (cierre.alRitmo && s.camionesCierre > s.camiones
             ? ' → ' + formatInteger(s.camionesCierre)
             : '') +
+          (s.patio === null || s.patio === undefined
+            ? ''
+            : ' <span class="hoy-reloj">' + duracion(s.patio) + '</span>') +
           '</span>';
       }).join('');
 
@@ -4915,9 +4971,28 @@
           tag: 'En patio ahora',
           val: formatInteger(hoy.enCurso || 0), uni: 'camiones',
           clase: hoy.enCurso ? 'val-madera' : '',
-          pie: hoy.enCurso
-            ? 'llegaron y el libro todavía no los cierra'
-            : 'ninguno esperando'
+          pie: demora.masLargo
+            ? 'el que lleva más: ' + duracion(demora.masLargo.minutos) +
+              ' · ' + shortProvider(demora.masLargo.proveedor)
+            : (hoy.enCurso
+                ? 'llegaron y el libro todavía no los cierra'
+                : 'ninguno esperando')
+        },
+        {
+          // Lo que demora un camión de verdad. La mediana de los que
+          // ya cerraron hoy: el que sigue adentro todavía no sabe
+          // cuánto va a demorar, así que no opina.
+          tag: 'Demora en patio',
+          val: duracion(demora.patio.mediana), uni: 'mediana',
+          clase: '',
+          pie: demora.patio.n
+            ? 'p90 ' + duracion(demora.patio.p90) + ' · el más largo ' +
+              duracion(demora.patio.max) +
+              (demora.flujo.mediana === null
+                ? ''
+                : ' · ' + duracion(demora.flujo.mediana) +
+                  ' desde la reserva')
+            : 'todavía no cierra ninguno'
         }
       ]);
 
@@ -4939,8 +5014,39 @@
               ? '<span class="sello-fuente es-est">EN PATIO</span>'
               : '<span class="sello-fuente">SALIÓ</span>');
 
+        // Las dos horas van juntas: separadas no dicen nada, y
+        // juntas son el tramo. Los puntos son el que sigue adentro.
+        var horas = esc(f.hora || '—') +
+          ' <span class="hoy-flecha">→</span> ' +
+          (f.abierto
+            ? '<span class="hoy-flecha">…</span>'
+            : esc(f.cierre || '—'));
+
+        // Contra su hora reservada: llegar antes no es un error, y
+        // explica que el tramo desde la reserva salga más corto que
+        // el de patio —o negativo—.
+        var agenda = f.agenda === null || f.agenda === undefined
+          ? ''
+          : '<div class="homo-hoy">' +
+            (f.agenda === 0
+              ? 'a su hora'
+              : duracion(Math.abs(f.agenda)) +
+                (f.agenda < 0 ? ' antes de su hora' : ' tarde')) +
+            '</div>';
+
+        var espera = f.horaDudosa
+          ? '<div class="homo-hoy es-sin-sap">hora al revés</div>'
+          : (f.patio === null || f.patio === undefined
+              ? '—'
+              : '<strong>' + duracion(f.patio) + '</strong>' +
+                (f.abierto ? ' <span class="hoy-flecha">y sigue</span>' : '') +
+                (f.flujo === null || f.flujo === undefined
+                  ? ''
+                  : '<div class="homo-hoy">' + duracion(f.flujo) +
+                    ' desde la reserva</div>'));
+
         return '<tr>' +
-          '<td class="num">' + esc(f.hora || '—') + '</td>' +
+          '<td class="num">' + horas + agenda + '</td>' +
           '<td class="num">' + esc(f.guia) + '</td>' +
           '<td><strong>' + esc(shortProvider(f.proveedor)) + '</strong>' +
             (normalizaNombre(f.proveedor) !== normalizaNombre(f.proveedorRaw)
@@ -4948,8 +5054,10 @@
                 esc(shortProvider(f.proveedorRaw)) + '</div>'
               : '') +
             '</td>' +
-          '<td>' + esc(shortProduct(f.subproducto)) + '</td>' +
-          '<td>' + esc(f.destino || '—') + '</td>' +
+          '<td>' + esc(shortProduct(f.subproducto)) +
+            '<div class="homo-hoy">' + esc(f.destino || '—') + '</div>' +
+            '</td>' +
+          '<td class="num">' + espera + '</td>' +
           '<td>' + sello + '</td>' +
           '</tr>';
       }).join('');
@@ -4957,8 +5065,8 @@
       caja.innerHTML =
         '<div class="tabla-marco tabla-fija">' +
         '<table data-tabla="hoy"><thead><tr>' +
-        '<th>Llegó</th><th>Guía</th><th>Proveedor</th>' +
-        '<th>Material</th><th>Destino</th><th>Estado</th>' +
+        '<th>Llegó → salió</th><th>Guía</th><th>Proveedor</th>' +
+        '<th>Material</th><th>En patio</th><th>Estado</th>' +
         '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
     }
 

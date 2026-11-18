@@ -61,6 +61,7 @@ const Utilities = {
 
 eval([recortarConst('SUBPRODUCTOS_OBJETIVO')].concat([
   'resumenDelDia_', 'camionesDelPlan_', 'minutosDeHora_',
+  'tramosDelCamion_', 'estadisticaDeMinutos_',
   'ahoraEnMinutos_', 'normalizaGuia_', 'factorDe_', 'formatDateKey_',
   'normalizeKey_', 'text_', 'round_'
 ].map(recortar)).join('\n'));
@@ -81,6 +82,92 @@ ok(minutosDeHora_('') === -1 && minutosDeHora_('25:00') === -1 &&
    minutosDeHora_('sin hora') === -1,
    'lo que no es una hora no se inventa');
 
+// Lo que escribe la portería de verdad, sacado del libro de noviembre.
+ok(minutosDeHora_('08.53') === 533 && minutosDeHora_('21.46') === 1306,
+   'el punto en vez de los dos puntos no rompe nada');
+ok(minutosDeHora_('18;35') === 1115 && minutosDeHora_('9:;40') === 580,
+   'ni el punto y coma, ni los dos signos juntos');
+ok(minutosDeHora_('0.3646') === -1,
+   'pero un número no se cuela como hora', minutosDeHora_('0.3646'));
+ok(minutosDeHora_('8:46:00') === 526,
+   'y con segundos se lee igual', minutosDeHora_('8:46:00'));
+
+/* ---------------------------------------------------------------------
+ * Los tramos del camión
+ * ------------------------------------------------------------------ */
+const normal = tramosDelCamion_(
+  { reserva: '8:40', llegada: '8:45', cierre: '9:05' }, 540
+);
+
+ok(normal.agenda === 5 && normal.patio === 20 && normal.flujo === 25,
+   'reservado 8:40, llegó 8:45 y cerró 9:05: 5 tarde, 20 en patio, ' +
+   '25 de flujo', normal);
+ok(normal.abierto === false && normal.inconsistente === false,
+   'y es un tramo cerrado', normal);
+
+const temprano_ = tramosDelCamion_(
+  { reserva: '8:49', llegada: '8:43', cierre: '8:46' }, 540
+);
+
+ok(temprano_.agenda === -6 && temprano_.patio === 3 &&
+   temprano_.flujo === -3,
+   'llegó antes de su hora y salió antes: el flujo es negativo y no ' +
+   'es un error', temprano_);
+
+const adentro = tramosDelCamion_(
+  { reserva: '13:50', llegada: '13:55', cierre: '' }, 840
+);
+
+ok(adentro.abierto === true && adentro.patio === 5 && adentro.flujo === 10,
+   'sin hora de cierre sigue adentro: se mide contra la hora de ahora',
+   adentro);
+
+const delMes = tramosDelCamion_(
+  { reserva: '13:50', llegada: '13:55', cierre: '' }, -1
+);
+
+ok(delMes.abierto === true && delMes.patio === null &&
+   delMes.flujo === null,
+   'y sin "ahora" no se mide: para el mes entero no significa nada',
+   delMes);
+
+const alReves = tramosDelCamion_(
+  { reserva: '8:04', llegada: '18:35', cierre: '8:04' }, 540
+);
+
+ok(alReves.inconsistente === true && alReves.patio === null &&
+   alReves.flujo === null,
+   'cerrar antes de llegar es la hora escrita al revés: se marca y no ' +
+   'se mide', alReves);
+
+const sinReserva = tramosDelCamion_(
+  { reserva: '', llegada: '8:45', cierre: '9:05' }, 540
+);
+
+ok(sinReserva.patio === 20 && sinReserva.flujo === null &&
+   sinReserva.agenda === null,
+   'sin reserva se mide el patio igual, y el flujo no se inventa',
+   sinReserva);
+
+/* ---------------------------------------------------------------------
+ * La mediana, no el promedio
+ * ------------------------------------------------------------------ */
+// Seis camiones normales y el de la fila 1822 del libro, que llegó
+// 13:30 y cerró 21:06. El promedio de esto es 78 minutos; la mediana,
+// 15. Lo que demora un camión es 15.
+const est = estadisticaDeMinutos_([10, 15, 20, 20, 10, 12, 456]);
+
+ok(est.n === 7 && est.mediana === 15,
+   'un camión de siete horas y media no mueve la mediana', est);
+ok(est.max === 456, 'pero el caso raro no desaparece: queda en el máximo',
+   est.max);
+ok(estadisticaDeMinutos_([]).mediana === null &&
+   estadisticaDeMinutos_([]).n === 0,
+   'sin datos no hay mediana, y se dice con null');
+ok(estadisticaDeMinutos_([null, undefined, 'tarde', 12]).n === 1,
+   'lo que no es número no entra',
+   estadisticaDeMinutos_([null, undefined, 'tarde', 12]));
+
 /* ---------------------------------------------------------------------
  * El día en curso
  * ------------------------------------------------------------------ */
@@ -96,19 +183,27 @@ function camion(hora, guia, proveedor, subproducto, extra) {
   }, extra || {});
 }
 
+// Cada camión con su hora reservada y su hora de cierre, que es de
+// donde sale la demora.
 const DIA = [
-  camion('8:45', '1001', 'PROMASA S.A.', 'ASTILLA PINO VERDE'),
-  camion('9:30', '1002', 'BIOMASA SUR', 'ASTILLA PINO VERDE'),
-  camion('10:15', '1003', 'FORESTAL AITUE LTDA', 'ASTILLA EUCALYPTUS NITENS'),
-  camion('11:00', '1004', 'PROMASA S.A.', 'AST. PINO VERDE C/ CORTEZA'),
-  camion('12:20', '1005', 'BIOMASA SUR', 'ASTILLA PINO VERDE'),
-  camion('13:40', '1006', 'LAMINADORA LOS ANGELES', 'ASERRÍN PINO VERDE'),
+  camion('8:45', '1001', 'PROMASA S.A.', 'ASTILLA PINO VERDE',
+         { reserva: '8:40', cierre: '9:05' }),
+  camion('9:30', '1002', 'BIOMASA SUR', 'ASTILLA PINO VERDE',
+         { reserva: '9:40', cierre: '9:50' }),
+  camion('10:15', '1003', 'FORESTAL AITUE LTDA', 'ASTILLA EUCALYPTUS NITENS',
+         { reserva: '10:00', cierre: '11:00' }),
+  camion('11:00', '1004', 'PROMASA S.A.', 'AST. PINO VERDE C/ CORTEZA',
+         { reserva: '11:00', cierre: '11:10' }),
+  camion('12:20', '1005', 'BIOMASA SUR', 'ASTILLA PINO VERDE',
+         { reserva: '12:00', cierre: '12:30' }),
+  camion('13:40', '1006', 'LAMINADORA LOS ANGELES', 'ASERRÍN PINO VERDE',
+         { reserva: '13:30', cierre: '13:55' }),
   // Llegó recién y el libro todavía no lo cierra.
   camion('13:55', '1007', 'PROMASA S.A.', 'ASTILLA PINO VERDE',
-         { enCurso: true }),
+         { enCurso: true, reserva: '13:50', cierre: '' }),
   // De ayer: no es de hoy y no entra.
   camion('16:00', '0999', 'PROMASA S.A.', 'ASTILLA PINO VERDE',
-         { fecha: '2026-11-16' })
+         { fecha: '2026-11-16', reserva: '15:50', cierre: '16:20' })
 ];
 
 // Una de las guías de hoy ya está cargada en SAP.
@@ -130,6 +225,44 @@ ok(dia.enCurso === 1, 'los que siguen en patio se cuentan', dia.enCurso);
 ok(dia.filas.filter(function(f) { return f.guia === '1001'; })[0].enSap
    === true,
    'y el que SAP ya cargó queda marcado');
+ok(dia.demora.patio.n === 6 && dia.demora.patio.mediana === 18,
+   'la demora en patio sale de los seis que cerraron, no de los siete',
+   dia.demora.patio);
+ok(dia.demora.patio.max === 45,
+   'y el más largo del día queda a la vista', dia.demora.patio.max);
+ok(dia.demora.flujo.mediana === 25,
+   'el flujo desde la hora reservada se mide aparte',
+   dia.demora.flujo);
+ok(dia.demora.masLargo && dia.demora.masLargo.guia === '1007' &&
+   dia.demora.masLargo.minutos === 5,
+   'y el que lleva más rato adentro ahora se puede ir a buscar',
+   dia.demora.masLargo);
+
+const f1002 = dia.filas.filter(function(f) {
+  return f.guia === '1002';
+})[0];
+
+ok(f1002.agenda === -10 && f1002.patio === 20 && f1002.flujo === 10,
+   'cada fila trae sus tres tramos', f1002);
+
+const f1004 = dia.filas.filter(function(f) {
+  return f.guia === '1004';
+})[0];
+
+ok(f1004.agenda === 0, 'y el que llegó a su hora dice cero, no nada',
+   f1004.agenda);
+
+const f1007 = dia.filas.filter(function(f) {
+  return f.guia === '1007';
+})[0];
+
+ok(f1007.abierto === true && f1007.patio === 5,
+   'el que sigue adentro dice cuánto lleva, no cuánto demoró', f1007);
+ok(dia.porSubproducto.filter(function(s) {
+  return s.subproducto === 'ASTILLA EUCALYPTUS NITENS';
+})[0].patio === 45,
+   'y cada material su propia mediana',
+   dia.porSubproducto.map(function(s) { return [s.subproducto, s.patio]; }));
 ok(dia.porSubproducto.length === 4,
    'con el detalle de los cuatro materiales',
    dia.porSubproducto.map(function(s) { return s.subproducto; }));

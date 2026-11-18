@@ -848,6 +848,8 @@ function getDashboardData() {
         repetidas: camiones.repetidas,
         // Camiones que llegaron y el libro todavía no cierra.
         enCurso: camiones.enCurso,
+        horasDudosas: camiones.horasDudosas,
+        demora: camiones.demora,
         primeraFecha: camiones.primeraFecha,
         ultimaFecha: camiones.ultimaFecha,
         ultimaFechaLabel: camiones.ultimaFecha
@@ -6095,9 +6097,16 @@ function readCamiones_(
     otrosProductos: 0,
     enCurso: 0,
     repetidas: 0,
+    // Filas con la hora de cierre anterior a la de llegada.
+    horasDudosas: 0,
+    demora: null,
     primeraFecha: '',
     ultimaFecha: ''
   };
+
+  // La demora del mes, sobre los camiones que ya cerraron.
+  const patios = [];
+  const flujos = [];
 
   const aMano = leerFuentes_(spreadsheet);
   const vistas = {};
@@ -6154,6 +6163,10 @@ function readCamiones_(
     const cDestino = col(['destino']);
     const cEstado = col(['estado']);
     const cLlegada = col(['hora llegada', 'llegada']);
+    // La columna que se llama "HORA" y nada más es la del cierre: se
+    // escribe cuando el camión termina y se va.
+    const cCierre = col(['hora']);
+    const cReserva = col(['hora reserva', 'reserva']);
 
     if (cFecha < 0 || cGuia < 0 || cProveedor < 0 || cProducto < 0) {
       salida.faltan.push(mes);
@@ -6217,15 +6230,34 @@ function readCamiones_(
       const estado = normalizeKey_(
         cEstado >= 0 ? valores[r][cEstado] : ''
       );
+      const llegada = cLlegada >= 0 ? text_(mostrados[r][cLlegada]) : '';
+      const cierre = cCierre >= 0 ? text_(mostrados[r][cCierre]) : '';
+      const reserva = cReserva >= 0 ? text_(mostrados[r][cReserva]) : '';
 
-      // Sin "OK" todavía: el camión llegó —tiene guía y hora de
-      // llegada— y el libro no lo cierra. Está en patio. Lo que pase
-      // entremedio no lo anota nadie, así que el panel no lo afirma:
-      // entró, y eso es lo que se cuenta. Poder decir cuántos están
-      // en patio ahora es justamente lo que da ver esto en vivo.
-      const enCurso = estado.indexOf('OK') !== 0;
+      // El camión está en patio mientras el libro no lo cierre, y
+      // cerrarlo son dos cosas: la hora y el "OK". Se escriben en ese
+      // orden —primero la hora—, así que mirar solo el estado va un
+      // paso atrás, y mirar solo la hora deja afuera al que cerraron
+      // sin anotarla. Con las dos basta que esté una.
+      //
+      // Lo que pase entremedio no lo anota nadie, así que el panel no
+      // lo afirma: entró, y eso es lo que se cuenta.
+      const enCurso = estado.indexOf('OK') !== 0 &&
+        minutosDeHora_(cierre) < 0;
 
       if (enCurso) { salida.enCurso++; }
+
+      const tramos = tramosDelCamion_(
+        { llegada: llegada, cierre: cierre, reserva: reserva },
+        -1
+      );
+
+      if (tramos.inconsistente) { salida.horasDudosas++; }
+
+      if (!tramos.abierto && !tramos.inconsistente) {
+        if (tramos.patio !== null) { patios.push(tramos.patio); }
+        if (tramos.flujo !== null) { flujos.push(tramos.flujo); }
+      }
 
       salida.rows.push({
         fecha: fecha,
@@ -6240,7 +6272,9 @@ function readCamiones_(
         camiones: 1,
         ts: factorDe_(subproducto),
         enCurso: enCurso,
-        llegada: cLlegada >= 0 ? text_(mostrados[r][cLlegada]) : '',
+        llegada: llegada,
+        cierre: cierre,
+        reserva: reserva,
         predio: '',
         rol: ''
       });
@@ -6252,6 +6286,11 @@ function readCamiones_(
       if (fecha > salida.ultimaFecha) { salida.ultimaFecha = fecha; }
     }
   });
+
+  salida.demora = {
+    patio: estadisticaDeMinutos_(patios),
+    flujo: estadisticaDeMinutos_(flujos)
+  };
 
   return salida;
 }
@@ -6535,7 +6574,7 @@ function escribirFuente_(spreadsheet, mes, libro) {
 function minutosDeHora_(valor) {
   const m = String(valor === null || valor === undefined ? '' : valor)
     .trim()
-    .match(/^(\d{1,2})[:.](\d{2})/);
+    .match(/^(\d{1,2})\D{1,3}(\d{2})(?!\d)/);
 
   if (!m) { return -1; }
 
@@ -6545,6 +6584,91 @@ function minutosDeHora_(valor) {
   if (hora > 23 || minuto > 59) { return -1; }
 
   return hora * 60 + minuto;
+}
+
+/**
+ * Los tramos del camión, en minutos.
+ *
+ * El libro anota cuatro horas y tres sirven para medir: la que se le
+ * reservó, la de llegada y la del cierre. Con esas:
+ *
+ *   agenda = llegada − reserva   negativo es llegar antes de su hora
+ *   patio  = cierre  − llegada   lo que estuvo adentro
+ *   flujo  = cierre  − reserva   desde que tenía hora hasta que salió
+ *
+ * El flujo puede ser negativo y no es un error: el camión llegó antes
+ * de su hora y alcanzó a salir antes también.
+ *
+ * Sin cierre el camión sigue adentro. Se mide contra la hora de ahora
+ * y queda marcado como abierto, que es distinto de un tramo cerrado:
+ * a ese todavía le falta. Con `ahora` en −1 no se mide, que es lo que
+ * conviene para el mes entero, donde "ahora" no significa nada.
+ *
+ * Un cierre anterior a la llegada no es un camión que salió antes de
+ * entrar: es la hora escrita al revés. No se arregla ni se recorta a
+ * cero —eso sería inventar el dato—: se marca y no entra en ninguna
+ * cuenta.
+ */
+function tramosDelCamion_(fila, ahora) {
+  const reserva = minutosDeHora_(fila.reserva);
+  const llegada = minutosDeHora_(fila.llegada);
+  const cierre = minutosDeHora_(fila.cierre);
+  const abierto = cierre < 0;
+  const hasta = abierto ? (ahora >= 0 ? ahora : -1) : cierre;
+
+  const salida = {
+    abierto: abierto,
+    inconsistente: false,
+    agenda: null,
+    patio: null,
+    flujo: null
+  };
+
+  if (llegada >= 0 && reserva >= 0) { salida.agenda = llegada - reserva; }
+
+  if (hasta < 0) { return salida; }
+
+  if (llegada >= 0) {
+    if (hasta < llegada) {
+      salida.inconsistente = true;
+      return salida;
+    }
+
+    salida.patio = hasta - llegada;
+  }
+
+  if (reserva >= 0) { salida.flujo = hasta - reserva; }
+
+  return salida;
+}
+
+/**
+ * Mediana, p90 y máximo de una lista de minutos.
+ *
+ * La mediana y no el promedio: un camión que esperó siete horas y
+ * media —y hay uno así— mueve el promedio y no mueve la mediana, y lo
+ * que se quiere saber es cuánto demora un camión normal. El p90 y el
+ * máximo van al lado para que el caso raro no desaparezca.
+ */
+function estadisticaDeMinutos_(valores) {
+  const lista = (valores || []).filter(function(x) {
+    return typeof x === 'number' && isFinite(x);
+  }).sort(function(a, b) { return a - b; });
+
+  if (!lista.length) {
+    return { n: 0, mediana: null, p90: null, max: null };
+  }
+
+  const medio = Math.floor(lista.length / 2);
+
+  return {
+    n: lista.length,
+    mediana: lista.length % 2
+      ? lista[medio]
+      : Math.round((lista[medio - 1] + lista[medio]) / 2),
+    p90: lista[Math.min(lista.length - 1, Math.ceil(lista.length * 0.9) - 1)],
+    max: lista[lista.length - 1]
+  };
 }
 
 /** La hora de ahora en la planta, en minutos. */
@@ -6580,12 +6704,25 @@ function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
     }
   });
 
+  const ahora = ahoraEnMinutos_(timezone);
+
   const filas = (camionesRows || []).filter(function(row) {
     return row.fecha === hoy;
   }).map(function(row) {
+    const tramos = tramosDelCamion_(row, ahora);
+
     return {
       hora: row.llegada || '',
+      cierre: row.cierre || '',
+      reserva: row.reserva || '',
       minutos: minutosDeHora_(row.llegada),
+      // Cuánto lleva: en patio, y desde que tenía hora reservada. Si
+      // sigue adentro se mide contra la hora de ahora y se dice.
+      agenda: tramos.agenda,
+      patio: tramos.patio,
+      flujo: tramos.flujo,
+      abierto: tramos.abierto,
+      horaDudosa: tramos.inconsistente,
       guia: row.guia,
       proveedor: row.proveedor,
       proveedorRaw: row.proveedorRaw,
@@ -6605,17 +6742,51 @@ function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
 
   filas.forEach(function(fila) {
     if (!porSub[fila.subproducto]) {
-      porSub[fila.subproducto] = { camiones: 0, ts: 0 };
+      porSub[fila.subproducto] = { camiones: 0, ts: 0, patios: [] };
     }
 
     porSub[fila.subproducto].camiones++;
     porSub[fila.subproducto].ts += Number(fila.ts) || 0;
+
+    if (!fila.abierto && !fila.horaDudosa && fila.patio !== null) {
+      porSub[fila.subproducto].patios.push(fila.patio);
+    }
   });
+
+  // La demora se mide sobre los que ya cerraron: al que sigue en
+  // patio todavía le falta, y meterlo en la mediana la tiraría para
+  // abajo justo cuando más interesa saberla.
+  const cerrados = filas.filter(function(f) {
+    return !f.abierto && !f.horaDudosa;
+  });
+
+  const abiertos = filas.filter(function(f) {
+    return f.abierto && f.patio !== null;
+  }).sort(function(a, b) { return b.patio - a.patio; });
+
+  const demora = {
+    patio: estadisticaDeMinutos_(cerrados.map(function(f) {
+      return f.patio;
+    })),
+    flujo: estadisticaDeMinutos_(cerrados.map(function(f) {
+      return f.flujo;
+    })),
+    horasDudosas: filas.filter(function(f) { return f.horaDudosa; }).length,
+    // El que lleva más rato adentro ahora mismo. Es el único número
+    // de aquí que se puede ir a buscar al patio.
+    masLargo: abiertos.length
+      ? {
+          minutos: abiertos[0].patio,
+          proveedor: abiertos[0].proveedor,
+          guia: abiertos[0].guia,
+          subproducto: abiertos[0].subproducto
+        }
+      : null
+  };
 
   const desde = minutosDeHora_(CONFIG.JORNADA.DESDE);
   const hasta = minutosDeHora_(CONFIG.JORNADA.HASTA);
   const jornada = Math.max(1, hasta - desde);
-  const ahora = ahoraEnMinutos_(timezone);
   const transcurridos = Math.max(0, Math.min(jornada, ahora - desde));
 
   // Antes de hora y media, o después de cerrar, no hay regla de tres
@@ -6630,7 +6801,8 @@ function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
       camiones: porSub[sub].camiones,
       ts: round_(porSub[sub].ts, 2),
       camionesCierre: Math.round(porSub[sub].camiones * factor),
-      tsCierre: round_(porSub[sub].ts * factor, 2)
+      tsCierre: round_(porSub[sub].ts * factor, 2),
+      patio: estadisticaDeMinutos_(porSub[sub].patios).mediana
     };
   });
 
@@ -6647,6 +6819,7 @@ function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
     ts: round_(ts, 2),
     enCurso: filas.filter(function(f) { return f.enCurso; }).length,
     enSap: filas.filter(function(f) { return f.enSap; }).length,
+    demora: demora,
     porSubproducto: subproductos,
     jornada: {
       desde: CONFIG.JORNADA.DESDE,
