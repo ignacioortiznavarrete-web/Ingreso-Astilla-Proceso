@@ -263,6 +263,17 @@ ok(dia.porSubproducto.filter(function(s) {
 })[0].patio === 45,
    'y cada material su propia mediana',
    dia.porSubproducto.map(function(s) { return [s.subproducto, s.patio]; }));
+ok(dia.porSubproducto.filter(function(s) {
+  return s.subproducto === 'ASTILLA PINO VERDE';
+})[0].enCurso === 1 &&
+   dia.porSubproducto.filter(function(s) {
+     return s.subproducto === 'ASERRÍN PINO VERDE';
+   })[0].enCurso === 0,
+   'y cuántos de cada material siguen en patio, para repartir la cifra ' +
+   'de la tarjeta',
+   dia.porSubproducto.map(function(s) {
+     return [s.subproducto, s.enCurso];
+   }));
 ok(dia.porSubproducto.length === 4,
    'con el detalle de los cuatro materiales',
    dia.porSubproducto.map(function(s) { return s.subproducto; }));

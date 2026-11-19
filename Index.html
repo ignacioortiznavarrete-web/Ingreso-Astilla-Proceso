@@ -2388,21 +2388,31 @@
       font-weight: normal; color: var(--ink-3); margin-left: 6px;
     }
 
-    .hoy-subs { display: inline-flex; flex-wrap: wrap; gap: 10px; }
+    /* La flecha entre la hora de llegada y la de salida: dato de
+       apoyo, no se pelea con el número. */
+    .hoy-flecha { color: var(--ink-3); }
 
-    .hoy-sub {
-      display: inline-flex; align-items: center; gap: 5px;
-      white-space: nowrap;
+    /* De dónde sale la cifra de la tarjeta, repartida por material.
+       El nombre a la izquierda y el número a la derecha, para poder
+       leer la columna de números sin pasar por los nombres. */
+    .cifra-mat {
+      list-style: none; margin: 9px 0 0; padding: 8px 0 0;
+      border-top: 1px solid var(--rule-soft);
+      display: grid; gap: 3px;
     }
 
-    .hoy-sub i {
-      display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    .cifra-mat li {
+      display: grid; grid-template-columns: 8px 1fr auto;
+      align-items: center; gap: 6px;
+      font-size: var(--t-mini); color: var(--ink-2);
     }
 
-    /* La flecha entre la hora de llegada y la de salida, y el reloj
-       del material: datos de apoyo, no se pelean con el número. */
-    .hoy-flecha, .hoy-reloj { color: var(--ink-3); }
-    .hoy-reloj { font-variant-numeric: tabular-nums; }
+    .cifra-mat i { width: 8px; height: 8px; border-radius: 2px; }
+
+    .cifra-mat b {
+      font-family: var(--mono); font-variant-numeric: tabular-nums;
+      font-weight: 600; color: var(--ink);
+    }
 
     /* Las notas de la carga, plegadas al final. Nada se esconde en
        silencio: el título dice cuántas hay. */
@@ -4890,6 +4900,40 @@
         (abs % 60 ? ' ' + (abs % 60) + '′' : '');
     }
 
+    /**
+     * El material en una palabra, para la columna angosta de una
+     * tarjeta: "Pino verde c/corteza" no cabe y "C/corteza" sí.
+     */
+    function subMinimo(name) {
+      if (name === 'ASTILLA EUCALYPTUS NITENS') { return 'Nitens'; }
+      if (name === 'AST. PINO VERDE C/ CORTEZA') { return 'C/corteza'; }
+      if (name === 'ASTILLA PINO VERDE') { return 'Pino verde'; }
+      if (name === 'ASERRÍN PINO VERDE') { return 'Aserrín'; }
+      return shortProduct(name);
+    }
+
+    /**
+     * El desglose por material de una tarjeta.
+     *
+     * La cifra grande es la suma; esto es de dónde sale. El material
+     * que no aporta nada a esa cifra no aparece: una fila en cero
+     * ocupa el mismo alto y no dice nada.
+     */
+    function porMaterial(items) {
+      var filas = (items || []).filter(function(x) {
+        return x.valor !== null && x.valor !== undefined && x.valor !== '';
+      });
+
+      if (!filas.length) { return ''; }
+
+      return '<ul class="cifra-mat">' + filas.map(function(x) {
+        return '<li><i style="background:' +
+          colorProducto(x.subproducto) + '"></i>' +
+          '<span>' + esc(subMinimo(x.subproducto)) + '</span>' +
+          '<b>' + esc(x.valor) + '</b></li>';
+      }).join('') + '</ul>';
+    }
+
     function cifras(celdas) {
       return celdas.map(function(c) {
         return '<div class="cifra">' +
@@ -4898,6 +4942,7 @@
             (c.uni ? '<small>' + esc(c.uni) + '</small>' : '') +
           '</div>' +
           '<div class="cifra-pie">' + esc(c.pie) + '</div>' +
+          (c.detalle || '') +
           '</div>';
       }).join('');
     }
@@ -4923,26 +4968,14 @@
         ? filas.length + (filas.length === 1 ? ' camión' : ' camiones')
         : 'sin camiones');
 
-      // Por material, lo que lleva y con cuánto cerraría. Va en una
-      // línea y no en tarjetas: son cuatro materiales y cuatro
-      // tarjetas más taparían la tabla, que es lo que se viene a ver.
-      var porSub = (hoy.porSubproducto || []).map(function(s) {
-        return '<span class="hoy-sub">' +
-          '<i style="background:' + colorProducto(s.subproducto) + '"></i>' +
-          esc(shortProduct(s.subproducto)) + ' <b>' +
-          formatInteger(s.camiones) + '</b>' +
-          (cierre.alRitmo && s.camionesCierre > s.camiones
-            ? ' → ' + formatInteger(s.camionesCierre)
-            : '') +
-          (s.patio === null || s.patio === undefined
-            ? ''
-            : ' <span class="hoy-reloj">' + duracion(s.patio) + '</span>') +
-          '</span>';
-      }).join('');
+      // El reparto por material iba aquí arriba, en una sola línea y
+      // con los números de todas las tarjetas mezclados. Ahora cada
+      // tarjeta lleva el suyo: el mismo espacio dice cuatro cosas en
+      // vez de una, y cada número queda debajo de la cifra que
+      // explica.
+      var subs = hoy.porSubproducto || [];
 
-      document.getElementById('hoyNota').innerHTML = porSub
-        ? ' <span class="hoy-subs">' + porSub + '</span>'
-        : '';
+      document.getElementById('hoyNota').innerHTML = '';
 
       document.getElementById('hoyCifras').innerHTML = cifras([
         {
@@ -4951,7 +4984,13 @@
           pie: formatQuantity(hoy.ts || 0) + ' ' + unidad() +
             (hoy.enSap
               ? ' · ' + formatInteger(hoy.enSap) + ' ya en Ingresos'
-              : ' · estimadas con el factor de cada material')
+              : ' · estimadas con el factor de cada material'),
+          detalle: porMaterial(subs.map(function(s) {
+            return {
+              subproducto: s.subproducto,
+              valor: formatInteger(s.camiones)
+            };
+          }))
         },
         {
           tag: 'Cierre a las ' + (jornada.hasta || '23:00'),
@@ -4965,7 +5004,15 @@
               ' por entrar · ' + formatQuantity(cierre.ts) + ' ' + unidad()
             : (jornada.transcurridos >= jornada.minutos
                 ? 'la jornada ya cerró'
-                : 'muy temprano para proyectar')
+                : 'muy temprano para proyectar'),
+          detalle: porMaterial(subs.map(function(s) {
+            return {
+              subproducto: s.subproducto,
+              valor: formatInteger(
+                cierre.alRitmo ? s.camionesCierre : s.camiones
+              )
+            };
+          }))
         },
         {
           tag: 'En patio ahora',
@@ -4976,7 +5023,15 @@
               ' · ' + shortProvider(demora.masLargo.proveedor)
             : (hoy.enCurso
                 ? 'llegaron y el libro todavía no los cierra'
-                : 'ninguno esperando')
+                : 'ninguno esperando'),
+          detalle: porMaterial(subs.filter(function(s) {
+            return s.enCurso;
+          }).map(function(s) {
+            return {
+              subproducto: s.subproducto,
+              valor: formatInteger(s.enCurso)
+            };
+          }))
         },
         {
           // Lo que demora un camión de verdad. La mediana de los que
@@ -4992,7 +5047,12 @@
                 ? ''
                 : ' · ' + duracion(demora.flujo.mediana) +
                   ' desde la reserva')
-            : 'todavía no cierra ninguno'
+            : 'todavía no cierra ninguno',
+          detalle: porMaterial(subs.filter(function(s) {
+            return s.patio !== null && s.patio !== undefined;
+          }).map(function(s) {
+            return { subproducto: s.subproducto, valor: duracion(s.patio) };
+          }))
         }
       ]);
 

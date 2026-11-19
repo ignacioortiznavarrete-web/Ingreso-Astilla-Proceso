@@ -6742,11 +6742,15 @@ function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
 
   filas.forEach(function(fila) {
     if (!porSub[fila.subproducto]) {
-      porSub[fila.subproducto] = { camiones: 0, ts: 0, patios: [] };
+      porSub[fila.subproducto] = {
+        camiones: 0, ts: 0, enCurso: 0, patios: []
+      };
     }
 
     porSub[fila.subproducto].camiones++;
     porSub[fila.subproducto].ts += Number(fila.ts) || 0;
+
+    if (fila.enCurso) { porSub[fila.subproducto].enCurso++; }
 
     if (!fila.abierto && !fila.horaDudosa && fila.patio !== null) {
       porSub[fila.subproducto].patios.push(fila.patio);
@@ -6799,6 +6803,10 @@ function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
     return {
       subproducto: sub,
       camiones: porSub[sub].camiones,
+      // Los que de esos siguen en patio ahora. Cada tarjeta de arriba
+      // muestra su propia cifra repartida por material, y esta es la
+      // que le toca a "en patio".
+      enCurso: porSub[sub].enCurso,
       ts: round_(porSub[sub].ts, 2),
       camionesCierre: Math.round(porSub[sub].camiones * factor),
       tsCierre: round_(porSub[sub].ts * factor, 2),

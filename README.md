@@ -50,6 +50,14 @@ hoy, se esté mirando el mes o el año—:
 | **En patio ahora** | Los que llegaron y el libro todavía no cierra, y cuánto lleva el que más |
 | **Demora en patio** | Lo que demora un camión, de llegada a cierre |
 
+**Cada tarjeta lleva su propio reparto por material**, debajo de la
+cifra: 4 de pino verde, 1 con corteza, 1 de nitens, 1 de aserrín. No es
+la misma lista cuatro veces —cada una reparte **su** número—: la de
+"entraron" reparte los que entraron, la de cierre los proyectados, la
+de patio solo los que están adentro ahora, y la de demora la mediana de
+cada material. El material que no aporta a esa cifra no aparece: una
+fila en cero ocupa el mismo alto y no dice nada.
+
 Y debajo, la tabla del día: llegó → salió, guía, proveedor, material
 y destino, **cuánto estuvo en patio** y el estado —en patio, salió, o
 ya en Ingresos—. Lo último arriba, que es lo que se viene a mirar.
