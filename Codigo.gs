@@ -367,6 +367,18 @@ const CONFIG = Object.freeze({
    * lo renombra o quiere fijar uno distinto, manda lo que esté escrito
    * en la hoja Fuentes.
    */
+  // El registro propio: una copia en Excel de cada día, en una
+  // carpeta de Drive que es nuestra. CARPETA acepta el enlace
+  // completo o solo el código.
+  ARCHIVO: Object.freeze({
+    CARPETA: 'https://drive.google.com/drive/folders/' +
+      '1amDJBZ_U4RoMksMN2sZXMYxvVbabZRMF',
+    PREFIJO: 'Ingresos',
+    // De madrugada, con el día ya cerrado y nadie escribiendo.
+    HORA: 2,
+    MINUTO: 0
+  }),
+
   CAMIONES: Object.freeze({
     PATRON: 'CAMIONES INGRESO',
     // Hasta qué columna se lee. La hoja tiene decenas, y las que
@@ -474,6 +486,11 @@ function onOpen() {
     .addItem('Ubicar en el mapa', 'ubicarMapeos')
     .addItem('Preparar hoja de rutas', 'instalarRutas')
     .addItem('Preparar hoja de apuntes', 'instalarApuntes')
+    .addSeparator()
+    .addItem('Guardar en Drive el día de ayer', 'archivarDia')
+    .addItem('Guardar en Drive el mes completo', 'archivarMes')
+    .addItem('Instalar el guardado diario', 'instalarArchivoDiario')
+    .addItem('Eliminar el guardado diario', 'eliminarArchivoDiario')
     .addSeparator()
     .addItem('Instalar automatización', 'instalarDisparador')
     .addItem('Eliminar automatización', 'eliminarDisparadores')
@@ -6693,7 +6710,13 @@ function ahoraEnMinutos_(timezone) {
  * Antes de hora y media no se proyecta: con dos camiones a las nueve
  * de la mañana, la regla de tres dice cualquier cosa.
  */
-function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
+function resumenDelDia_(
+  camionesRows,
+  ingresosRows,
+  hoy,
+  timezone,
+  ahoraFijo
+) {
   const enSap = {};
 
   (ingresosRows || []).forEach(function(row) {
@@ -6704,7 +6727,13 @@ function resumenDelDia_(camionesRows, ingresosRows, hoy, timezone) {
     }
   });
 
-  const ahora = ahoraEnMinutos_(timezone);
+  // La hora de ahora, salvo cuando se está rehaciendo un día que ya
+  // terminó: ahí "ahora" no significa nada —son las dos de la mañana
+  // del día siguiente— y al camión sin hora de cierre no se le puede
+  // medir el patio contra ella. Con −1 no se mide y se dice.
+  const ahora = typeof ahoraFijo === 'number'
+    ? ahoraFijo
+    : ahoraEnMinutos_(timezone);
 
   const filas = (camionesRows || []).filter(function(row) {
     return row.fecha === hoy;
@@ -6919,6 +6948,404 @@ function camionesDelPlan_(planDetails, rows, month, workdays) {
   }).filter(function(x) {
     return x.planTs > 0 || x.camionesMes > 0 || x.filasPlan > 0;
   });
+}
+
+/* =====================================================================
+ * EL ARCHIVO DEL DÍA
+ *
+ * El panel de "Hoy" se vacía solo a medianoche: muestra las filas cuya
+ * fecha es la de hoy en la planta, y a las doce esa fecha es otra. Lo
+ * que se vio ayer no se pierde —sigue en el libro de la portería—,
+ * pero ese libro es ajeno y cambia de archivo cada mes: a fin de año no
+ * queda nada propio con qué mirar atrás.
+ *
+ * Esto deja la copia. Un archivo de Excel por día, dentro de una
+ * carpeta por mes, en una carpeta de Drive nuestra. Lo que el panel
+ * mostró en pantalla queda escrito con las horas y los tramos de cada
+ * camión, y la demora de un martes de marzo se puede ir a buscar dos
+ * años después.
+ * ===================================================================== */
+
+const ARCHIVO_COLUMNAS = Object.freeze([
+  'Fecha',
+  'Llegó',
+  'Salió',
+  'Reservada',
+  'Agenda (min)',
+  'En patio (min)',
+  'Desde la reserva (min)',
+  'Guía',
+  'Proveedor',
+  'Como lo escribe la portería',
+  'Material',
+  'Destino',
+  'TS',
+  'Estado',
+  'Observación'
+]);
+
+/**
+ * Lo mismo que queda en el registro, dicho en pantalla.
+ *
+ * Desde el menú de la planilla hay alguien mirando y conviene el
+ * cartel; desde un disparador no hay nadie y getUi() revienta. Por eso
+ * el try: el aviso es un extra, no el resultado.
+ */
+function avisarEnPantalla_(mensaje) {
+  try {
+    SpreadsheetApp.getUi().alert(mensaje);
+  } catch (sinPantalla) {}
+}
+
+/** El día anterior a una clave 'yyyy-MM-dd'. */
+function diaAnterior_(clave) {
+  const p = String(clave).split('-');
+  const d = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
+
+  d.setUTCDate(d.getUTCDate() - 1);
+
+  return d.getUTCFullYear() + '-' +
+    ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' +
+    ('0' + d.getUTCDate()).slice(-2);
+}
+
+/**
+ * La carpeta del mes, dentro de la carpeta del registro.
+ *
+ * El nombre empieza por la clave del mes —"2026-11 NOVIEMBRE"— para
+ * que Drive las ordene por fecha. Con solo el nombre del mes quedarían
+ * en orden alfabético, ABRIL antes que ENERO, que no le sirve a nadie.
+ */
+function carpetaDelMes_(mesPrefijo) {
+  const id = idDeEnlace_(CONFIG.ARCHIVO.CARPETA);
+
+  if (!id) {
+    throw new Error(
+      'CONFIG.ARCHIVO.CARPETA no trae el enlace de ninguna carpeta de ' +
+      'Drive.'
+    );
+  }
+
+  const raiz = DriveApp.getFolderById(id);
+  const nombre = mesPrefijo + ' ' + nombreDelMes_(mesPrefijo);
+  const hallada = raiz.getFoldersByName(nombre);
+
+  return hallada.hasNext() ? hallada.next() : raiz.createFolder(nombre);
+}
+
+/**
+ * Lo que hace falta para escribir uno o varios días de un mes.
+ *
+ * Se lee una vez y sirve para todo el mes: abrir el libro ajeno una vez
+ * por día sería pagar veinte veces lo mismo.
+ */
+function contextoDeArchivo_(mesPrefijo) {
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const timezone =
+    spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
+  const homologacion = leerProveedores_(spreadsheet);
+
+  const ingresos = readIngresos_(
+    spreadsheet,
+    timezone,
+    mesPrefijo + '-01',
+    homologacion
+  );
+
+  const camiones = readCamiones_(
+    spreadsheet,
+    [mesPrefijo],
+    ingresos.proveedores,
+    homologacion,
+    timezone
+  );
+
+  return {
+    mes: mesPrefijo,
+    timezone: timezone,
+    ingresos: ingresos.rows,
+    camiones: camiones.rows,
+    carpeta: carpetaDelMes_(mesPrefijo),
+    hoy: Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd')
+  };
+}
+
+/** Un cero y un vacío no son lo mismo: el vacío es "no se midió". */
+function celdaDeMinutos_(valor) {
+  return valor === null || valor === undefined ? '' : valor;
+}
+
+/** Una fila por camión, con sus horas y sus tramos. */
+function filasDelDia_(resumen) {
+  return (resumen.filas || []).map(function(f) {
+    return [
+      resumen.fecha,
+      f.hora || '',
+      f.abierto ? '' : (f.cierre || ''),
+      f.reserva || '',
+      celdaDeMinutos_(f.agenda),
+      celdaDeMinutos_(f.patio),
+      celdaDeMinutos_(f.flujo),
+      f.guia,
+      f.proveedor,
+      // Solo cuando la portería lo escribe distinto: repetir el mismo
+      // nombre en dos columnas no informa nada.
+      normalizeKey_(f.proveedor) === normalizeKey_(f.proveedorRaw)
+        ? ''
+        : f.proveedorRaw,
+      f.subproducto,
+      f.destino || '',
+      f.ts,
+      f.enSap ? 'EN INGRESOS' : (f.enCurso ? 'EN PATIO' : 'SALIÓ'),
+      f.horaDudosa ? 'hora al revés' : ''
+    ];
+  });
+}
+
+/** El mismo resumen que muestran las tarjetas, en una hoja aparte. */
+function filasDelResumen_(resumen) {
+  const demora = resumen.demora || {};
+  const patio = demora.patio || {};
+  const flujo = demora.flujo || {};
+
+  const filas = [
+    ['Material', 'Camiones', 'TS', 'En patio mediana (min)']
+  ];
+
+  (resumen.porSubproducto || []).forEach(function(s) {
+    filas.push([
+      s.subproducto,
+      s.camiones,
+      s.ts,
+      celdaDeMinutos_(s.patio)
+    ]);
+  });
+
+  filas.push(['Total', resumen.camiones, resumen.ts, '']);
+  filas.push(['', '', '', '']);
+  filas.push(['La demora del día', '', '', '']);
+  filas.push(['Camiones medidos', patio.n || 0, '', '']);
+  filas.push(['En patio mediana (min)', celdaDeMinutos_(patio.mediana),
+              '', '']);
+  filas.push(['En patio p90 (min)', celdaDeMinutos_(patio.p90), '', '']);
+  filas.push(['En patio el más largo (min)', celdaDeMinutos_(patio.max),
+              '', '']);
+  filas.push(['Desde la reserva mediana (min)',
+              celdaDeMinutos_(flujo.mediana), '', '']);
+  filas.push(['Sin cerrar', resumen.enCurso, '', '']);
+  filas.push(['Horas escritas al revés', demora.horasDudosas || 0,
+              '', '']);
+
+  return filas;
+}
+
+/**
+ * El libro, convertido a un archivo de Excel.
+ *
+ * Apps Script no sabe escribir .xlsx; lo que sabe es crear una hoja de
+ * cálculo y pedirle a Drive que la convierta. De ahí el rodeo de la
+ * hoja temporal, que se bota apenas sale el archivo.
+ */
+function exportarXlsx_(idLibro, nombre) {
+  const respuesta = UrlFetchApp.fetch(
+    'https://docs.google.com/spreadsheets/d/' + idLibro +
+      '/export?format=xlsx',
+    {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    }
+  );
+
+  if (respuesta.getResponseCode() !== 200) {
+    throw new Error(
+      'Drive no convirtió la hoja a Excel (código ' +
+      respuesta.getResponseCode() + ').'
+    );
+  }
+
+  return respuesta.getBlob().setName(nombre);
+}
+
+/** Escribe un día en la carpeta del mes y devuelve qué quedó. */
+function escribirDiaEnDrive_(ctx, fecha) {
+  const resumen = resumenDelDia_(
+    ctx.camiones,
+    ctx.ingresos,
+    fecha,
+    ctx.timezone,
+    // El día de hoy todavía corre y al que está en patio se le puede
+    // medir contra la hora de ahora. Un día ya cerrado no.
+    fecha === ctx.hoy ? undefined : -1
+  );
+
+  // Un domingo sin camiones no necesita un archivo vacío.
+  if (!resumen.filas.length) {
+    return { fecha: fecha, camiones: 0, archivo: '', url: '' };
+  }
+
+  const nombre = CONFIG.ARCHIVO.PREFIJO + ' ' + fecha;
+  const temporal = SpreadsheetApp.create(nombre);
+
+  try {
+    const detalle = temporal.getSheets()[0].setName('Camiones');
+    const filas = filasDelDia_(resumen);
+
+    detalle
+      .getRange(1, 1, 1, ARCHIVO_COLUMNAS.length)
+      .setValues([ARCHIVO_COLUMNAS])
+      .setFontWeight('bold');
+
+    detalle
+      .getRange(2, 1, filas.length, ARCHIVO_COLUMNAS.length)
+      .setValues(filas);
+
+    detalle.setFrozenRows(1);
+
+    const resumenFilas = filasDelResumen_(resumen);
+    const hoja = temporal.insertSheet('Resumen');
+
+    hoja.getRange(1, 1, resumenFilas.length, 4).setValues(resumenFilas);
+    hoja.getRange(1, 1, 1, 4).setFontWeight('bold');
+
+    SpreadsheetApp.flush();
+
+    const blob = exportarXlsx_(temporal.getId(), nombre + '.xlsx');
+    const previos = ctx.carpeta.getFilesByName(nombre + '.xlsx');
+
+    // Rehacer un día ya archivado lo reemplaza. Si se corrigió algo,
+    // lo que tiene que quedar guardado es lo corregido, no las dos
+    // versiones una al lado de la otra.
+    while (previos.hasNext()) { previos.next().setTrashed(true); }
+
+    const archivo = ctx.carpeta.createFile(blob);
+
+    return {
+      fecha: fecha,
+      camiones: resumen.filas.length,
+      archivo: archivo.getName(),
+      url: archivo.getUrl()
+    };
+  } finally {
+    DriveApp.getFileById(temporal.getId()).setTrashed(true);
+  }
+}
+
+/**
+ * Guarda un día en Drive. Sin fecha, el de ayer.
+ */
+function archivarDia(fechaClave) {
+  const fecha = text_(fechaClave) ||
+    diaAnterior_(
+      Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd')
+    );
+
+  const hecho = escribirDiaEnDrive_(
+    contextoDeArchivo_(fecha.slice(0, 7)),
+    fecha
+  );
+
+  const mensaje = hecho.camiones
+    ? 'Guardado: ' + hecho.archivo + '\n\n' + hecho.camiones +
+      ' camiones\n' + hecho.url
+    : 'El ' + fecha + ' no trae camiones de proceso, así que no se ' +
+      'escribió ningún archivo.';
+
+  Logger.log(mensaje);
+  avisarEnPantalla_(mensaje);
+
+  return hecho;
+}
+
+/**
+ * Lo que corre el disparador cada madrugada.
+ *
+ * Guarda el día que terminó y de paso rehace el anterior: la portería
+ * a veces cierra una fila al otro día, y reescribir cuesta lo mismo
+ * que no hacerlo.
+ */
+function archivarCierreDelDia() {
+  const hoy = Utilities.formatDate(
+    new Date(),
+    CONFIG.TIMEZONE,
+    'yyyy-MM-dd'
+  );
+
+  const ayer = diaAnterior_(hoy);
+
+  return [archivarDia(ayer), archivarDia(diaAnterior_(ayer))];
+}
+
+/**
+ * Guarda todos los días de un mes. Sin mes, el que corre.
+ *
+ * Es la forma de rehacer lo que haya que rehacer: cada día reemplaza
+ * al archivo anterior del mismo día, así que correrlo dos veces no
+ * duplica nada.
+ */
+function archivarMes(mesPrefijo) {
+  const mes = text_(mesPrefijo) ||
+    Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM');
+
+  const ctx = contextoDeArchivo_(mes);
+  const dias = {};
+
+  ctx.camiones.forEach(function(row) {
+    if (String(row.fecha).slice(0, 7) === mes && row.fecha <= ctx.hoy) {
+      dias[row.fecha] = true;
+    }
+  });
+
+  const hechos = Object.keys(dias).sort().map(function(fecha) {
+    return escribirDiaEnDrive_(ctx, fecha);
+  });
+
+  const mensaje = hechos.length
+    ? 'Guardados ' + hechos.length + ' días de ' + mes + ':\n\n' +
+      hechos.map(function(h) {
+        return h.fecha + ' · ' + h.camiones + ' camiones';
+      }).join('\n')
+    : 'El libro de ' + mes + ' no trae ningún día con camiones de ' +
+      'proceso.';
+
+  Logger.log(mensaje);
+  avisarEnPantalla_(mensaje);
+
+  return hechos;
+}
+
+function instalarArchivoDiario() {
+  eliminarArchivoDiario();
+
+  ScriptApp
+    .newTrigger('archivarCierreDelDia')
+    .timeBased()
+    .everyDays(1)
+    .atHour(CONFIG.ARCHIVO.HORA)
+    .nearMinute(CONFIG.ARCHIVO.MINUTO)
+    .inTimezone(CONFIG.TIMEZONE)
+    .create();
+
+  const mensaje = 'Listo. Cada día alrededor de las ' +
+    CONFIG.ARCHIVO.HORA + ':00 se guarda en Drive el día anterior, y de ' +
+    'paso se rehace el de antes por si la portería cerró una fila tarde.';
+
+  Logger.log(mensaje);
+  avisarEnPantalla_(mensaje);
+
+  return mensaje;
+}
+
+function eliminarArchivoDiario() {
+  let borrados = 0;
+
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'archivarCierreDelDia') {
+      ScriptApp.deleteTrigger(trigger);
+      borrados++;
+    }
+  });
+
+  return borrados;
 }
 
 /* =====================================================================

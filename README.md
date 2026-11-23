@@ -115,6 +115,68 @@ de que su hora llegara. Pasa seguido.
 El aviso de la carga, abajo en Suministro, dice la demora **del mes
 entero**: la mediana, el p90 y el más largo.
 
+### El archivo del día
+
+"Hoy" se vacía solo a medianoche: muestra las filas cuya fecha es la de
+hoy en la planta, y a las doce esa fecha es otra. Lo que se vio ayer no
+se pierde —sigue en el libro de la portería—, pero ese libro **es
+ajeno y cambia de archivo cada mes**: a fin de año no queda nada propio
+con qué mirar atrás.
+
+Por eso cada madrugada se guarda una copia en Drive, en la carpeta
+**Registro de demora**:
+
+```
+Registro de demora/
+  2026-11 NOVIEMBRE/
+    Ingresos 2026-11-18.xlsx
+    Ingresos 2026-11-19.xlsx
+  2026-12 DICIEMBRE/
+    Ingresos 2026-12-01.xlsx
+```
+
+La carpeta del mes **se crea sola** la primera vez que se guarda un día
+de ese mes. El nombre empieza por la clave —`2026-11`— para que Drive
+las ordene por fecha: con solo el nombre del mes quedarían en orden
+alfabético, ABRIL antes que ENERO.
+
+Cada archivo es un **Excel de verdad** (`.xlsx`), con dos hojas:
+
+| Hoja | Qué trae |
+|---|---|
+| `Camiones` | Una fila por camión: fecha, llegó, salió, reservada, los tres tramos **en minutos**, guía, proveedor, cómo lo escribe la portería, material, destino, TS, estado y observación |
+| `Resumen` | Camiones, TS y mediana por material, y la demora del día: mediana, p90, el más largo, sin cerrar y horas al revés |
+
+Los tramos van **como números de minutos**, no como "1h 20′": así se
+pueden promediar y graficar en Excel sin tener que traducirlos.
+
+**Qué correr:**
+
+| Función | Cuándo |
+|---|---|
+| `instalarArchivoDiario` | Una vez. Deja el guardado corriendo cada día a las 2:00 |
+| `archivarDia` | A mano. Sin argumento guarda **ayer** |
+| `archivarMes` | A mano. Guarda **todos** los días del mes que el libro traiga |
+| `eliminarArchivoDiario` | Para apagarlo |
+
+Las cuatro están también en el menú **Astilla Dashboard** de la
+planilla.
+
+**Tres decisiones:**
+
+- **A las 2 de la mañana, no a las 23:00.** La jornada cierra a las 23
+  pero la portería sigue escribiendo después; guardar antes sería
+  guardar a medias. Y de paso, cada corrida **rehace también el día
+  anterior**, por si cerraron una fila al otro día.
+- **Rehacer reemplaza.** Un día ya guardado se sobreescribe, no se
+  duplica. Por eso `archivarMes` se puede correr las veces que sea.
+- **Al que quedó en patio no se le inventa la demora.** En el panel,
+  un camión sin cerrar dice "20′ y sigue" contra la hora de ahora. En
+  el archivo del día siguiente eso no significa nada —serían las horas
+  que pasaron hasta las 2 de la mañana—, así que la celda queda
+  **vacía** y el estado dice `EN PATIO`. Vacío no es cero: cero diría
+  que no demoró nada.
+
 **La proyección es una regla de tres, no un pronóstico.** La planta
 recibe de **08:30 a 23:00** (`CONFIG.JORNADA`): si en las primeras horas
 entraron N camiones, al cierre entrarán los que da ese mismo ritmo. Los
