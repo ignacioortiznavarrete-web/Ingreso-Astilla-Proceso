@@ -169,7 +169,7 @@ cambiarla también acá.
 Los feriados también son copia, pero de esos se encarga una prueba.
 `Feriados.gs` los calcula —Pascua, solsticio de junio y los traslados
 de las leyes 19.973 y 20.299— en vez de tenerlos escritos, así que no
-se acaban nunca. `pruebas/feriados.js` corre esta copia y la del panel
+se acaban nunca. `pruebas/alertas/feriados.js` corre esta copia y la del panel
 contra el calendario real y falla si se separan. Lo único a mano es
 `FERIADOS_EXTRA`, hoy vacío, para el feriado que declare una ley puntual
 y ninguna regla prediga.
@@ -179,8 +179,8 @@ y ninguna regla prediga.
 ## Pruebas
 
 ```
-node pruebas/prueba.js
-node pruebas/feriados.js
+node pruebas/alertas/prueba.js
+node pruebas/alertas/feriados.js
 ```
 
 Corre los `.gs` en node con hojas falsas que imitan la forma real
@@ -191,7 +191,7 @@ excluyentes, las dos señales de «a la baja» por separado, el día que
 está en SAP y en la planilla a la vez, el primer día del mes sin
 acusar a nadie, el salto del sábado, el caso sin nadie en riesgo y el
 Plan sin columna del mes. Deja el correo armado en
-`pruebas/correo.html` para poder mirarlo en el navegador.
+`pruebas/alertas/correo.html` para poder mirarlo en el navegador.
 `Config.gs` se carga **antes** que `Feriados.gs` a propósito: es el
 orden que reventaría si alguien volviera a calcular los feriados al
 cargar el archivo en vez de pedirlos cuando se usan.

@@ -1,9 +1,9 @@
-# Qué sube al proyecto de Apps Script de las alertas y qué NO.
+# Qué sube al proyecto de Apps Script del aviso diario.
 #
-# pruebas/ corre en node, en el computador. No se pega en el editor.
-#
-# Va al revés de lo normal: se ignora todo y después se deja pasar,
-# uno por uno, solo lo que es el proyecto.
+# Esta carpeta ya trae solo lo que se pega —las pruebas viven en
+# pruebas/alertas/, fuera de aquí—, pero la lista queda escrita igual:
+# va al revés de lo normal, ignora todo y después deja pasar uno por
+# uno, así que un archivo nuevo no se sube solo.
 **/**
 
 !Config.gs

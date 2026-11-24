@@ -1,4 +1,4 @@
 .clasp.json
 node_modules/
 .DS_Store
-alertas/pruebas/correo.html
+pruebas/alertas/correo.html

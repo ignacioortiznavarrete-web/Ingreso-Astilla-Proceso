@@ -455,30 +455,45 @@ opina, porque con tres camiones un promedio dice cualquier cosa.
 
 ## Archivos
 
-Al proyecto de Apps Script del panel suben **tres** archivos:
+Tres carpetas, y la regla es una sola: **una carpeta por proyecto de
+Apps Script, y adentro solo lo que se pega**.
+
+```
+panel/      ← se pega en el proyecto del panel
+alertas/    ← se pega en el proyecto del aviso diario
+pruebas/    ← NO se pega en ninguna parte
+```
+
+**`panel/`** — tres archivos:
 
 | Archivo            | Qué es                                            |
 |--------------------|---------------------------------------------------|
-| `Codigo.gs`        | El servidor: lectura, cruces, Gmail, Calendar      |
+| `Codigo.gs`        | El servidor: lectura, cruces, Drive, Gmail         |
 | `Index.html`       | El dashboard (HTML + CSS + JS en un archivo)       |
 | `appsscript.json`  | Manifiesto: zona horaria, scopes y Drive API v3    |
 
-Y estos **no** suben:
+En el editor, `Codigo` se crea como **secuencia de comandos** e `Index`
+como **HTML**, con ese nombre exacto: en `Codigo.gs` está escrito
+`HTML_FILE: 'Index'`. El manifiesto viene solo y está oculto.
 
-| Carpeta            | Qué es                                            |
-|--------------------|---------------------------------------------------|
-| `pruebas/`         | Pruebas en **node**, no en Apps Script. Ver `pruebas/README.md` |
-| `alertas/`         | Otro proyecto de Apps Script: el correo diario     |
+**`alertas/`** — cinco archivos, **otro proyecto**, con su propio
+manifiesto y sus propios permisos: solo lee la planilla y manda correo.
+No puede escribir nada ni entrar a Drive. Ver
+[`alertas/README.md`](alertas/README.md).
 
-`pruebas/` son archivos `.js` que corren en el computador con node y
-leen `Codigo.gs` como texto. **Nunca se pegan en el editor de Apps
-Script**, y el `.claspignore` de la raíz lo deja escrito para que
-`clasp push` no pueda subirlos ni por error: ignora todo y después deja
-pasar solo los tres de arriba.
+**`pruebas/`** — archivos `.js` que corren en **node**, en el
+computador, y leen los `.gs` como texto para probarlos. **Ninguno se
+pega en el editor de Apps Script.** Ver
+[`pruebas/README.md`](pruebas/README.md).
 
-`alertas/` tampoco es parte de este proyecto: es otro, con su propio
-manifiesto y sus propios permisos, que abre la misma planilla en modo
-lectura. Ver `alertas/README.md`. El panel no manda correo.
+La regla corta, por si alguna vez hay dudas frente al editor:
+
+> **Se pega lo que termina en `.gs` o en `.html`. Lo que termina en
+> `.js` o en `.md`, nunca.**
+
+Y cada proyecto lleva su `.claspignore`, que va al revés de lo normal
+—ignora todo y después deja pasar, uno por uno, solo sus archivos—,
+para que un archivo nuevo no se suba solo.
 
 ## El panel
 
@@ -810,7 +825,7 @@ días en uno, que es peor porque no se nota. La prueba exige que nada de
 `FERIADOS_EXTRA` repita algo que la regla ya calcula.
 
 `alertas/Feriados.gs` es una copia del mismo módulo —son dos proyectos de
-Apps Script distintos, no comparten código—. `alertas/pruebas/feriados.js`
+Apps Script distintos, no comparten código—. `pruebas/alertas/feriados.js`
 corre las dos copias contra el calendario real de 2024, 2025 y 2026 y
 exige que den lo mismo, así que si una se toca sin la otra, la prueba lo
 dice.
@@ -1231,8 +1246,8 @@ escribirla a mano.
 ## Instalación
 
 1. Abrir el spreadsheet → **Extensiones › Apps Script**.
-2. Pegar `Codigo.gs` y crear un archivo HTML llamado exactamente `Index`
-   con el contenido de `Index.html`.
+2. Pegar `panel/Codigo.gs` y crear un archivo HTML llamado exactamente
+   `Index` con el contenido de `panel/Index.html`.
 3. En **Servicios**, agregar **Drive API v3** (se necesita para leer las
    planillas que llegan como adjunto Excel).
 4. Recargar el spreadsheet: aparece el menú **Astilla Dashboard**.
@@ -1291,7 +1306,7 @@ búsqueda no devuelve es un correo que nadie revisó.
 
 Para que no se repita, el resumen de la importación cuenta aparte
 **cuántos correos del reservador quedaron fuera por el asunto**, y lista
-los primeros cinco. Y `pruebas/gmail.js` exige que todo asunto que la
+los primeros cinco. Y `pruebas/panel/gmail.js` exige que todo asunto que la
 regla acepta traiga alguna de las palabras que la búsqueda pide.
 
 ### Un día en cero no es un día que falta
@@ -1340,7 +1355,7 @@ llega como una sola matriz con *todas* sus tablas pegadas una tras otra
 puede no ser la primera y cualquier otra tabla podría colarse. Una firma
 no tiene fecha arriba a la izquierda; una tabla de turnos no tiene fila
 `Total`; un párrafo con la fecha no tiene columna de números a la
-derecha. `pruebas/planilla.js` prueba las tres por separado, y además
+derecha. `pruebas/panel/planilla.js` prueba las tres por separado, y además
 que la tabla se siga leyendo bien cuando viene con otra tabla encima.
 
 Un detalle que importa: la celda de los camiones tiene que ser **el
@@ -1377,6 +1392,6 @@ Si un correo no aparece **ni en esa lista**, entonces no está en la
 casilla o no lo mandó ese remitente. No escribe nada.
 
 ```
-node pruebas/gmail.js
-node pruebas/planilla.js
+node pruebas/panel/gmail.js
+node pruebas/panel/planilla.js
 ```

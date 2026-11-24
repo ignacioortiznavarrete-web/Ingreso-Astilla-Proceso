@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const src = fs.readFileSync(
-  path.join(__dirname, '..', 'Codigo.gs'), 'utf8'
+  path.join(__dirname, '..', '..', 'panel', 'Codigo.gs'), 'utf8'
 );
 
 function recortar(nombre) {
