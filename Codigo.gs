@@ -374,9 +374,10 @@ const CONFIG = Object.freeze({
     CARPETA: 'https://drive.google.com/drive/folders/' +
       '1amDJBZ_U4RoMksMN2sZXMYxvVbabZRMF',
     PREFIJO: 'Ingresos',
-    // De madrugada, con el día ya cerrado y nadie escribiendo.
-    HORA: 2,
-    MINUTO: 0
+    // Media hora después de que cierra la jornada y antes de las doce:
+    // el día queda guardado el mismo día.
+    HORA: 23,
+    MINUTO: 30
   }),
 
   CAMIONES: Object.freeze({
@@ -7257,11 +7258,20 @@ function archivarDia(fechaClave) {
 }
 
 /**
- * Lo que corre el disparador cada madrugada.
+ * Qué días guarda la corrida de la noche: el que termina y el anterior.
  *
- * Guarda el día que terminó y de paso rehace el anterior: la portería
- * a veces cierra una fila al otro día, y reescribir cuesta lo mismo
- * que no hacerlo.
+ * El de ayer se rehace porque la portería a veces cierra una fila al
+ * otro día, y porque el disparador puede caer a las 23:15 —Apps Script
+ * no deja fijar el minuto exacto— y dejar afuera al último camión.
+ * Reescribir cuesta lo mismo que no hacerlo, y el archivo de ayer
+ * queda completo a más tardar esta noche.
+ */
+function diasDelCierre_(hoy) {
+  return [hoy, diaAnterior_(hoy)];
+}
+
+/**
+ * Lo que corre el disparador cada noche, al cerrar la jornada.
  */
 function archivarCierreDelDia() {
   const hoy = Utilities.formatDate(
@@ -7270,9 +7280,9 @@ function archivarCierreDelDia() {
     'yyyy-MM-dd'
   );
 
-  const ayer = diaAnterior_(hoy);
-
-  return [archivarDia(ayer), archivarDia(diaAnterior_(ayer))];
+  return diasDelCierre_(hoy).map(function(fecha) {
+    return archivarDia(fecha);
+  });
 }
 
 /**
@@ -7326,8 +7336,12 @@ function instalarArchivoDiario() {
     .create();
 
   const mensaje = 'Listo. Cada día alrededor de las ' +
-    CONFIG.ARCHIVO.HORA + ':00 se guarda en Drive el día anterior, y de ' +
-    'paso se rehace el de antes por si la portería cerró una fila tarde.';
+    CONFIG.ARCHIVO.HORA + ':' +
+    (CONFIG.ARCHIVO.MINUTO < 10 ? '0' : '') + CONFIG.ARCHIVO.MINUTO +
+    ' se guarda en Drive el día que termina, y de paso se rehace el ' +
+    'anterior por si la portería cerró una fila tarde.\n\n' +
+    'Apps Script no deja fijar el minuto exacto: la ventana real es de ' +
+    'unos quince minutos a cada lado.';
 
   Logger.log(mensaje);
   avisarEnPantalla_(mensaje);

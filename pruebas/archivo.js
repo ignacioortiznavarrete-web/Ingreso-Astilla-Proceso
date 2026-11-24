@@ -46,8 +46,8 @@ const CONFIG = {
     CARPETA: 'https://drive.google.com/drive/folders/' +
       '1amDJBZ_U4RoMksMN2sZXMYxvVbabZRMF?usp=sharing',
     PREFIJO: 'Ingresos',
-    HORA: 2,
-    MINUTO: 0
+    HORA: 23,
+    MINUTO: 30
   },
   FACTOR_POR_MATERIAL: {
     'ASTILLA EUCALYPTUS NITENS': 15.2,
@@ -108,6 +108,7 @@ eval([recortarConst('ARCHIVO_COLUMNAS').replace('const ', 'var ')]
   'estadisticaDeMinutos_', 'ahoraEnMinutos_', 'normalizaGuia_',
   'factorDe_', 'formatDateKey_', 'diaAnterior_', 'carpetaDelMes_',
   'celdaDeMinutos_', 'filasDelDia_', 'filasDelResumen_',
+  'diasDelCierre_',
   'idDeEnlace_', 'nombreDelMes_', 'normalizeKey_', 'text_', 'round_'
 ].map(recortar)).concat([recortarConst('MESES_LARGOS')]).join('\n'));
 
@@ -133,6 +134,16 @@ ok(diaAnterior_('2026-01-01') === '2025-12-31',
 ok(diaAnterior_('2024-03-01') === '2024-02-29',
    'el 29 de febrero existe cuando toca',
    diaAnterior_('2024-03-01'));
+
+/* ---------------------------------------------------------------------
+ * Qué guarda la corrida de las 23:30
+ * ------------------------------------------------------------------ */
+ok(diasDelCierre_('2026-11-19').join(' ') === '2026-11-19 2026-11-18',
+   'a las 23:30 el día que se guarda es el que termina, no el de ayer',
+   diasDelCierre_('2026-11-19'));
+ok(diasDelCierre_('2026-12-01').join(' ') === '2026-12-01 2026-11-30',
+   'y el primero del mes rehace el último del anterior, que vive en ' +
+   'otra carpeta', diasDelCierre_('2026-12-01'));
 
 /* ---------------------------------------------------------------------
  * La carpeta del mes

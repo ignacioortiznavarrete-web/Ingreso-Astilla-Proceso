@@ -154,8 +154,8 @@ pueden promediar y graficar en Excel sin tener que traducirlos.
 
 | Función | Cuándo |
 |---|---|
-| `instalarArchivoDiario` | Una vez. Deja el guardado corriendo cada día a las 2:00 |
-| `archivarDia` | A mano. Sin argumento guarda **ayer** |
+| `instalarArchivoDiario` | Una vez. Deja el guardado corriendo cada día a las 23:30 |
+| `archivarDia` | A mano. Sin argumento guarda **ayer**; con una fecha (`'2026-11-19'`), ese día |
 | `archivarMes` | A mano. Guarda **todos** los días del mes que el libro traiga |
 | `eliminarArchivoDiario` | Para apagarlo |
 
@@ -164,10 +164,12 @@ planilla.
 
 **Tres decisiones:**
 
-- **A las 2 de la mañana, no a las 23:00.** La jornada cierra a las 23
-  pero la portería sigue escribiendo después; guardar antes sería
-  guardar a medias. Y de paso, cada corrida **rehace también el día
-  anterior**, por si cerraron una fila al otro día.
+- **A las 23:30, media hora después de que cierra la jornada.** Así el
+  día queda guardado el mismo día. Apps Script no deja fijar el minuto
+  exacto —la ventana real es de unos quince minutos a cada lado—, y la
+  portería a veces cierra una fila al otro día, así que cada corrida
+  **rehace también el día anterior**: lo que quede afuera esta noche
+  entra mañana.
 - **Rehacer reemplaza.** Un día ya guardado se sobreescribe, no se
   duplica. Por eso `archivarMes` se puede correr las veces que sea.
 - **Al que quedó en patio no se le inventa la demora.** En el panel,
