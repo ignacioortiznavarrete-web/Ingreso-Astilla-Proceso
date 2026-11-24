@@ -559,6 +559,11 @@
       padding: var(--s6) 0 var(--s5);
     }
 
+    /* La regla del mes, sola. Las cifras que la acompañaban bajaron a
+       la fila de lectura: ahí están al lado de las otras ocho y de los
+       datos que explican, en vez de arriba y aparte. */
+    .portada-sola { grid-template-columns: minmax(0, 1fr); }
+
     .portada-mapeos, .portada-apuntes { align-items: center; }
 
     .titulo-vista {
@@ -3094,7 +3099,7 @@
   <main>
     <!-- ======================= SUMINISTRO ======================= -->
     <section id="vistaSuministro" role="tabpanel" aria-labelledby="pesSuministro">
-      <div class="portada">
+      <div class="portada portada-sola">
         <div class="regla">
           <div class="regla-cab">
             <div class="regla-titulo" id="reglaTitulo">La regla del mes</div>
@@ -3113,8 +3118,6 @@
           </div>
           <div class="regla-escala" id="reglaEscala"></div>
         </div>
-
-        <div class="portada-cifras" id="portadaCifras"></div>
       </div>
 
       <div class="pila">
@@ -3182,7 +3185,7 @@
           <div class="campo">
             <label for="subproductoFilter">Subproducto</label>
             <select id="subproductoFilter" onchange="renderAll()">
-              <option value="">Los tres de proceso</option>
+              <option value="">Todos los de proceso</option>
             </select>
           </div>
           <div class="campo">
@@ -3372,7 +3375,7 @@
             <div class="panel-cab">
               <div>
                 <h2>Mix de subproductos</h2>
-                <p class="panel-nota">Participación de los tres tipos de astilla.</p>
+                <p class="panel-nota">Participación de cada material de proceso.</p>
               </div>
             </div>
             <div id="grafMix"></div>
@@ -4527,7 +4530,9 @@
 
       fillSelect('subproductoFilter',
         DATA.filters.subproductos || DATA.subproductos || [],
-        'Los tres de proceso');
+        // Eran tres hasta que entró el aserrín. Contarlos en el rótulo
+        // obliga a venir a cambiarlo cada vez que aparece un material.
+        'Todos los de proceso');
       fillSelect('proveedorFilter', DATA.filters.proveedores || [], 'Todos');
       fillSelect('destinoFilter', DATA.filters.destinos || [], 'Todos');
 
@@ -5431,7 +5436,6 @@
       CURRENT_PRICING = buildPricingSummary(CURRENT_ROWS, period);
       CURRENT_METRICS = buildMetrics(CURRENT_ROWS, period);
 
-      dibujarPortada(CURRENT_METRICS);
       dibujarRegla(CURRENT_METRICS);
       dibujarLectura(CURRENT_METRICS);
       dibujarAlertas(CURRENT_METRICS);
@@ -6262,42 +6266,8 @@
 
 
 /* =====================================================================
- * PORTADA Y LA REGLA DEL MES
+ * LA REGLA DEL MES
  * ===================================================================== */
-
-    function dibujarPortada(m) {
-      var celdas = [
-        {
-          tag: 'Total operativo',
-          val: formatQuantity(m.total),
-          uni: unidad(),
-          clase: ''
-        },
-        {
-          tag: 'Cumplimiento a la fecha',
-          val: m.compliance === null ? '—' : formatPercent(m.compliance),
-          uni: '',
-          clase: m.compliance !== null && m.compliance < 1 ? 'val-riesgo' : 'val-verde'
-        },
-        {
-          // Nueve dígitos no caben en una tarjeta: en la portada va
-          // abreviado y el número exacto vive en la tabla de precios.
-          tag: 'Costo valorizado',
-          val: m.operatingCost ? formatCorto(m.operatingCost) : '—',
-          uni: '',
-          clase: ''
-        }
-      ];
-
-      document.getElementById('portadaCifras').innerHTML = celdas
-        .map(function(c) {
-          return '<div class="portada-cifra">' +
-            '<div class="portada-tag">' + esc(c.tag) + '</div>' +
-            '<div class="portada-val ' + c.clase + '">' + esc(c.val) +
-            (c.uni ? '<small>' + esc(c.uni) + '</small>' : '') +
-            '</div></div>';
-        }).join('');
-    }
 
     /**
      * En el rubro todo se mide: forcípula, romana, cinta diamétrica.
@@ -6374,11 +6344,104 @@
  * LECTURA SECUNDARIA
  * ===================================================================== */
 
+    /**
+     * Camiones por material, contando guías y no filas.
+     *
+     * Un camión es una guía: SAP puede partirla en dos líneas y el libro
+     * puede tenerla escrita dos veces, y sigue siendo el mismo camión.
+     * Las filas viejas de la planilla no traen guía —venían por día, no
+     * por camión—, así que esas se suman como vienen.
+     */
+    function camionesPorMaterial(filas) {
+      var vistas = {};
+      var porSub = {};
+
+      (filas || []).forEach(function(row) {
+        var sub = row.subproducto;
+
+        if (!porSub[sub]) { porSub[sub] = 0; }
+
+        if (!row.guia) {
+          porSub[sub] += Number(row.camiones) || 0;
+          return;
+        }
+
+        var llave = sub + '||' + row.guia + '||' +
+          normalizaNombre(row.proveedor);
+
+        if (vistas[llave]) { return; }
+
+        vistas[llave] = true;
+        porSub[sub] += 1;
+      });
+
+      return porSub;
+    }
+
     function dibujarLectura(m) {
       var p = m.period;
       var sinPlan = planDisabledReason();
+      var camiones = camionesPorMaterial(CURRENT_ROWS);
+      var orden = (DATA.subproductos || []).concat(
+        Object.keys(camiones).filter(function(s) {
+          return (DATA.subproductos || []).indexOf(s) === -1;
+        })
+      );
+
+      var totalCamiones = orden.reduce(function(t, s) {
+        return t + (camiones[s] || 0);
+      }, 0);
 
       var celdas = [
+        {
+          // Estaban arriba, al lado de la regla del mes. Bajaron acá:
+          // la regla se lee mejor sola y las cifras se leen mejor
+          // juntas, al lado de las que explican lo mismo.
+          tag: 'Total operativo',
+          val: formatQuantity(m.total), uni: unidad(),
+          pie: 'Real más estimado, en el período filtrado',
+          // En el mismo orden que la tarjeta de al lado: dos listas
+          // de los mismos cuatro materiales en distinto orden se leen
+          // mal, aunque cada una por separado esté bien.
+          detalle: porMaterial(orden.map(function(s) {
+            const x = (CURRENT_PRODUCTS || []).filter(function(y) {
+              return y.subproducto === s;
+            })[0];
+
+            return {
+              subproducto: s,
+              valor: x && x.total > 0 ? formatQuantity(x.total) : null
+            };
+          }))
+        },
+        {
+          tag: 'Camiones del período',
+          val: formatInteger(totalCamiones), uni: 'camiones',
+          pie: 'Contados por guía: una guía es un camión, venga en una ' +
+            'línea o en dos',
+          detalle: porMaterial(orden.filter(function(s) {
+            return camiones[s];
+          }).map(function(s) {
+            return { subproducto: s, valor: formatInteger(camiones[s]) };
+          }))
+        },
+        {
+          tag: 'Cumplimiento a la fecha',
+          val: m.compliance === null ? '—' : formatPercent(m.compliance),
+          clase: m.compliance !== null && m.compliance < 1
+            ? 'val-riesgo'
+            : 'val-verde',
+          pie: m.planValid
+            ? 'Contra el plan prorrateado a hoy'
+            : sinPlan
+        },
+        {
+          // Nueve dígitos no caben en una tarjeta: va abreviado y el
+          // número exacto vive en la tabla de precios.
+          tag: 'Costo valorizado',
+          val: m.operatingCost ? formatCorto(m.operatingCost) : '—',
+          pie: 'Al precio que le fija el Plan a cada proveedor'
+        },
         {
           tag: 'Ingreso real', val: formatQuantity(m.real), uni: unidad(),
           pie: 'Confirmado hasta ' + (DATA.source.lastActualDateLabel || '—')
@@ -6446,16 +6509,7 @@
         }
       ];
 
-      document.getElementById('lectura').innerHTML = celdas
-        .map(function(c) {
-          return '<div class="cifra">' +
-            '<div class="cifra-tag">' + esc(c.tag) + '</div>' +
-            '<div class="cifra-val ' + (c.clase || '') + '">' + esc(c.val) +
-              (c.uni ? '<small>' + esc(c.uni) + '</small>' : '') +
-            '</div>' +
-            '<div class="cifra-pie">' + esc(c.pie) + '</div>' +
-            '</div>';
-        }).join('');
+      document.getElementById('lectura').innerHTML = cifras(celdas);
     }
 
 /* =====================================================================

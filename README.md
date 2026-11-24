@@ -489,6 +489,34 @@ cruzan con SAP),
 **Mapeos** (aserraderos en el mapa y armado de rutas) y **Apuntes**
 (pauta de la reunión semanal y su registro).
 
+### La regla del mes, y las cifras debajo
+
+La regla del mes ocupa el ancho completo: es una sola barra —verde lo
+recibido, madera lo estimado, la marca del plan a la fecha y la del
+cierre proyectado— y se lee de un vistazo cuando nada le compite al
+lado.
+
+Las cifras van todas abajo, en una sola fila, junto a los datos que
+explican. Las dos primeras se abren por material:
+
+| Tarjeta | Qué dice |
+|---|---|
+| **Total operativo** | Real más estimado del período, y cuántas TS puso cada material |
+| **Camiones del período** | Cuántos camiones entraron, y cuántos de cada material: 30 de pino verde, 12 con corteza, 8 de nitens, 3 de aserrín |
+| **Cumplimiento a la fecha** | Contra el plan prorrateado a hoy |
+| **Costo valorizado** | Al precio que el Plan le fija a cada proveedor |
+
+Y después las ocho de siempre: ingreso real, complemento estimado,
+plan del período, desvío, cierre al ritmo, ritmo actual, precio
+promedio y cobertura de precio.
+
+**Los camiones se cuentan por guía, no por fila.** SAP puede partir una
+guía en dos líneas —dos posiciones del mismo pedido— y el libro puede
+tenerla escrita dos veces: sigue siendo el mismo camión. La misma guía
+a nombre de **otro** proveedor sí son dos, porque el número es la
+correlativa de cada uno. Las filas viejas de la planilla no traen guía
+—venían por día, no por camión—, así que esas se suman como vienen.
+
 ### Sistema visual
 
 El color del dato significa una sola cosa, siempre la misma:

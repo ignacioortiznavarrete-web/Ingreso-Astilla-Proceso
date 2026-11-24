@@ -71,6 +71,7 @@ function shortProduct(n) {
   return String(n || '');
 }
 function celdaN(t) { return '<td class="number">' + t + '</td>'; }
+function colorProducto(n) { return 'var(--sub-' + String(n || '') + ')'; }
 function vacio(t) { return '<p>' + t + '</p>'; }
 var HOMO_MAPA_FILTRO = '';
 var HOMO_ALCANCE = 'mes';
@@ -84,7 +85,7 @@ eval([
   'dibujarHomoMapa', 'homoProvisorios', 'homoTabla',
   'dibujarDescuadres', 'esDelMes', 'homoGrupos', 'sellosDeHoja',
   'dibujarHomoGrupos', 'marcarVivo', 'puedeRefrescar', 'esEstimado',
-  'marcarPermisos'
+  'marcarPermisos', 'camionesPorMaterial', 'subMinimo', 'porMaterial'
 ].map(recortar).join('\n'));
 
 // --- Datos como los manda el servidor -------------------------------
@@ -423,6 +424,53 @@ marcarPermisos();
 
 ok(!document.body.classList.contains('solo-lectura'),
    'sin el dato, se asume que puede: no se rompe lo que ya andaba');
+
+/* ---------------------------------------------------------------------
+ * Camiones por material: la cuenta que va en la tarjeta
+ * ------------------------------------------------------------------ */
+const FLOTA = [
+  // Treinta de pino verde, y uno de ellos partido en dos líneas de SAP.
+  { subproducto: 'ASTILLA PINO VERDE', guia: '1001',
+    proveedor: 'PROMASA S.A.', camiones: 1 },
+  { subproducto: 'ASTILLA PINO VERDE', guia: '1001',
+    proveedor: 'PROMASA S.A.', camiones: null },
+  { subproducto: 'ASTILLA PINO VERDE', guia: '1002',
+    proveedor: 'BIOMASA SUR', camiones: 1 },
+  // La misma guía a nombre de otro proveedor es otro camión: el
+  // número es la correlativa de cada uno.
+  { subproducto: 'ASTILLA PINO VERDE', guia: '1001',
+    proveedor: 'BIOMASA SUR', camiones: 1 },
+  { subproducto: 'ASERRÍN PINO VERDE', guia: '47209',
+    proveedor: 'LAMINADORA LOS ANGELES', camiones: 1 },
+  // De la planilla vieja: venía por día y sin guía, así que se suma
+  // como viene.
+  { subproducto: 'ASTILLA EUCALYPTUS NITENS', guia: '',
+    proveedor: 'FORESTAL AITUE', camiones: 4 }
+];
+
+const flota = camionesPorMaterial(FLOTA);
+
+ok(flota['ASTILLA PINO VERDE'] === 3,
+   'una guía partida en dos líneas es un camión, y la misma guía de ' +
+   'otro proveedor es otro', flota);
+ok(flota['ASERRÍN PINO VERDE'] === 1,
+   'el aserrín cuenta como cualquier otro material', flota);
+ok(flota['ASTILLA EUCALYPTUS NITENS'] === 4,
+   'y lo que no trae guía se suma como viene', flota);
+ok(camionesPorMaterial([])['ASTILLA PINO VERDE'] === undefined,
+   'sin filas no hay materiales que mostrar');
+
+const lista = porMaterial([
+  { subproducto: 'ASTILLA PINO VERDE', valor: '30' },
+  { subproducto: 'ASERRÍN PINO VERDE', valor: null }
+]);
+
+ok(lista.indexOf('Pino verde') !== -1 && lista.indexOf('30') !== -1,
+   'el desglose de la tarjeta nombra el material y su número', lista);
+ok(lista.indexOf('Aserrín') === -1,
+   'y el que no aporta a esa cifra no ocupa una fila en cero', lista);
+ok(porMaterial([]) === '',
+   'sin materiales no se dibuja la lista');
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;
