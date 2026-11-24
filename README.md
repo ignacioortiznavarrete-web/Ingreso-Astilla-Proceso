@@ -155,6 +155,7 @@ pueden promediar y graficar en Excel sin tener que traducirlos.
 | Función | Cuándo |
 |---|---|
 | `instalarArchivoDiario` | Una vez. Deja el guardado corriendo cada día a las 23:45 |
+| `archivarHoy` | A mano. Guarda **el día que está corriendo**, como va hasta ese minuto |
 | `archivarDia` | A mano. Sin argumento guarda **ayer**; con una fecha (`'2026-11-19'`), ese día |
 | `archivarMes` | A mano. Guarda **todos** los días del mes que el libro traiga |
 | `eliminarArchivoDiario` | Para apagarlo |

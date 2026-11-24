@@ -488,6 +488,7 @@ function onOpen() {
     .addItem('Preparar hoja de rutas', 'instalarRutas')
     .addItem('Preparar hoja de apuntes', 'instalarApuntes')
     .addSeparator()
+    .addItem('Guardar en Drive el día de hoy', 'archivarHoy')
     .addItem('Guardar en Drive el día de ayer', 'archivarDia')
     .addItem('Guardar en Drive el mes completo', 'archivarMes')
     .addItem('Instalar el guardado diario', 'instalarArchivoDiario')
@@ -7268,6 +7269,25 @@ function archivarDia(fechaClave) {
  */
 function diasDelCierre_(hoy) {
   return [hoy, diaAnterior_(hoy)];
+}
+
+/**
+ * Guarda el día de hoy, tal como va hasta este minuto.
+ *
+ * Existe porque `archivarDia` sin fecha guarda el de AYER —es lo que
+ * necesita el disparador de la noche— y desde el menú eso sorprende:
+ * uno aprieta a las once de la mañana del 23 y le aparece un archivo
+ * del 22. Esto guarda el día que está corriendo, con los camiones que
+ * lleven entrados y los que estén en patio en este momento.
+ *
+ * Se puede apretar las veces que sea: reemplaza el archivo del día, no
+ * lo duplica, y a las 23:45 se vuelve a escribir solo con el día ya
+ * completo.
+ */
+function archivarHoy() {
+  return archivarDia(
+    Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd')
+  );
 }
 
 /**
