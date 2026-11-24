@@ -85,7 +85,7 @@ function cargar(hojas, hoy) {
   };
 
   vm.createContext(ctx);
-  const dir = path.join(__dirname, '..', '..', 'alertas');
+  const dir = path.join(__dirname, '..');
   // Config.gs va primero a propósito: es el orden que más duele si
   // alguien vuelve a calcular los feriados al cargar el archivo en vez
   // de pedirlos cuando se usan.

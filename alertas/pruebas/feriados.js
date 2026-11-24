@@ -38,7 +38,7 @@ function recortar(txt, firma) {
 
 /** El módulo del panel: el bloque de feriados más el ayudante de fechas. */
 function moduloDelPanel() {
-  const txt = fs.readFileSync(path.join(raiz, 'panel', 'Codigo.gs'), 'utf8');
+  const txt = fs.readFileSync(path.join(raiz, 'Codigo.gs'), 'utf8');
   const marca = txt.indexOf(' * FERIADOS DE CHILE, CALCULADOS');
   const ini = txt.lastIndexOf('/*', marca);
   const fin = txt.indexOf('const CONFIG = Object.freeze({');

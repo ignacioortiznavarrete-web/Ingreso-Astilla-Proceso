@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 const src = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'panel', 'Index.html'), 'utf8'
+  path.join(__dirname, '..', 'Index.html'), 'utf8'
 );
 
 function recortar(nombre) {

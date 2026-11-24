@@ -1,0 +1,15 @@
+# Qué sube a Apps Script y qué NO.
+#
+# Sin este archivo, `clasp push` manda TODO lo que haya en la carpeta,
+# y los .js de pruebas/ entrarían al proyecto como si fueran código del
+# panel. No lo son: corren en node, en el computador, y nunca se pegan
+# en el editor de Apps Script.
+#
+# Por eso va al revés de lo normal: primero se ignora todo y después se
+# deja pasar, uno por uno, solo lo que de verdad es el proyecto. Así un
+# archivo nuevo que aparezca mañana en el repo no se sube solo.
+**/**
+
+!Codigo.gs
+!Index.html
+!appsscript.json
