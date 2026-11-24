@@ -374,10 +374,10 @@ const CONFIG = Object.freeze({
     CARPETA: 'https://drive.google.com/drive/folders/' +
       '1amDJBZ_U4RoMksMN2sZXMYxvVbabZRMF',
     PREFIJO: 'Ingresos',
-    // Media hora después de que cierra la jornada y antes de las doce:
-    // el día queda guardado el mismo día.
+    // Quince minutos antes de las doce: el día queda guardado el mismo
+    // día, con la jornada cerrada hace tres cuartos de hora.
     HORA: 23,
-    MINUTO: 30
+    MINUTO: 45
   }),
 
   CAMIONES: Object.freeze({
@@ -7271,16 +7271,34 @@ function diasDelCierre_(hoy) {
 }
 
 /**
+ * Cuál es el día que terminó, visto desde la hora en que se pregunta.
+ *
+ * El disparador sale a las 23:45, pero Apps Script no promete el
+ * minuto: puede salir 23:59 y, si la lectura se demora, la fecha ya
+ * cambió cuando se calcula. Sin esto guardaría el día recién
+ * empezado —vacío— y dejaría sin archivo el que se quería guardar.
+ *
+ * El corte es el mediodía, que es de sobra: una corrida nocturna nunca
+ * cae en la mañana, y una que sí caiga ahí —a mano, al día
+ * siguiente— también quiere el día anterior.
+ */
+function diaQueTermina_(fecha, hora) {
+  return String(hora) < '12:00' ? diaAnterior_(fecha) : fecha;
+}
+
+/**
  * Lo que corre el disparador cada noche, al cerrar la jornada.
  */
 function archivarCierreDelDia() {
-  const hoy = Utilities.formatDate(
+  const ahora = Utilities.formatDate(
     new Date(),
     CONFIG.TIMEZONE,
-    'yyyy-MM-dd'
+    'yyyy-MM-dd HH:mm'
   );
 
-  return diasDelCierre_(hoy).map(function(fecha) {
+  const cierra = diaQueTermina_(ahora.slice(0, 10), ahora.slice(11));
+
+  return diasDelCierre_(cierra).map(function(fecha) {
     return archivarDia(fecha);
   });
 }

@@ -47,7 +47,7 @@ const CONFIG = {
       '1amDJBZ_U4RoMksMN2sZXMYxvVbabZRMF?usp=sharing',
     PREFIJO: 'Ingresos',
     HORA: 23,
-    MINUTO: 30
+    MINUTO: 45
   },
   FACTOR_POR_MATERIAL: {
     'ASTILLA EUCALYPTUS NITENS': 15.2,
@@ -108,7 +108,7 @@ eval([recortarConst('ARCHIVO_COLUMNAS').replace('const ', 'var ')]
   'estadisticaDeMinutos_', 'ahoraEnMinutos_', 'normalizaGuia_',
   'factorDe_', 'formatDateKey_', 'diaAnterior_', 'carpetaDelMes_',
   'celdaDeMinutos_', 'filasDelDia_', 'filasDelResumen_',
-  'diasDelCierre_',
+  'diasDelCierre_', 'diaQueTermina_',
   'idDeEnlace_', 'nombreDelMes_', 'normalizeKey_', 'text_', 'round_'
 ].map(recortar)).concat([recortarConst('MESES_LARGOS')]).join('\n'));
 
@@ -144,6 +144,17 @@ ok(diasDelCierre_('2026-11-19').join(' ') === '2026-11-19 2026-11-18',
 ok(diasDelCierre_('2026-12-01').join(' ') === '2026-12-01 2026-11-30',
    'y el primero del mes rehace el último del anterior, que vive en ' +
    'otra carpeta', diasDelCierre_('2026-12-01'));
+
+// El disparador sale a las 23:45 y Apps Script no promete el minuto.
+ok(diaQueTermina_('2026-11-19', '23:45') === '2026-11-19',
+   'a las 23:45 el día que termina es el de hoy');
+ok(diaQueTermina_('2026-11-20', '00:03') === '2026-11-19',
+   'pero si la corrida se pasó de la medianoche, el día que terminó ' +
+   'es el de ayer: si no, guardaría uno recién empezado y vacío',
+   diaQueTermina_('2026-11-20', '00:03'));
+ok(diaQueTermina_('2026-12-01', '00:10') === '2026-11-30',
+   'y en el cambio de mes se va a la carpeta del mes anterior',
+   diaQueTermina_('2026-12-01', '00:10'));
 
 /* ---------------------------------------------------------------------
  * La carpeta del mes
