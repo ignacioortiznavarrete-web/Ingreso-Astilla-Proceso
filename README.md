@@ -431,7 +431,17 @@ Al proyecto de Apps Script del panel suben **tres** archivos:
 |--------------------|---------------------------------------------------|
 | `Codigo.gs`        | El servidor: lectura, cruces, Drive, Calendar      |
 | `Index.html`       | El dashboard (HTML + CSS + JS en un archivo)       |
-| `appsscript.json`  | Manifiesto: zona horaria, scopes y Drive API v3    |
+| `appsscript.json`  | Manifiesto: zona horaria, permisos y Drive API v3  |
+
+**Los permisos del manifiesto se escriben a mano, y Google valida la
+lista entera al pedir el consentimiento.** Uno inválido bloquea la
+autorización completa con `Error 400: invalid_scope`, aunque todos los
+demás estén bien y aunque el script llevara años funcionando: la lista
+solo se revisa cuando cambia y hay que volver a autorizar.
+
+Pasó con `auth/maps`, que no existe como permiso de OAuth. El servicio
+`Maps` de Apps Script —el que geocodifica los aserraderos— va con
+`script.external_request`, que ya estaba en la lista.
 
 Y estos **no** suben:
 
