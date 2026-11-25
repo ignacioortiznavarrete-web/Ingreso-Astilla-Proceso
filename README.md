@@ -1235,6 +1235,7 @@ clasp push
 | Buscar el libro de camiones del mes    | Busca el archivo del mes en Drive y lo deja escrito en `Fuentes` |
 | Preparar hoja de fuentes               | Crea la hoja `Fuentes` y escribe el libro del mes |
 | Validar hoja Plan                      | Solo lee y valida; no modifica formato          |
+| ¿Por qué no toma el plan?              | Proveedor por proveedor: con qué fila del Plan cruzó, por qué camino, y qué filas del Plan nadie usó |
 | Guardar en Drive el día de hoy         | Escribe el Excel del día que corre              |
 | Guardar en Drive el día de ayer        | Escribe el Excel del día anterior               |
 | Guardar en Drive el mes completo       | Escribe un Excel por cada día que el libro traiga |

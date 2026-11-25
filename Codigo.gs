@@ -408,6 +408,7 @@ function onOpen() {
     .addItem('Abrir dashboard', 'abrirDashboard')
     .addSeparator()
     .addItem('Validar hoja Plan (no modifica)', 'prepararHojaPlan')
+    .addItem('¿Por qué no toma el plan?', 'diagnosticarPlan')
     .addSeparator()
     .addItem('Preparar hoja de fuentes', 'instalarFuentes')
     .addItem(
@@ -519,6 +520,119 @@ function abrirDashboard() {
  */
 function prepararHojaPlan() {
   return validarHojaPlan();
+}
+
+/**
+ * Por qué un proveedor no toma su plan.
+ *
+ * El cruce contra el Plan puede fallar en tres lugares distintos y el
+ * panel solo muestra el resultado: una celda vacía se ve igual venga
+ * de un nombre que no cruzó, de un material que el Plan no tiene o de
+ * una fila del Plan escrita en el mes equivocado.
+ *
+ * Esto los separa. Por cada proveedor y material que entró este mes
+ * dice con qué fila del Plan cruzó y por qué camino; y al final, las
+ * filas del Plan que nadie usó.
+ */
+function diagnosticarPlan() {
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const timezone =
+    spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
+  const month = getCurrentMonthWindow_(timezone);
+  const homologacion = leerProveedores_(spreadsheet);
+
+  const ingresos = readIngresos_(
+    spreadsheet, timezone, month.startKey, homologacion
+  );
+
+  const camiones = readCamiones_(
+    spreadsheet,
+    mesesDelLibro_(month),
+    ingresos.proveedores,
+    homologacion,
+    timezone
+  );
+
+  const delLibro = complementarCamiones_(ingresos.rows, camiones.rows);
+  const plan = readPlan_(spreadsheet, month);
+
+  // Lo que entró este mes, juntado por proveedor y material.
+  const porPar = {};
+
+  ingresos.rows.concat(delLibro.rows).forEach(function(row) {
+    if (String(row.fecha).slice(0, 7) !== month.prefix) { return; }
+
+    const llave = row.proveedor + '||' + row.subproducto;
+
+    if (!porPar[llave]) {
+      porPar[llave] = {
+        proveedor: row.proveedor,
+        subproducto: row.subproducto,
+        ts: 0
+      };
+    }
+
+    porPar[llave].ts += Number(row.ts) || 0;
+  });
+
+  const usadas = {};
+  const cruzan = [];
+  const fallan = [];
+
+  Object.keys(porPar).sort().forEach(function(llave) {
+    const par = porPar[llave];
+    const r = resolvePlanPrice_(
+      par.proveedor, par.subproducto, plan.details, homologacion
+    );
+
+    const linea = par.proveedor + ' · ' + subCorto_(par.subproducto) +
+      ' · ' + round_(par.ts, 1) + ' TS';
+
+    if (r.detail) {
+      usadas[r.detail.planKey] = true;
+
+      cruzan.push(
+        linea + '\n      → ' + r.method + ' con "' +
+        r.detail.proveedorPlan + '" · plan ' +
+        round_(r.detail.plan || 0, 1) + ' TS a ' + r.detail.precio
+      );
+    } else {
+      fallan.push(
+        linea + '\n      → ' + r.method +
+        (r.score ? ' (mejor parecido ' + r.score + ')' : '')
+      );
+    }
+  });
+
+  // Filas del Plan con toneladas este mes que nadie usó.
+  const sinIngreso = plan.details.filter(function(d) {
+    return (Number(d.plan) || 0) > 0 && !usadas[d.planKey];
+  }).map(function(d) {
+    return subCorto_(d.subproducto) + ' · "' + d.proveedorPlan +
+      '" · ' + round_(d.plan, 1) + ' TS';
+  });
+
+  const lineas = [
+    'Cruce con el Plan · ' + (plan.monthLabel || month.label),
+    '',
+    'Filas del Plan leídas: ' + plan.details.length,
+    '',
+    'CRUZAN (' + cruzan.length + ')',
+    cruzan.length ? '  ' + cruzan.join('\n  ') : '  ninguno',
+    '',
+    'NO CRUZAN (' + fallan.length + ')',
+    fallan.length ? '  ' + fallan.join('\n  ') : '  ninguno',
+    '',
+    'EN EL PLAN Y SIN INGRESO (' + sinIngreso.length + ')',
+    sinIngreso.length ? '  ' + sinIngreso.join('\n  ') : '  ninguna'
+  ];
+
+  const texto = lineas.join('\n');
+
+  Logger.log(texto);
+  avisarEnPantalla_(texto);
+
+  return texto;
 }
 
 function validarHojaPlan() {
@@ -6152,6 +6266,18 @@ function eliminarArchivoDiario() {
 /* =====================================================================
  * QUÉ MATERIAL ES, Y SI VA A PROCESO
  * ===================================================================== */
+/** El material en corto, para un cartel que se lee de una pasada. */
+function subCorto_(subproducto) {
+  const corto = {
+    'ASTILLA EUCALYPTUS NITENS': 'nitens',
+    'AST. PINO VERDE C/ CORTEZA': 'c/corteza',
+    'ASTILLA PINO VERDE': 'pino verde',
+    'ASERRÍN PINO VERDE': 'aserrín'
+  };
+
+  return corto[text_(subproducto)] || text_(subproducto);
+}
+
 /**
  * Toneladas secas por camión del material. Si el subproducto no está
  * en la tabla se usa el factor general, que es lo que había antes.
