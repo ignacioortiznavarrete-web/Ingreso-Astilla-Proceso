@@ -18,28 +18,22 @@ puede subirlos ni por error.
 ## Correrlas
 
 ```
-node pruebas/gmail.js
-node pruebas/planilla.js
 node pruebas/camiones.js
 node pruebas/dia.js
 node pruebas/archivo.js
 node pruebas/homologacion.js
-node pruebas/descuadres.js
 node pruebas/panel.js
 ```
 
 | Archivo | Qué cuida |
 |---|---|
-| `gmail.js` | Que la búsqueda de Gmail no pierda un correo que la regla del asunto acepta |
-| `planilla.js` | Que la tabla se lea como venga: con despachos, en cero y sin la fila de encabezados |
 | `camiones.js` | Que el libro en vivo se lea como viene y que el cruce por guía no cuente un camión dos veces |
 | `dia.js` | La proyección de cierre del día (08:30 a 23:00) y el plan convertido a camiones |
 | `archivo.js` | Que la copia diaria caiga en la carpeta del mes que corresponde y no invente demoras en el día que ya pasó |
 | `homologacion.js` | Los dos tiempos, los grupos de tres hojas y asignarlos de una vez |
-| `descuadres.js` | Que la comparación planilla ↔ SAP solo afirme lo que se puede afirmar |
-| `panel.js` | Que el panel dibuje lo que el servidor le manda: homologación y descuadres |
+| `panel.js` | Que el panel dibuje lo que el servidor le manda: homologación y el conteo de camiones por material |
 
-Las siete primeras leen `Codigo.gs` y `panel.js` lee `Index.html`;
+Las cuatro primeras leen `Codigo.gs` y `panel.js` lee `Index.html`;
 todas recortan de ahí las funciones que necesitan, así que prueban el
 código de verdad y no una copia. `panel.js` corre el dibujo con un DOM
 de mentira: no abre un navegador.

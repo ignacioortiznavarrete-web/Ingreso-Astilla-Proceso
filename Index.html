@@ -3085,14 +3085,6 @@
           </svg>
         </button>
         <span class="sello-lectura" id="selloLectura" hidden>solo lectura</span>
-        <button class="boton" id="botonImportar" data-escribe type="button"
-                onclick="importarGmail()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/>
-          </svg>
-          Importar Gmail
-        </button>
         <span class="sello-vivo" id="selloVivo" aria-live="polite"
               title="El panel vuelve a leer el libro de camiones solo, cada pocos minutos"></span>
         <button class="boton boton-firme" type="button" onclick="cargarTodo()">
@@ -3196,7 +3188,7 @@
             <select id="sourceFilter" onchange="renderAll()">
               <option value="">Real + estimado</option>
               <option value="INGRESOS">Solo real</option>
-              <option value="PLANILLA">Solo estimado</option>
+              <option value="CAMIONES">Solo estimado</option>
             </select>
           </div>
           <div class="campo">
@@ -3564,32 +3556,6 @@
 
           <div id="listaAccion" class="acciones"></div>
           <p class="accion-nota" id="accionNota" hidden></p>
-        </article>
-
-        <article class="panel" id="panelDescuadres" hidden>
-          <div class="panel-cab">
-            <div>
-              <h2>La planilla y SAP no cuentan lo mismo</h2>
-              <p class="panel-nota">
-                Solo los días que cubren las <b>dos</b> fuentes: ahí sí
-                se puede comparar. Ninguna cifra del panel cambia por
-                esto —donde Ingresos tiene el día cargado, Ingresos
-                manda y el estimado se descarta—, pero el error de la
-                planilla no aparecía en ninguna parte y quien la escribe
-                no se enteraba nunca. Esta es la lista para ir a
-                conversarla.
-                La planilla cuenta <b>camiones</b> y SAP pesa
-                <b>toneladas</b>, y un camión no pesa siempre lo mismo:
-                se avisa cuando la diferencia pasa de 0,6 camiones del
-                factor del material, que es más de lo que explica una
-                carga liviana.
-                <span id="descuadresNota"></span>
-              </p>
-            </div>
-            <div class="conteo" id="conteoDescuadres">—</div>
-          </div>
-
-          <div id="listaDescuadres"></div>
         </article>
 
         <article class="panel">
@@ -4560,25 +4526,6 @@
       if (!document.hidden) { latido(); }
     });
 
-    function importarGmail() {
-      var boton = document.getElementById('botonImportar');
-      boton.disabled = true;
-      setLoading(true, 'Importando planillas de Gmail');
-      hideError();
-
-      google.script.run
-        .withSuccessHandler(function() {
-          boton.disabled = false;
-          cargarTodo();
-        })
-        .withFailureHandler(function(err) {
-          boton.disabled = false;
-          setLoading(false);
-          showError(mensaje(err));
-        })
-        .procesarPlanillasGmail();
-    }
-
     /* =================================================================
        CONFIGURACIÓN INICIAL
        ================================================================= */
@@ -4683,84 +4630,6 @@
           'confirmado en la hoja Ingresos.';
       }
 
-      // Un día anterior al último registro real que igual hubo que
-      // completar es un hueco en Ingresos, no un desfase. Se dice,
-      // porque es lo que hay que ir a cargar.
-      var huecos = source.huecosLabel || [];
-
-      if (huecos.length) {
-        nota +=
-          ' <b>' + huecos.length +
-          (huecos.length === 1
-            ? ' día quedó sin TS en Ingresos</b> y se tomó'
-            : ' días quedaron sin TS en Ingresos</b> y se tomaron') +
-          ' de la planilla: ' + esc(huecos.join(', ')) + '.';
-      }
-
-      // Días que el reservador reportó y vinieron en cero. Un día en
-      // blanco y un día sin despacho se ven igual en un gráfico, y no
-      // son lo mismo: uno hay que ir a cargarlo, el otro ya está
-      // contestado.
-      var enCero = (source.sinDespacho || []).filter(function(f) {
-        return f >= DATA.month.startKey && f <= DATA.month.endKey;
-      });
-
-      if (enCero.length) {
-        nota += ' <b>' + enCero.length +
-          (enCero.length === 1
-            ? ' día se reportó sin despacho</b>: '
-            : ' días se reportaron sin despacho</b>: ') +
-          esc(enCero.slice(0, 6).map(formatDateKey).join(', ')) +
-          (enCero.length > 6 ? '…' : '') +
-          '. No faltan: entraron en cero.';
-      }
-
-      // Proveedores que SAP no conoce en toda la ventana y que igual se
-      // complementan, aun en días que SAP sí tenía cargados. Es seguro
-      // —SAP no tiene nada suyo con qué contarlos dos veces— pero hay
-      // que decirlo: o falta registrarlos en SAP, o su nombre no está
-      // homologado y en realidad son otro que SAP sí conoce.
-      var ajenos = source.ajenos || [];
-
-      if (ajenos.length) {
-        nota += ' <b>' + ajenos.length +
-          (ajenos.length === 1
-            ? ' proveedor no está en Ingresos</b> y se complementa igual: '
-            : ' proveedores no están en Ingresos</b> y se complementan igual: ') +
-          esc(ajenos.slice(0, 4).map(shortProvider).join(', ')) +
-          (ajenos.length > 4 ? '…' : '') +
-          '. Revísalos en <b>Homologación</b>: o falta registrarlos, o ' +
-          'son otro escrito distinto.';
-      }
-
-      // Días que SAP tiene cargados a medias: el resto del día sí está,
-      // este proveedor no. Su planilla se completa igual, y se nombran
-      // porque son los que hay que ir a cargar.
-      var rezagados = source.rezagados || [];
-
-      if (rezagados.length) {
-        var quienes = {};
-
-        rezagados.forEach(function(x) { quienes[x.proveedor] = true; });
-
-        var nombres = Object.keys(quienes);
-
-        nota += ' <b>' + rezagados.length +
-          (rezagados.length === 1
-            ? ' día quedó cargado a medias en Ingresos</b> y se completó'
-            : ' días quedaron cargados a medias en Ingresos</b> y se completaron') +
-          ' con la planilla: ' +
-          esc(rezagados.slice(0, 4).map(function(x) {
-            return shortProvider(x.proveedor) + ' el ' + x.fechaLabel;
-          }).join(', ')) +
-          (rezagados.length > 4 ? '…' : '') +
-          '. El resto de ' +
-          (rezagados.length === 1 ? 'ese día' : 'esos días') +
-          ' sí está en Ingresos; lo de ' +
-          (nombres.length === 1 ? 'ese proveedor' : 'esos proveedores') +
-          ', no.';
-      }
-
       // Camiones escritos en columnas de la hoja Proyección que este
       // mes no tienen día hábil. Se descartan, así que se dicen.
       var pr = DATA.proyeccion || {};
@@ -4817,21 +4686,6 @@
         ojo.push('No se encontró la hoja <b>Ingresos</b>.');
       }
 
-      if (source.missingInforme) {
-        ojo.push(
-          'No existe <b>InformeAstilla</b>: importa los correos del ' +
-          'reservador.'
-        );
-      }
-
-      if (source.errors) {
-        ojo.push(
-          '<b>' + formatInteger(source.errors) + '</b> correo' +
-          (source.errors === 1 ? ' quedó' : 's quedaron') +
-          ' con error de extracción.'
-        );
-      }
-
       if (
         source.materialesSinReconocer &&
         source.materialesSinReconocer.length
@@ -4872,26 +4726,6 @@
         ojo.push(
           'Cobertura de precio <b>' + formatPercent(source.priceCoverage) +
           '</b>: las TS sin precio quedan fuera de la valorización.'
-        );
-      }
-
-      // Lo que la planilla registró de menos. No cambia ninguna cifra
-      // del panel, pero es un error que no se veía en ninguna parte.
-      var desc = source.descuadres || {};
-      var casos = (desc.faltan || []).length +
-        (desc.difieren || []).length;
-
-      if (casos) {
-        ojo.push(
-          'La planilla y <b>Ingresos</b> no cuentan lo mismo en <b>' +
-          formatInteger(casos) + '</b> ' +
-          (casos === 1 ? 'caso' : 'casos') +
-          (desc.camionesFaltantes
-            ? ', con <b>' + formatQuantity(desc.camionesFaltantes) +
-              ' camiones</b> que la planilla no registró'
-            : '') +
-          '. Están más abajo, en «La planilla y SAP no cuentan lo ' +
-          'mismo».'
         );
       }
 
@@ -4947,7 +4781,6 @@
       caja.innerHTML = ojo.join(' ');
       caja.classList.toggle('se-ve', ojo.length > 0);
 
-      dibujarDescuadres();
       dibujarHoy();
 
       if (VISTA === 'dia') { dibujarDia(); }
@@ -5359,110 +5192,7 @@
         '</p></div>';
     }
 
-    /**
-     * Dónde la planilla y SAP no cuentan lo mismo.
-     *
-     * No es una cifra del panel: es una lista de trabajo. Donde SAP
-     * tiene el día cargado el panel usa SAP y el estimado se descarta,
-     * así que un error de la planilla no mueve ningún total… y
-     * justamente por eso nadie lo veía.
-     *
-     * Dos casos, en una sola tabla porque se revisan juntos: el
-     * proveedor que SAP registró y la planilla no nombra, y el que
-     * está en las dos con cantidades que no cuadran.
-     */
-    function dibujarDescuadres() {
-      var d = (DATA.source || {}).descuadres || {};
-      var mes = DATA.month || {};
-
-      function delMes(x) {
-        return x.fecha >= mes.startKey && x.fecha <= mes.endKey;
-      }
-
-      var faltan = (d.faltan || []).filter(delMes);
-      var difieren = (d.difieren || []).filter(delMes);
-      var total = faltan.length + difieren.length;
-      var fuera =
-        (d.faltan || []).length + (d.difieren || []).length - total;
-
-      document.getElementById('panelDescuadres').hidden = !total;
-
-      setText('conteoDescuadres', total
-        ? total + (total === 1 ? ' caso' : ' casos')
-        : 'ninguno');
-
-      // Siempre se dice lo que no se está mostrando: los casos de
-      // meses anteriores y los que no se pueden afirmar.
-      var avisos = [];
-
-      if (fuera) {
-        avisos.push('Hay <b>' + fuera + '</b> ' +
-          (fuera === 1 ? 'caso más' : 'casos más') +
-          ' en meses anteriores.');
-      }
-
-      if (d.ambiguos) {
-        avisos.push('Otros <b>' + d.ambiguos + '</b> no se pueden ' +
-          'afirmar: ese día la planilla trae un nombre sin homologar ' +
-          'que se parece al proveedor que falta, y puede ser el mismo ' +
-          'escrito de otra forma. Homologarlo en <b>Homologación</b> ' +
-          'los destapa.');
-      }
-
-      document.getElementById('descuadresNota').innerHTML =
-        avisos.length ? ' ' + avisos.join(' ') : '';
-
-      if (!total) {
-        document.getElementById('listaDescuadres').innerHTML = '';
-        return;
-      }
-
-      var cuerpo = faltan.map(function(x) {
-        return '<tr>' +
-          '<td>' + esc(x.fechaLabel) + '</td>' +
-          '<td><strong>' + esc(shortProvider(x.proveedor)) +
-            '</strong></td>' +
-          '<td>' + esc(shortProduct(x.subproducto)) + '</td>' +
-          '<td>no lo nombra</td>' +
-          celdaN(formatQuantity(x.camiones) + ' cam · ' +
-            formatQuantity(x.ts) + ' TS') +
-          '<td><span class="sello-fuente es-flojo">' +
-            'no quedó registrado</span></td>' +
-          '</tr>';
-      }).concat(difieren.map(function(x) {
-        var menos = x.diferencia < 0;
-
-        return '<tr>' +
-          '<td>' + esc(x.fechaLabel) + '</td>' +
-          '<td><strong>' + esc(shortProvider(x.proveedor)) +
-            '</strong></td>' +
-          '<td>' + esc(shortProduct(x.subproducto)) + '</td>' +
-          celdaN(formatInteger(x.camionesPlanilla) + ' cam') +
-          celdaN('≈ ' + formatQuantity(x.camionesSap) + ' cam · ' +
-            formatQuantity(x.ts) + ' TS') +
-          '<td><span class="sello-fuente ' +
-            (menos ? 'es-flojo' : 'es-est') + '">' +
-            (menos
-              ? 'anotó ' + formatQuantity(Math.abs(x.diferencia)) +
-                ' de menos'
-              : 'anotó ' + formatQuantity(x.diferencia) + ' de más') +
-            '</span></td>' +
-          '</tr>';
-      })).join('');
-
-      document.getElementById('listaDescuadres').innerHTML =
-        '<div class="tabla-marco tabla-fija">' +
-        '<table data-tabla="descuadres"><thead><tr>' +
-        '<th>Día</th>' +
-        '<th>Proveedor</th>' +
-        '<th>Subproducto</th>' +
-        '<th>Dice la planilla</th>' +
-        '<th class="number">Tiene Ingresos</th>' +
-        '<th>Qué pasó</th>' +
-        '</tr></thead><tbody>' + cuerpo + '</tbody></table></div>';
-    }
-
-    /* =================================================================
+        /* =================================================================
        ATAJOS DE RANGO
 
        La pantalla abre en el mes vigente, que es la lectura de todos
@@ -9798,7 +9528,7 @@
           facetaLista(
             'fuente', 'Real y estimado', 'Filtrar por fuente del dato',
             [{ v: 'INGRESOS', t: 'Solo real' },
-             { v: 'PLANILLA', t: 'Solo estimado' }],
+             { v: 'CAMIONES', t: 'Solo estimado' }],
             function(f, v) { return f.source === v; }
           )
         ],

@@ -13,9 +13,6 @@ Google Apps Script sobre un spreadsheet. La unidad de trabajo es la
   libro —es de otra área, no se toca y cambia de archivo cada mes— y
   completa lo que SAP todavía no carga, con
   `camiones × factor del material`. Ver más abajo.
-- **InformeAstilla** (hoja) guarda las planillas diarias que el
-  reservador mandaba por correo. Quedó como **historia**: completa los
-  días anteriores a donde empieza el libro.
 - **Plan** (hoja) aporta precio unitario y volumen mensual comprometido
   por proveedor y material.
 - **Proyeccion** (hoja) son los camiones que cada proveedor se
@@ -30,9 +27,10 @@ está en Ingresos, ese camión ya está contado con su peso real; si no
 está, entra estimado. Nada de fechas de corte, nada de reglas de día: el
 estimado de un camión desaparece solo el día que SAP carga **esa** guía.
 
-En los días anteriores al libro —los que cubría la planilla del
-correo— sigue valiendo la regla vieja, que es de día completo y está
-explicada más abajo.
+Son dos fuentes y nada más. Hubo una tercera —una planilla que el
+reservador mandaba por correo todos los días, que el panel leía de
+Gmail— y se eliminó entera: el libro trae lo mismo, en vivo y camión
+por camión.
 
 ### La pestaña del día
 
@@ -372,88 +370,6 @@ Se leen **dos** libros: el del mes en curso y el del anterior. SAP se
 atrasa días, no meses, y leer seis libros ajenos en cada carga del panel
 sería pagar mucho por nada.
 
-### Cuando SAP carga el día a medias
-
-> Esta sección vale para los días que cubre la **planilla del correo**,
-> donde no hay guía con qué cruzar. Donde llega el libro de camiones, el
-> cruce es por guía y estas excepciones no hacen falta.
-
-La base del complemento es el **día completo**: un día con TS en
-Ingresos manda entero. Es así a propósito —mezclar las dos fuentes
-dentro de una misma fecha contaría dos veces los camiones que ya
-llegaron a SAP si la homologación del nombre falla—.
-
-Pero un día puede venir cargado **a medias**, y ahí esa regla borra
-despachos que existieron. Dos excepciones, las dos atadas a poder
-afirmar **con certeza** que SAP no tiene eso:
-
-| | Quién | Por qué es seguro |
-|---|---|---|
-| **ajeno** | El proveedor que Ingresos no nombra ni una vez en toda la ventana | No hay nada suyo en SAP, ningún día: no hay con qué contarlo dos veces |
-| **rezagado** | El que **sí** está en SAP pero a quien le falta **este** día | Su nombre cruzó exacto o escrito a mano, así que «SAP no tiene nada suyo ese día» es una afirmación confiable |
-
-El rezagado es el caso de **AITUE**: entrega nitens, es el único que
-entrega nitens, y su día quedó sin cargar mientras el resto del día sí
-se cargó. La regla del día completo descartaba su planilla entera y el
-nitens de esa fecha desaparecía —que es justamente lo que lo hace fácil
-de ver—.
-
-**El «seguro» no es un detalle.** Con un cruce por *parecido* no se
-puede afirmar que SAP no tiene nada de ese proveedor ese día, porque
-puede ser otro proveedor; ahí sí se contaría dos veces. Por eso el
-parecido no basta y hay que confirmarlo en Homologación —esa
-confirmación es lo que habilita el complemento—.
-
-Las dos se corrigen solas: el día que Ingresos cargue lo que falta, la
-fila se descarta como cualquier otra. Y las dos se dicen en la nota de
-Suministro, con nombre y fecha, porque son exactamente lo que hay que ir
-a cargar.
-
-### Cuando la planilla registró de menos
-
-La planilla la escribe una persona a mano, día a día, y a veces registra
-**menos** de lo que entró: se le queda un proveedor afuera, o anota
-menos camiones de los que llegaron.
-
-Donde Ingresos tiene el día cargado el panel no se equivoca por eso
-—Ingresos manda y el estimado se descarta—, y precisamente por eso el
-error **no aparecía en ninguna parte**: ni movía una cifra, ni quien
-escribe la planilla se enteraba nunca. El único lugar donde se notaba
-era al revés, cuando SAP venía atrasado y el panel tenía que completar
-el día con una planilla incompleta.
-
-El panel de **«La planilla y SAP no cuentan lo mismo»** (en Suministro,
-bajo el plan de acción) compara las dos fuentes **solo en los días que
-cubren las dos**: si Ingresos no tiene el día, la planilla es lo único
-que hay y no hay con qué compararla; si la planilla no llegó, no hay
-nada que revisar.
-
-| Caso | Qué muestra |
-|---|---|
-| El proveedor que Ingresos registró y la planilla **no nombra** | Sus camiones y sus TS: eso no quedó registrado |
-| Los que están en las dos con cantidades que **no cuadran** | Lo que dice la planilla, lo que pesó Ingresos y de cuánto es la diferencia |
-
-**La comparación de cantidades pisa con cuidado.** La planilla cuenta
-*camiones* y SAP pesa *toneladas*, y un camión no pesa siempre lo
-mismo: se avisa solo cuando la diferencia pasa de **0,6 camiones** del
-factor de ese material, que es más de lo que explica una carga liviana.
-La diferencia se redondea **antes** de comparar: `15,4 / 11` da
-`1,4000000000000001`, y un umbral que se decide por el error del punto
-flotante no es un umbral.
-
-**Y hay una honestidad en el medio.** Si ese día la planilla trae un
-nombre que todavía no cruza y que **se parece** al proveedor que falta,
-puede ser el mismo escrito de otra forma. Ahí no se afirma nada: el caso
-se cuenta aparte y se dice cuántos hay. Acusar a la planilla de no
-registrar algo que sí registró quemaría la lista entera, y una lista que
-miente una vez no se vuelve a mirar. Homologar ese nombre destapa el
-caso. Para dudar basta un parecido lejano (0,45); para afirmar un cruce
-hace falta mucho más (0,72).
-
-La lista muestra el mes en curso, lo más nuevo primero —el error de ayer
-todavía se puede conversar—, y dice cuántos casos quedaron en meses
-anteriores.
-
 ### Qué entra a proceso
 
 Cuatro materiales, y la lista es exactamente esa:
@@ -513,7 +429,7 @@ Al proyecto de Apps Script del panel suben **tres** archivos:
 
 | Archivo            | Qué es                                            |
 |--------------------|---------------------------------------------------|
-| `Codigo.gs`        | El servidor: lectura, cruces, Gmail, Calendar      |
+| `Codigo.gs`        | El servidor: lectura, cruces, Drive, Calendar      |
 | `Index.html`       | El dashboard (HTML + CSS + JS en un archivo)       |
 | `appsscript.json`  | Manifiesto: zona horaria, scopes y Drive API v3    |
 
@@ -578,7 +494,7 @@ El color del dato significa una sola cosa, siempre la misma:
 | Color    | Qué es                                     |
 |----------|--------------------------------------------|
 | Verde    | Ingreso real, confirmado en `Ingresos`     |
-| Madera   | Complemento estimado del reservador        |
+| Madera   | Complemento estimado del libro de camiones |
 | Pizarra  | Plan (referencia, no material)             |
 | Ladrillo | Riesgo: bajo plan, precio sin homologar    |
 
@@ -938,21 +854,21 @@ eso, cada proveedor aparecía cayendo un 20% el día 10 del mes.
 
 ### Homologación: un proveedor, un nombre
 
-SAP escribe cada proveedor de **una** sola forma. La planilla del
-reservador lo escribe de muchas: `PROMASA S.A.`, `Promasa`,
+SAP escribe cada proveedor de **una** sola forma. La portería lo
+escribe de muchas: `PROMASA S.A.`, `Promasa`,
 `PROMASA SPA`. Cuando un nombre no cruza, el panel no lo corrige: lo
 deja pasar con el nombre que traía, y ahí aparece un proveedor nuevo
 que en realidad ya existía. **Eso es la duplicidad.**
 
 Entran las **tres** hojas que escriben nombres de proveedor:
-`InformeAstilla` (la planilla del reservador), `Proyeccion` y `Plan`.
+el libro de camiones, `Proyeccion` y `Plan`.
 Cada fila dice de cuál viene, y una sola asignación las arregla todas:
 el cruce es el mismo para las tres.
 
 ### Un proveedor, sus nombres, una decisión
 
 Lo difícil de homologar no es el cruce: es que el mismo proveedor llega
-escrito por **tres manos** —la planilla del reservador, `Proyeccion` y
+escrito por **tres manos** —el libro de la portería, `Proyeccion` y
 el `Plan`— y la lista de pendientes los muestra como **tres problemas
 sueltos**. Resolver uno no resuelve los otros dos, así que había que
 buscar al mismo proveedor tres veces y acertarle tres veces al mismo
@@ -1308,129 +1224,10 @@ clasp push
 | Abrir dashboard                        | Abre el panel en un diálogo modal               |
 | Buscar el libro de camiones del mes    | Busca el archivo del mes en Drive y lo deja escrito en `Fuentes` |
 | Preparar hoja de fuentes               | Crea la hoja `Fuentes` y escribe el libro del mes |
-| Importar nuevas planillas              | Lee Gmail y suma los correos no procesados      |
-| Reconstruir planillas desde Gmail      | Respalda y reimporta todo el historial          |
-| Probar último correo (sin escribir)    | Muestra qué extraería, sin tocar la hoja        |
-| ¿Por qué falta un día?                 | Correo por correo, dónde se cayó cada uno       |
-| Diagnosticar cruce Ingresos vs planilla| Qué materiales y proveedores no están cruzando  |
 | Validar hoja Plan                      | Solo lee y valida; no modifica formato          |
+| Guardar en Drive el día de hoy         | Escribe el Excel del día que corre              |
+| Guardar en Drive el día de ayer        | Escribe el Excel del día anterior               |
+| Guardar en Drive el mes completo       | Escribe un Excel por cada día que el libro traiga |
+| Instalar el guardado diario            | Deja el guardado corriendo a las 23:45          |
 | Ubicar en el mapa                      | Geocodifica los aserraderos de la hoja Mapeos   |
 | Rellenar proveedores sugeridos         | Vuelca los nombres sin par al final de la hoja  |
-
-## Origen de la planilla
-
-> El correo del reservador quedó como **historia**. La fuente en vivo
-> es el libro de camiones; esto sigue valiendo para los días que ya
-> están importados y para reconstruirlos si hiciera falta.
-
-Solo se acepta el correo **original** de `reservador.horario@masisa.com`
-cuyo asunto **empieza** con `PLANILLA CUMPLIMIENTO SUB-PRODUCTOS` o
-`CUMPLIMIENTO SUBPRODUCTOS`, comparado sin espacios ni guiones —así
-`SUB-PRODUCTOS`, `SUB PRODUCTOS` y `SUBPRODUCTOS` son lo mismo—. Eso
-descarta `Re:`, `RV:` y `Fwd:`. Las filas «Total…» y las que vienen sin
-proveedor se ignoran siempre: son sumas y duplicarían los camiones.
-
-**La búsqueda de Gmail es un prefiltro, no la regla.** La regla vive en
-`matchesPlanillaMessage_` y mira mensaje por mensaje; la búsqueda solo
-evita traerse el buzón entero, y por eso va escrita lo más ancha
-posible: la **primera palabra** de cada frase aceptada, suelta y sin
-comillas, sacada de `CONFIG` para que una frase nueva entre sola.
-
-Iba con la frase completa entrecomillada y eso **perdía correos en
-silencio**: en la búsqueda de Gmail el guion no es una letra más, y un
-asunto real como `PLANILLA CUMPLIMIENTO SUB-PRODUCTOS VIERNES 25 DE
-SEPTIEMBRE DE 2026` no volvía en los resultados. El día entero
-desaparecía del panel sin una sola señal, porque un correo que la
-búsqueda no devuelve es un correo que nadie revisó.
-
-Para que no se repita, el resumen de la importación cuenta aparte
-**cuántos correos del reservador quedaron fuera por el asunto**, y lista
-los primeros cinco. Y `pruebas/gmail.js` exige que todo asunto que la
-regla acepta traiga alguna de las palabras que la búsqueda pide.
-
-### Un día en cero no es un día que falta
-
-La tabla admite llegar **sin una sola línea de detalle**: la fecha, un
-cero y la fila `Total`, en el mismo orden de columnas de siempre. Es el
-día que el reservador reportó y vino en cero.
-
-Antes eso reventaba con «no se encontraron filas», el correo quedaba
-marcado como error y el día desaparecía. Ahora el encabezado se
-reconoce igual y se escribe **una** fila con Estado `SIN DESPACHO`: sin
-proveedor y sin TS, así que el panel no la suma, pero el día queda
-contestado. En la nota de Suministro se dice con nombre y fecha, porque
-un día en blanco y un día sin despacho se ven igual en un gráfico y no
-son lo mismo: uno hay que ir a cargarlo, el otro ya está respondido.
-
-### La planilla que llega sin encabezados
-
-La del martes 6 de octubre vino **sin la fila de rótulos**: arranca
-directo en la fecha y el total del día.
-
-```
-06/10/2026 | Total                     |                           |          | 0
-           | ASERRÍN COMBUSTIBLE       | COMERCIAL EL CHACAY LTDA. | NEOMAS   | 2
-           | Total ASERRÍN COMBUSTIBLE |                           |          | 2
-           | ASTILLA PINO VERDE        | PROMASA SPA.              | TABLEROS | 4
-```
-
-Las columnas van en el orden de siempre —fecha, subproducto, proveedor,
-destino, camiones—, pero el lector buscaba el rótulo `PROVEEDORES` para
-saber dónde estaba cada una. Sin rótulos devolvía tabla vacía: el día
-entero se perdía, y encima en silencio, porque un correo leído «sin
-filas» queda marcado y no se vuelve a intentar.
-
-Ahora, cuando no hay encabezado, la tabla **se reconoce por su forma**:
-
-| Condición | Para qué sirve |
-|---|---|
-| Una fecha en las primeras celdas de una fila | Es el ancla: ahí empieza la tabla |
-| Una columna de números a la derecha, con sitio para subproducto, proveedor y destino en medio | Son los camiones |
-| Alguna fila `Total` más abajo | La planilla cierra con subtotales |
-
-Hacen falta **las tres**, y por una razón concreta: el cuerpo del correo
-llega como una sola matriz con *todas* sus tablas pegadas una tras otra
-—la firma, el hilo citado, los wrappers de Outlook—, así que la planilla
-puede no ser la primera y cualquier otra tabla podría colarse. Una firma
-no tiene fecha arriba a la izquierda; una tabla de turnos no tiene fila
-`Total`; un párrafo con la fecha no tiene columna de números a la
-derecha. `pruebas/planilla.js` prueba las tres por separado, y además
-que la tabla se siga leyendo bien cuando viene con otra tabla encima.
-
-Un detalle que importa: la celda de los camiones tiene que ser **el
-número solo**. El lector de números es a propósito tolerante —les saca
-las letras y se queda con la cifra—, así que `COMERCIAL EL CHACAY LTDA.`
-le vale 0 por el punto final; eso sirve para leer una cantidad, no para
-reconocer una columna.
-
-El encabezado, cuando viene, sigue mandando: la forma se mira **solo**
-si no se encontró. Y de paso queda cubierto el día en que le cambien los
-rótulos —`PROVEEDOR / RAZÓN SOCIAL` en vez de `PROVEEDORES`—, que antes
-tiraba la tabla completa. Un día en cero sin encabezados se lee igual
-que uno con encabezados: `SIN DESPACHO`.
-
-Si el correo ya quedó con `ERROR:` en `InformeAstilla`, la importación
-normal no lo vuelve a mirar —está leído, aunque haya salido mal—; hay
-que correr `Astilla Dashboard › Reconstruir planillas desde Gmail`.
-
-### Cuando un día no aparece
-
-`Astilla Dashboard › ¿Por qué falta un día?` revisa **todos** los
-correos del reservador de los últimos 120 días —a propósito más ancho
-que la importación, para ver también los que la regla descarta— y dice,
-correo por correo, en cuál de las cuatro puertas se cayó:
-
-| Veredicto | Qué significa |
-|---|---|
-| `NO: lo mandó otro` | El remitente no es el oficial |
-| `NO: el asunto no empieza…` | La regla del asunto lo descarta |
-| `ya estaba leído` | Está en `InformeAstilla`; mira su Estado |
-| `SÍ: N filas` / `día sin despacho` | Entra, y con qué fecha |
-
-Si un correo no aparece **ni en esa lista**, entonces no está en la
-casilla o no lo mandó ese remitente. No escribe nada.
-
-```
-node pruebas/gmail.js
-node pruebas/planilla.js
-```

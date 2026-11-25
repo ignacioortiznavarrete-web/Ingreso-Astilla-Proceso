@@ -83,7 +83,7 @@ var SIN_SAP_PREFIJO = '__SIN_SAP__||';
 eval([
   'normalizaNombre', 'celdaNombres', 'homoMapa',
   'dibujarHomoMapa', 'homoProvisorios', 'homoTabla',
-  'dibujarDescuadres', 'esDelMes', 'homoGrupos', 'sellosDeHoja',
+  'esDelMes', 'homoGrupos', 'sellosDeHoja',
   'dibujarHomoGrupos', 'marcarVivo', 'puedeRefrescar', 'esEstimado',
   'marcarPermisos', 'camionesPorMaterial', 'subMinimo', 'porMaterial',
   'repartir'
@@ -184,59 +184,6 @@ ok(tabla.indexOf('No está en SAP todavía') !== -1 &&
    'el selector ofrece agregarlo sin SAP', tabla.slice(0, 500));
 ok(tabla.indexOf('Agregarlo así, con este mismo nombre') !== -1,
    'con un texto que se entiende');
-
-/* ---------------------------------------------------------------------
- * La planilla y SAP que no cuentan lo mismo.
- * ------------------------------------------------------------------ */
-DATA.source.descuadres = {
-  faltan: [{
-    fecha: '2026-10-06', fechaLabel: '06-10',
-    proveedor: 'LAMINADORA LOS ANGELES S.A.',
-    subproducto: 'ASTILLA PINO VERDE', ts: 22, camiones: 2
-  }],
-  difieren: [{
-    fecha: '2026-10-05', fechaLabel: '05-10',
-    proveedor: 'PROMASA SPA.', subproducto: 'ASTILLA PINO VERDE',
-    camionesPlanilla: 2, camionesSap: 4, ts: 44, diferencia: -2
-  }],
-  ambiguos: 1,
-  camionesFaltantes: 2
-};
-
-dibujarDescuadres();
-
-const desc = caja('listaDescuadres').innerHTML;
-
-ok(caja('panelDescuadres').hidden === false,
-   'el panel de descuadres aparece cuando hay casos');
-ok(caja('conteoDescuadres').textContent === '2 casos',
-   'contando los dos tipos juntos', caja('conteoDescuadres').textContent);
-ok(desc.indexOf('no quedó registrado') !== -1 &&
-   desc.indexOf('LAMINADORA') !== -1,
-   'el proveedor que la planilla no nombró', desc.slice(0, 500));
-ok(desc.indexOf('anotó 2 de menos') !== -1,
-   'y el que anotó de menos, con cuánto');
-ok(caja('descuadresNota').innerHTML.indexOf('1</b> no se pueden') !== -1,
-   'los casos que no se pueden afirmar se dicen, no se esconden',
-   caja('descuadresNota').innerHTML);
-
-// Fuera del mes: no se muestra, pero se dice.
-DATA.source.descuadres = {
-  faltan: [{
-    fecha: '2026-09-15', fechaLabel: '15-09',
-    proveedor: 'PROMASA SPA.', subproducto: 'ASTILLA PINO VERDE',
-    ts: 22, camiones: 2
-  }],
-  difieren: [], ambiguos: 0, camionesFaltantes: 2
-};
-
-dibujarDescuadres();
-
-ok(caja('panelDescuadres').hidden === true,
-   'sin casos del mes, el panel no ocupa lugar');
-ok(caja('descuadresNota').innerHTML.indexOf('1</b> caso más') !== -1,
-   'pero el de otro mes queda dicho',
-   caja('descuadresNota').innerHTML);
 
 /* ---------------------------------------------------------------------
  * Un proveedor, sus nombres, una decisión.
