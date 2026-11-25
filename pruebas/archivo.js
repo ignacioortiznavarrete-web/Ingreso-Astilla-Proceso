@@ -42,6 +42,7 @@ function recortarConst(nombre) {
 const CONFIG = {
   TIMEZONE: 'America/Santiago',
   JORNADA: { DESDE: '08:30', HASTA: '23:00' },
+  PERFIL: { MINIMO_CAMIONES: 8, MINIMA_PARTE: 0.15, HORAS_PUNTA: 3 },
   ARCHIVO: {
     CARPETA: 'https://drive.google.com/drive/folders/' +
       '1amDJBZ_U4RoMksMN2sZXMYxvVbabZRMF?usp=sharing',
@@ -102,12 +103,14 @@ const DriveApp = {
 
 // Con `const` el eval se lo queda para sí; con `var` queda a la vista
 // de la prueba, que es la que necesita los nombres de las columnas.
-eval([recortarConst('ARCHIVO_COLUMNAS').replace('const ', 'var ')]
+eval([recortarConst('ARCHIVO_COLUMNAS').replace('const ', 'var '),
+      recortarConst('TRAMOS_DEMORA')]
   .concat([
   'resumenDelDia_', 'minutosDeHora_', 'tramosDelCamion_',
   'estadisticaDeMinutos_', 'ahoraEnMinutos_', 'normalizaGuia_',
   'factorDe_', 'formatDateKey_', 'diaAnterior_', 'carpetaDelMes_',
   'celdaDeMinutos_', 'filasDelDia_', 'filasDelResumen_',
+  'perfilHorario_', 'parteDelDia_', 'tramosDeDemora_',
   'diasDelCierre_', 'diaQueTermina_',
   'idDeEnlace_', 'nombreDelMes_', 'normalizeKey_', 'text_', 'round_'
 ].map(recortar)).concat([recortarConst('MESES_LARGOS')]).join('\n'));

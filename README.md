@@ -34,6 +34,54 @@ En los días anteriores al libro —los que cubría la planilla del
 correo— sigue valiendo la regla vieja, que es de día completo y está
 explicada más abajo.
 
+### La pestaña del día
+
+Hoy tiene su propia pestaña, **El día**, al lado de Suministro. No
+depende de los filtros de abajo: Suministro es el mes, El día es hoy.
+
+Trae cuatro paneles: las cifras del día, a qué hora llegan los
+camiones, cuánto se demoran, y la tabla camión por camión.
+
+**La proyección de cierre no es una regla de tres.** El día no es
+parejo: hay punta en la mañana, baja al mediodía y repunta en la
+tarde. Decir «a las 11 llevamos 20, a este ritmo cerramos con 60»
+supone que a las 11 pasó un tercio del día, y no es cierto —pasó
+bastante más—.
+
+Entonces el panel arma **la forma del día** con los días anteriores del
+mismo libro: qué parte del día entra en cada hora. Después, saber qué
+parte del día típico ya pasó convierte lo que va entrado en un cierre.
+
+```
+a las 9:30 ya entró el 56% de un día normal
+van 40 camiones  →  40 / 0,56 = 71 al cierre
+```
+
+Tres cuidados:
+
+- **Se promedian las partes de cada día, no los camiones.** Un martes
+  de cuarenta y un sábado de diez pesan lo mismo en la forma: lo que
+  interesa es cómo se reparte el día, no cuánto trajo.
+- **Un día de menos de ocho camiones no entra** en la forma. Tres
+  camiones un domingo no dicen nada de cómo cae un día.
+- **Antes de que haya pasado el 15% del día no se proyecta.** Dividir
+  por un número muy chico dispara el resultado.
+
+Cuando no hay con qué —libro recién empezado, muy temprano— cae a la
+regla de tres de siempre y lo dice.
+
+**El gráfico de llegadas** pone la barra de lo que entró en cada hora
+contra la línea punteada de lo que trae esa hora normalmente, a la
+escala del cierre proyectado. El fondo marca **la punta**: las tres
+horas que concentran más movimiento, con el porcentaje del día que
+entra en ellas. Eso es a qué hora conviene tener gente en la romana.
+
+**Los dos gráficos de demora** responden cosas distintas. El de la
+izquierda, en cuántos minutos sale cada camión (hasta 15′, 15 a 30′,
+30′ a 1h, 1 a 2h, más de 2h), con los dos últimos tramos en rojo. El
+de la derecha, la mediana hora por hora: si la demora se dispara justo
+en la punta, se ve ahí.
+
 ### Hoy: lo que va entrando, y con qué cierra
 
 Es lo que el libro de camiones vino a hacer posible. Antes esta

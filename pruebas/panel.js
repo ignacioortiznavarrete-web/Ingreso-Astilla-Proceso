@@ -85,7 +85,8 @@ eval([
   'dibujarHomoMapa', 'homoProvisorios', 'homoTabla',
   'dibujarDescuadres', 'esDelMes', 'homoGrupos', 'sellosDeHoja',
   'dibujarHomoGrupos', 'marcarVivo', 'puedeRefrescar', 'esEstimado',
-  'marcarPermisos', 'camionesPorMaterial', 'subMinimo', 'porMaterial'
+  'marcarPermisos', 'camionesPorMaterial', 'subMinimo', 'porMaterial',
+  'repartir'
 ].map(recortar).join('\n'));
 
 // --- Datos como los manda el servidor -------------------------------
@@ -471,6 +472,28 @@ ok(lista.indexOf('Aserrín') === -1,
    'y el que no aporta a esa cifra no ocupa una fila en cero', lista);
 ok(porMaterial([]) === '',
    'sin materiales no se dibuja la lista');
+
+/* ---------------------------------------------------------------------
+ * Repartir un total sin que la suma se despegue
+ * ------------------------------------------------------------------ */
+const reparto = repartir([1, 1, 1, 1], 71);
+
+ok(reparto.reduce(function(t, x) { return t + x; }, 0) === 71,
+   'el desglose suma exactamente lo que dice la cifra de arriba', reparto);
+ok(reparto.join(',') === '18,18,18,17',
+   'y lo que sobra al redondear se reparte, no se repite en todos',
+   reparto);
+
+const desparejo = repartir([21, 8, 7, 4], 81);
+
+ok(desparejo.reduce(function(t, x) { return t + x; }, 0) === 81,
+   'tambi\u00e9n con partes desparejas', desparejo);
+ok(desparejo[0] > desparejo[1] && desparejo[1] > desparejo[2],
+   'y respeta el orden de las partes', desparejo);
+ok(repartir([0, 0], 10).join(',') === '0,0',
+   'sin partes no se inventa un reparto');
+ok(repartir([3, 2], 0).join(',') === '0,0',
+   'y sin total tampoco');
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

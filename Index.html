@@ -3010,6 +3010,17 @@
           </svg>
           <span class="pestana-nombre">Suministro</span>
         </button>
+        <button class="pestana" id="pesDia" role="tab"
+                aria-selected="false" aria-controls="vistaDia"
+                onclick="verVista('dia')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round"
+               stroke-linejoin="round">
+            <circle cx="12" cy="12" r="8.5"/>
+            <path d="M12 7.5V12l3 1.8"/>
+          </svg>
+          <span class="pestana-nombre">El día</span>
+        </button>
         <button class="pestana" id="pesComparacion" role="tab"
                 aria-selected="false" aria-controls="vistaComparacion"
                 onclick="verVista('comparacion')">
@@ -3122,26 +3133,6 @@
 
       <div class="pila">
         <div class="aviso aviso-mal" id="avisoMal"></div>
-
-        <article class="panel" id="panelHoy">
-          <div class="panel-cab">
-            <div>
-              <h2>Hoy <span class="panel-fecha" id="hoyFecha"></span></h2>
-              <p class="panel-nota">
-                Lo que va entrando hoy, camión por camión, según el
-                libro de la portería. La planta recibe de <b>08:30</b> a
-                <b>23:00</b>: la proyección de cierre es una regla de
-                tres sobre lo que lleva corrido de esa jornada, no un
-                pronóstico.
-                <span id="hoyNota"></span>
-              </p>
-            </div>
-            <div class="conteo" id="hoyConteo">—</div>
-          </div>
-
-          <section class="lectura" id="hoyCifras"></section>
-          <div id="hoyTabla"></div>
-        </article>
 
         <article class="panel" id="panelPlanCamiones">
           <div class="panel-cab">
@@ -3647,6 +3638,86 @@
           <div class="aviso aviso-ojo" id="avisoOjo"></div>
           <div class="aviso aviso-nota se-ve" id="avisoNota">Cargando…</div>
         </details>
+      </div>
+    </section>
+
+    <!-- ========================== EL DÍA ========================== -->
+    <section id="vistaDia" role="tabpanel" aria-labelledby="pesDia" hidden>
+      <div class="portada portada-sola">
+        <div>
+          <h1 class="titulo-vista">
+            El día <span class="panel-fecha" id="diaFecha"></span>
+          </h1>
+          <p class="portada-nota">
+            Solo hoy, camión por camión, según el libro de la portería.
+            No depende de los filtros de Suministro: hoy es hoy. La
+            planta recibe de <b>08:30</b> a <b>23:00</b>.
+          </p>
+        </div>
+      </div>
+
+      <div class="pila">
+        <article class="panel" id="panelHoy">
+          <div class="panel-cab">
+            <div>
+              <h2>Lo que va entrando</h2>
+              <p class="panel-nota" id="hoyNota"></p>
+            </div>
+            <div class="conteo" id="hoyConteo">—</div>
+          </div>
+
+          <section class="lectura" id="hoyCifras"></section>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
+              <h2>A qué hora llegan</h2>
+              <p class="panel-nota">
+                Barra verde: los camiones que entraron en esa hora. Línea
+                punteada: los que trae esa hora en un día normal, a la
+                escala del cierre que se proyecta. El día no es parejo,
+                y por eso la proyección se calcula contra esta forma y
+                no contra una recta.
+                <span id="horasNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="horasConteo">—</div>
+          </div>
+          <div id="grafHoras"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
+              <h2>Cuánto se demoran</h2>
+              <p class="panel-nota">
+                De la hora de llegada a la de salida. A la izquierda,
+                en cuántos minutos sale cada camión; a la derecha, la
+                mediana hora por hora, para ver si la demora se
+                concentra en la punta.
+                <span id="demoraNota"></span>
+              </p>
+            </div>
+            <div class="conteo" id="demoraConteo">—</div>
+          </div>
+          <div class="par">
+            <div id="grafDemoraTramos"></div>
+            <div id="grafDemoraHoras"></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-cab">
+            <div>
+              <h2>Camión por camión</h2>
+              <p class="panel-nota">
+                Lo último arriba, que es lo que se viene a mirar.
+              </p>
+            </div>
+          </div>
+          <div id="hoyTabla"></div>
+        </article>
       </div>
     </section>
 
@@ -4199,7 +4270,7 @@
     var RUTA = { id: '', nombre: '', fecha: '', hora: '', paradas: [] };
     var TRAZO = null;
     var CONTEXTO = {
-      suministro: '', comparacion: '', mapeos: '', apuntes: ''
+      suministro: '', dia: '', comparacion: '', mapeos: '', apuntes: ''
     };
 
     var SUAVE = !window.matchMedia(
@@ -4263,6 +4334,7 @@
 
     var VISTAS = Object.freeze({
       suministro: { seccion: 'vistaSuministro', pestana: 'pesSuministro' },
+      dia: { seccion: 'vistaDia', pestana: 'pesDia' },
       comparacion: {
         seccion: 'vistaComparacion', pestana: 'pesComparacion'
       },
@@ -4299,6 +4371,10 @@
       if (cual === 'comparacion' && !COMP_PINTADA) {
         dibujarComparacion();
       }
+
+      // Los gráficos del día miden el ancho de su caja, y una caja
+      // escondida mide cero: se dibujan al entrar, no antes.
+      if (cual === 'dia') { dibujarDia(); }
 
       if (cual === 'homologacion') { dibujarHomologacion(); }
 
@@ -4873,6 +4949,9 @@
 
       dibujarDescuadres();
       dibujarHoy();
+
+      if (VISTA === 'dia') { dibujarDia(); }
+
       dibujarCamionesPlan();
 
       // Las notas quedaron abajo y plegadas: el título dice cuántas
@@ -4924,6 +5003,36 @@
      * que no aporta nada a esa cifra no aparece: una fila en cero
      * ocupa el mismo alto y no dice nada.
      */
+    /**
+     * Reparte un total entre partes, en la misma proporción y sin que
+     * la suma se despegue.
+     *
+     * Redondear cada parte por su cuenta deja el desglose sumando 72
+     * cuando arriba dice 71, y eso se lee como un error aunque no lo
+     * sea. Lo que sobra al redondear se le da a las partes que más
+     * fracción perdieron.
+     */
+    function repartir(partes, total) {
+      var suma = partes.reduce(function(t, x) { return t + (x || 0); }, 0);
+      var meta = Math.round(total || 0);
+
+      if (!suma || !meta) { return partes.map(function() { return 0; }); }
+
+      var exactos = partes.map(function(x) { return (x || 0) * meta / suma; });
+      var enteros = exactos.map(Math.floor);
+      var falta = meta - enteros.reduce(function(t, x) { return t + x; }, 0);
+
+      exactos.map(function(v, i) {
+        return { i: i, resto: v - Math.floor(v) };
+      }).sort(function(a, b) {
+        return b.resto - a.resto;
+      }).slice(0, Math.max(0, falta)).forEach(function(x) {
+        enteros[x.i] += 1;
+      });
+
+      return enteros;
+    }
+
     function porMaterial(items) {
       var filas = (items || []).filter(function(x) {
         return x.valor !== null && x.valor !== undefined && x.valor !== '';
@@ -4968,7 +5077,7 @@
       var demora = hoy.demora ||
         { patio: {}, flujo: {}, masLargo: null, horasDudosas: 0 };
 
-      setText('hoyFecha', hoy.fechaLabel || '');
+      setText('diaFecha', hoy.fechaLabel || '');
       setText('hoyConteo', filas.length
         ? filas.length + (filas.length === 1 ? ' camión' : ' camiones')
         : 'sin camiones');
@@ -4979,8 +5088,24 @@
       // vez de una, y cada número queda debajo de la cifra que
       // explica.
       var subs = hoy.porSubproducto || [];
+      var perfil = hoy.perfil || { dias: 0, horas: [], punta: [] };
+      var porPerfil = (cierre.perfil || {});
 
-      document.getElementById('hoyNota').innerHTML = '';
+      // Lo que hay que saber para leer todo lo de abajo: cuánto va
+      // corrido de la jornada y, si hay con qué, qué parte del día
+      // suele haber entrado a esta hora.
+      document.getElementById('hoyNota').innerHTML =
+        'La jornada lleva <b>' + duracion(jornada.transcurridos) +
+        '</b> de ' + duracion(jornada.minutos) + '.' +
+        (porPerfil.hay
+          ? ' En un día normal, a esta hora ya entró el <b>' +
+            formatPercent(porPerfil.parte) + '</b> del día; por eso el ' +
+            'cierre se calcula contra esa forma y no contra una recta.'
+          : (perfil.dias
+              ? ' Todavía es muy temprano para proyectar contra la forma ' +
+                'del día.'
+              : ' Sin días anteriores en el libro no hay forma del día con ' +
+                'qué comparar.'));
 
       document.getElementById('hoyCifras').innerHTML = cifras([
         {
@@ -4999,23 +5124,37 @@
         },
         {
           tag: 'Cierre a las ' + (jornada.hasta || '23:00'),
-          val: cierre.alRitmo
-            ? formatInteger(cierre.camiones)
-            : formatInteger(filas.length),
+          val: porPerfil.hay
+            ? formatInteger(porPerfil.camiones)
+            : (cierre.alRitmo
+                ? formatInteger(cierre.camiones)
+                : formatInteger(filas.length)),
           uni: 'camiones',
-          clase: cierre.alRitmo ? 'val-madera' : '',
-          pie: cierre.alRitmo
-            ? 'a este ritmo faltarían ' + formatInteger(cierre.faltan) +
-              ' por entrar · ' + formatQuantity(cierre.ts) + ' ' + unidad()
-            : (jornada.transcurridos >= jornada.minutos
-                ? 'la jornada ya cerró'
-                : 'muy temprano para proyectar'),
-          detalle: porMaterial(subs.map(function(s) {
+          clase: porPerfil.hay || cierre.alRitmo ? 'val-madera' : '',
+          pie: porPerfil.hay
+            ? 'faltarían ' + formatInteger(porPerfil.faltan) +
+              ' por entrar · ' + formatQuantity(porPerfil.ts) + ' ' +
+              unidad() + ' · forma de ' + formatInteger(perfil.dias) +
+              ' días'
+            : (cierre.alRitmo
+                ? 'a este ritmo faltarían ' + formatInteger(cierre.faltan) +
+                  ' por entrar · ' + formatQuantity(cierre.ts) + ' ' +
+                  unidad()
+                : (jornada.transcurridos >= jornada.minutos
+                    ? 'la jornada ya cerró'
+                    : 'muy temprano para proyectar')),
+          // Cada material crece en la misma proporción que el total:
+          // no hay una forma del día por material, y fingir una con
+          // tres camiones sería inventarla.
+          detalle: porMaterial(repartir(
+            subs.map(function(s) { return s.camiones; }),
+            porPerfil.hay
+              ? porPerfil.camiones
+              : (cierre.alRitmo ? cierre.camiones : filas.length)
+          ).map(function(valor, i) {
             return {
-              subproducto: s.subproducto,
-              valor: formatInteger(
-                cierre.alRitmo ? s.camionesCierre : s.camiones
-              )
+              subproducto: subs[i].subproducto,
+              valor: formatInteger(valor)
             };
           }))
         },
@@ -7531,6 +7670,325 @@
                   ? ' · ' + formatPercent(x.projectedCompliance) + ' del plan'
                   : '')
               : (x.trucks ? formatInteger(x.trucks) + ' camiones de planilla.' : null)
+          });
+        }
+      });
+    }
+
+    /* =================================================================
+       EL DÍA: A QUÉ HORA LLEGAN Y CUÁNTO SE DEMORAN
+       ================================================================= */
+
+    /**
+     * Los tres gráficos de la pestaña del día.
+     *
+     * Van aparte del resto porque miden el ancho de su caja, y una
+     * caja escondida mide cero: hay que dibujarlos al entrar a la
+     * pestaña, no cuando llegan los datos.
+     */
+    function dibujarDia() {
+      grafHoras();
+      grafDemoraTramos();
+      grafDemoraHoras();
+    }
+
+    /** Las horas en que el día concentra el movimiento, en palabras. */
+    function horasEnPalabras(horas) {
+      return (horas || []).map(function(h) {
+        return h + ':00';
+      }).join(', ');
+    }
+
+    function grafHoras() {
+      var caja = document.getElementById('grafHoras');
+
+      if (!caja) { return; }
+
+      var hoy = (DATA.source || {}).hoy || {};
+      var datos = (hoy.porHora || []).filter(function(x) {
+        return x.camiones > 0 || x.parte > 0;
+      });
+      var perfil = hoy.perfil || { dias: 0, punta: [] };
+
+      if (!datos.length) {
+        caja.innerHTML = vacio('Todavía no entra ningún camión hoy.');
+        setText('horasConteo', '—');
+        setText('horasNota', '');
+        return;
+      }
+
+      setText('horasConteo', perfil.dias
+        ? 'forma de ' + formatInteger(perfil.dias) + ' días'
+        : 'sin forma todavía');
+
+      document.getElementById('horasNota').innerHTML = perfil.dias
+        ? ' La punta está en <b>' + esc(horasEnPalabras(perfil.punta)) +
+          '</b>: ahí entra el <b>' + formatPercent(perfil.parteEnPunta) +
+          '</b> del día.'
+        : '';
+
+      var tope = Math.max(1, Math.max.apply(null, datos.map(function(x) {
+        return Math.max(x.camiones, x.esperado || 0);
+      })));
+
+      var W = Math.max(360, caja.clientWidth || 900);
+      var H = 280;
+      var M = { t: 24, r: 14, b: 30, l: 44 };
+      var w = W - M.l - M.r;
+      var h = H - M.t - M.b;
+      var paso = w / datos.length;
+      var ancho = Math.max(4, Math.min(30, paso - 6));
+
+      var y = function(v) { return M.t + h - (v / tope) * h; };
+      var partes = [ejeY(M, w, h, tope, formatInteger)];
+
+      // La punta, marcada por detrás: es el dato operativo del
+      // gráfico, a qué hora conviene tener gente en la romana.
+      datos.forEach(function(x, i) {
+        if ((perfil.punta || []).indexOf(x.hora) === -1) { return; }
+
+        partes.push('<rect x="' + (M.l + paso * i) + '" y="' + M.t +
+          '" width="' + paso + '" height="' + h +
+          '" fill="var(--madera)" opacity=".07"/>');
+      });
+
+      datos.forEach(function(x, i) {
+        if (!x.camiones) { return; }
+
+        var cx = M.l + paso * i + paso / 2;
+
+        partes.push('<rect class="barra-svg" data-i="' + i + '" x="' +
+          (cx - ancho / 2) + '" y="' + y(x.camiones) + '" width="' + ancho +
+          '" height="' + Math.max(1, (x.camiones / tope) * h) +
+          '" fill="var(--verde)" rx="1.5"/>');
+      });
+
+      // La forma del día, a la escala del cierre proyectado.
+      var conEsperado = datos.filter(function(x) {
+        return x.esperado !== null && x.esperado !== undefined;
+      });
+
+      if (conEsperado.length > 1) {
+        var puntos = datos.map(function(x, i) {
+          return (M.l + paso * i + paso / 2).toFixed(1) + ',' +
+            y(x.esperado || 0).toFixed(1);
+        }).join(' ');
+
+        partes.push('<polyline class="traza-plan" fill="none" points="' +
+          puntos + '"/>');
+      }
+
+      var cifras = datos.map(function(x) { return formatInteger(x.camiones); });
+
+      if (cabenRotulos(cifras, paso)) {
+        datos.forEach(function(x, i) {
+          if (!x.camiones) { return; }
+
+          partes.push(rotulo(
+            M.l + paso * i + paso / 2, y(x.camiones) - 6,
+            cifras[i], 'rotulo-verde'
+          ));
+        });
+      }
+
+      datos.forEach(function(x, i) {
+        partes.push('<text x="' + (M.l + paso * i + paso / 2) + '" y="' +
+          (M.t + h + 17) + '" text-anchor="middle" font-size="9.5">' +
+          x.hora + '</text>');
+      });
+
+      partes.push('<line class="eje" x1="' + M.l + '" y1="' + (M.t + h) +
+        '" x2="' + (M.l + w) + '" y2="' + (M.t + h) + '"/>');
+
+      caja.innerHTML = '<svg class="grafico" viewBox="0 0 ' + W + ' ' + H +
+        '" height="' + H + '" role="img" aria-label="Llegadas por hora">' +
+        partes.join('') + bandas(datos.length, M, w, h, paso) + '</svg>';
+
+      montarGlobo(caja, {
+        contenido: function(i) {
+          var x = datos[i];
+          var filas = [{
+            color: 'var(--verde)',
+            etiqueta: 'Entraron',
+            valor: formatInteger(x.camiones) + ' · ' +
+              formatQuantity(x.ts) + ' ' + unidad()
+          }];
+
+          if (x.esperado !== null && x.esperado !== undefined) {
+            filas.push({
+              color: 'var(--pizarra)',
+              etiqueta: 'En un día normal',
+              valor: formatQuantity(x.esperado) + ' camiones'
+            });
+          }
+
+          if (x.patio !== null && x.patio !== undefined) {
+            filas.push({
+              color: 'var(--ink-3)',
+              etiqueta: 'Demora mediana',
+              valor: duracion(x.patio)
+            });
+          }
+
+          return globoHTML({
+            titulo: x.hora + ':00 a ' + (x.hora + 1) + ':00',
+            filas: filas
+          });
+        }
+      });
+    }
+
+    function grafDemoraTramos() {
+      var caja = document.getElementById('grafDemoraTramos');
+
+      if (!caja) { return; }
+
+      var hoy = (DATA.source || {}).hoy || {};
+      var datos = hoy.demoraTramos || [];
+      var total = datos.reduce(function(t, x) { return t + x.camiones; }, 0);
+
+      setText('demoraConteo', total
+        ? formatInteger(total) + ' camiones medidos'
+        : '—');
+
+      var dem = hoy.demora || { patio: {} };
+
+      document.getElementById('demoraNota').innerHTML =
+        dem.patio && dem.patio.n
+          ? ' Mediana <b>' + duracion(dem.patio.mediana) + '</b>, p90 ' +
+            duracion(dem.patio.p90) + ', el más largo ' +
+            duracion(dem.patio.max) + '.'
+          : '';
+
+      if (!total) {
+        caja.innerHTML = vacio('Todavía no cierra ningún camión hoy.');
+        return;
+      }
+
+      var tope = Math.max.apply(null, datos.map(function(x) {
+        return x.camiones;
+      })) || 1;
+
+      var W = Math.max(300, caja.clientWidth || 430);
+      var H = 240;
+      var M = { t: 24, r: 12, b: 42, l: 36 };
+      var w = W - M.l - M.r;
+      var h = H - M.t - M.b;
+      var paso = w / datos.length;
+      var ancho = Math.max(10, Math.min(46, paso - 10));
+
+      var y = function(v) { return M.t + h - (v / tope) * h; };
+      var partes = [ejeY(M, w, h, tope, formatInteger)];
+
+      datos.forEach(function(x, i) {
+        var cx = M.l + paso * i + paso / 2;
+
+        if (x.camiones) {
+          partes.push('<rect class="barra-svg" data-i="' + i + '" x="' +
+            (cx - ancho / 2) + '" y="' + y(x.camiones) + '" width="' +
+            ancho + '" height="' + Math.max(1, (x.camiones / tope) * h) +
+            '" fill="' + (i >= 3 ? 'var(--ladrillo)' : 'var(--verde)') +
+            '" rx="1.5"/>');
+
+          partes.push(rotulo(cx, y(x.camiones) - 6,
+            formatPercent(x.parte), i >= 3 ? 'rotulo-ladrillo' : 'rotulo-verde'));
+        }
+
+        partes.push('<text x="' + cx + '" y="' + (M.t + h + 16) +
+          '" text-anchor="middle" font-size="9">' + esc(x.nombre) +
+          '</text>');
+      });
+
+      partes.push('<line class="eje" x1="' + M.l + '" y1="' + (M.t + h) +
+        '" x2="' + (M.l + w) + '" y2="' + (M.t + h) + '"/>');
+
+      caja.innerHTML = '<svg class="grafico" viewBox="0 0 ' + W + ' ' + H +
+        '" height="' + H + '" role="img" aria-label="Demora por tramo">' +
+        partes.join('') + bandas(datos.length, M, w, h, paso) + '</svg>';
+
+      montarGlobo(caja, {
+        contenido: function(i) {
+          return globoHTML({
+            titulo: datos[i].nombre,
+            filas: [{
+              color: i >= 3 ? 'var(--ladrillo)' : 'var(--verde)',
+              etiqueta: 'Camiones',
+              valor: formatInteger(datos[i].camiones) + ' · ' +
+                formatPercent(datos[i].parte)
+            }]
+          });
+        }
+      });
+    }
+
+    function grafDemoraHoras() {
+      var caja = document.getElementById('grafDemoraHoras');
+
+      if (!caja) { return; }
+
+      var hoy = (DATA.source || {}).hoy || {};
+      var datos = (hoy.porHora || []).filter(function(x) {
+        return x.patio !== null && x.patio !== undefined;
+      });
+
+      if (!datos.length) {
+        caja.innerHTML = vacio('Sin demoras medidas todavía.');
+        return;
+      }
+
+      var tope = Math.max.apply(null, datos.map(function(x) {
+        return x.patio;
+      })) || 1;
+
+      var W = Math.max(300, caja.clientWidth || 430);
+      var H = 240;
+      var M = { t: 24, r: 12, b: 42, l: 40 };
+      var w = W - M.l - M.r;
+      var h = H - M.t - M.b;
+      var paso = w / datos.length;
+      var ancho = Math.max(6, Math.min(34, paso - 8));
+
+      var y = function(v) { return M.t + h - (v / tope) * h; };
+      var partes = [ejeY(M, w, h, tope, formatInteger)];
+
+      datos.forEach(function(x, i) {
+        var cx = M.l + paso * i + paso / 2;
+
+        partes.push('<rect class="barra-svg" data-i="' + i + '" x="' +
+          (cx - ancho / 2) + '" y="' + y(x.patio) + '" width="' + ancho +
+          '" height="' + Math.max(1, (x.patio / tope) * h) +
+          '" fill="var(--madera)" rx="1.5"/>');
+
+        partes.push('<text x="' + cx + '" y="' + (M.t + h + 16) +
+          '" text-anchor="middle" font-size="9.5">' + x.hora + '</text>');
+      });
+
+      var cifras = datos.map(function(x) { return duracion(x.patio); });
+
+      if (cabenRotulos(cifras, paso)) {
+        datos.forEach(function(x, i) {
+          partes.push(rotulo(M.l + paso * i + paso / 2, y(x.patio) - 6,
+            cifras[i], 'rotulo-madera'));
+        });
+      }
+
+      partes.push('<line class="eje" x1="' + M.l + '" y1="' + (M.t + h) +
+        '" x2="' + (M.l + w) + '" y2="' + (M.t + h) + '"/>');
+
+      caja.innerHTML = '<svg class="grafico" viewBox="0 0 ' + W + ' ' + H +
+        '" height="' + H + '" role="img" aria-label="Demora por hora">' +
+        partes.join('') + bandas(datos.length, M, w, h, paso) + '</svg>';
+
+      montarGlobo(caja, {
+        contenido: function(i) {
+          return globoHTML({
+            titulo: datos[i].hora + ':00 a ' + (datos[i].hora + 1) + ':00',
+            filas: [
+              { color: 'var(--madera)', etiqueta: 'Demora mediana',
+                valor: duracion(datos[i].patio) },
+              { color: 'var(--verde)', etiqueta: 'Camiones',
+                valor: formatInteger(datos[i].camiones) }
+            ]
           });
         }
       });

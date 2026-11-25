@@ -42,6 +42,7 @@ function recortarConst(nombre) {
 const CONFIG = {
   TIMEZONE: 'America/Santiago',
   JORNADA: { DESDE: '08:30', HASTA: '23:00' },
+  PERFIL: { MINIMO_CAMIONES: 8, MINIMA_PARTE: 0.15, HORAS_PUNTA: 3 },
   FACTOR_CAMION: 11,
   FACTOR_POR_MATERIAL: {
     'ASTILLA EUCALYPTUS NITENS': 15.2,
@@ -59,9 +60,11 @@ const Utilities = {
   formatDate: function() { return AHORA; }
 };
 
-eval([recortarConst('SUBPRODUCTOS_OBJETIVO')].concat([
+eval([recortarConst('SUBPRODUCTOS_OBJETIVO'),
+      recortarConst('TRAMOS_DEMORA')].concat([
   'resumenDelDia_', 'camionesDelPlan_', 'minutosDeHora_',
   'tramosDelCamion_', 'estadisticaDeMinutos_',
+  'perfilHorario_', 'parteDelDia_', 'tramosDeDemora_',
   'ahoraEnMinutos_', 'normalizaGuia_', 'factorDe_', 'formatDateKey_',
   'normalizeKey_', 'text_', 'round_'
 ].map(recortar)).join('\n'));
@@ -426,6 +429,131 @@ const noEstaEnElPlan = camionesDelPlan_(
 ok(!noEstaEnElPlan,
    'y el material que no está en el Plan ni entró no ocupa una fila',
    noEstaEnElPlan);
+
+/* ---------------------------------------------------------------------
+ * A qué hora llegan los camiones
+ *
+ * El día no es parejo, y proyectar con una recta a las nueve de la
+ * mañana da cualquier cosa. La forma del día se saca de los días
+ * anteriores del mismo libro.
+ * ------------------------------------------------------------------ */
+function llegada(fecha, hora, guia) {
+  return {
+    fecha: fecha, source: 'CAMIONES', llegada: hora, cierre: '', reserva: '',
+    guia: guia, proveedor: 'PROMASA S.A.', proveedorRaw: 'PROMASA S.A.',
+    subproducto: 'ASTILLA PINO VERDE', destino: 'TABLEROS',
+    camiones: 1, ts: 11, enCurso: false
+  };
+}
+
+const HISTORIA = [];
+let correlativo = 0;
+
+// Dos días de distinto tamaño y la misma forma: 40% a las 8, 40% a las
+// 9, 20% a las 14.
+[['2026-11-17', 10], ['2026-11-18', 20]].forEach(function(par) {
+  const fecha = par[0];
+  const total = par[1];
+
+  for (let i = 0; i < total * 0.4; i++) {
+    HISTORIA.push(llegada(fecha, '8:' + (10 + i), 'H' + (correlativo++)));
+  }
+  for (let i = 0; i < total * 0.4; i++) {
+    HISTORIA.push(llegada(fecha, '9:' + (10 + i), 'H' + (correlativo++)));
+  }
+  for (let i = 0; i < total * 0.2; i++) {
+    HISTORIA.push(llegada(fecha, '14:' + (10 + i), 'H' + (correlativo++)));
+  }
+});
+
+// Un día de tres camiones no dice nada de la forma del día.
+['2026-11-16', '2026-11-16', '2026-11-16'].forEach(function(fecha) {
+  HISTORIA.push(llegada(fecha, '20:10', 'H' + (correlativo++)));
+});
+
+const HOY2 = '2026-11-19';
+
+// Seis camiones, todos antes de las 9:30.
+for (let i = 0; i < 3; i++) {
+  HISTORIA.push(llegada(HOY2, '8:' + (20 + i), 'D' + i));
+}
+for (let i = 0; i < 3; i++) {
+  HISTORIA.push(llegada(HOY2, '9:' + (10 + i), 'D' + (10 + i)));
+}
+
+const perfil = perfilHorario_(HISTORIA, HOY2);
+
+ok(perfil.dias === 2,
+   'el día de tres camiones no entra en la forma, y el de hoy tampoco',
+   perfil.dias);
+ok(perfil.horas[8].parte === 0.4 && perfil.horas[9].parte === 0.4 &&
+   perfil.horas[14].parte === 0.2,
+   'un día de diez y uno de veinte con la misma forma pesan lo mismo: ' +
+   'se promedian las partes, no los camiones',
+   [perfil.horas[8].parte, perfil.horas[9].parte, perfil.horas[14].parte]);
+ok(perfil.horas[23].acumulado === 1,
+   'y las partes suman el día entero', perfil.horas[23].acumulado);
+ok(perfil.punta.join(',') === '8,9,14' && perfil.parteEnPunta === 1,
+   'la punta son las horas que concentran el movimiento', perfil.punta);
+
+ok(parteDelDia_(perfil, 9 * 60) === 0.4,
+   'a las 9 en punto pasó lo de las 8 y nada de las 9');
+ok(parteDelDia_(perfil, 9 * 60 + 30) === 0.6,
+   'y a las 9:30, la mitad de la hora que corre',
+   parteDelDia_(perfil, 9 * 60 + 30));
+ok(parteDelDia_(perfil, 23 * 60) === 1, 'al cierre, el día entero');
+ok(parteDelDia_({ dias: 0, horas: [] }, 600) === null,
+   'sin días anteriores no se inventa una forma');
+
+AHORA = '09:30';
+
+const conPerfil = resumenDelDia_(HISTORIA, [], HOY2, CONFIG.TIMEZONE);
+
+ok(conPerfil.camiones === 6, 'van seis camiones', conPerfil.camiones);
+ok(conPerfil.cierre.alRitmo === false,
+   'la recta no se atreve: lleva una hora de jornada, no hora y media');
+ok(conPerfil.cierre.perfil.hay === true &&
+   conPerfil.cierre.perfil.camiones === 10,
+   'pero la forma del día sí: seis camiones son el 60% de un día ' +
+   'normal a las 9:30, así que el cierre son diez',
+   conPerfil.cierre.perfil);
+ok(conPerfil.cierre.perfil.faltan === 4,
+   'y faltan cuatro por entrar', conPerfil.cierre.perfil.faltan);
+
+const h9 = conPerfil.porHora.filter(function(x) { return x.hora === 9; })[0];
+const h14 = conPerfil.porHora.filter(function(x) { return x.hora === 14; })[0];
+
+ok(h9 && h9.camiones === 3 && h9.esperado === 4,
+   'cada hora dice lo que trajo y lo que trae normalmente', h9);
+ok(h14 && h14.camiones === 0 && h14.esperado === 2,
+   'incluso las horas que todavía no llegan', h14);
+ok(h9.corrida === false && conPerfil.porHora.filter(function(x) {
+  return x.hora === 8;
+})[0].corrida === true,
+   'la hora que está corriendo no se juzga: todavía le falta');
+
+/* ---------------------------------------------------------------------
+ * En qué se va el tiempo
+ * ------------------------------------------------------------------ */
+const tramos = tramosDeDemora_([0, 12, 15, 16, 30, 45, 61, 119, 120, 456]);
+
+ok(tramos.length === 5, 'cinco tramos', tramos.length);
+ok(tramos[0].nombre === 'hasta 15′' && tramos[0].camiones === 3,
+   'el camión de cero minutos cae en el primer tramo, no entre dos',
+   tramos[0]);
+// 16 y 30 → segundo; 45 → tercero; 61, 119 y 120 → cuarto; 456 → último.
+// El borde es cerrado por arriba: 60 es "hasta 1h" y 61 ya no.
+ok(tramos[1].camiones === 2 && tramos[2].camiones === 1 &&
+   tramos[3].camiones === 3 && tramos[4].camiones === 1,
+   'y cada uno en el suyo, sin repetirse ni perderse',
+   tramos.map(function(t) { return t.camiones; }));
+ok(tramos.reduce(function(t, x) { return t + x.camiones; }, 0) === 10,
+   'los diez están en algún tramo',
+   tramos.map(function(t) { return t.camiones; }));
+ok(tramos[4].parte === 0.1,
+   'con su parte del total, que es lo que se mira', tramos[4]);
+ok(tramosDeDemora_([]).every(function(t) { return t.camiones === 0; }),
+   'sin camiones, todo en cero y nada roto');
 
 console.log(fallos ? '\n' + fallos + ' FALLOS' : '\nTodo OK');
 process.exitCode = fallos ? 1 : 0;

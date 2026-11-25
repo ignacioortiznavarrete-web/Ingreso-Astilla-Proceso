@@ -380,6 +380,18 @@ const CONFIG = Object.freeze({
     MINUTO: 45
   }),
 
+  // Cómo se reparte el día: a qué hora llegan los camiones.
+  PERFIL: Object.freeze({
+    // Un día con menos camiones que esto no dice nada de la forma del
+    // día: un sábado con tres no se parece a un martes.
+    MINIMO_CAMIONES: 8,
+    // Antes de que haya pasado esta parte del día típico, proyectar
+    // es dividir por un número muy chico y el resultado se dispara.
+    MINIMA_PARTE: 0.15,
+    // Cuántas horas entran en "la punta".
+    HORAS_PUNTA: 3
+  }),
+
   CAMIONES: Object.freeze({
     PATRON: 'CAMIONES INGRESO',
     // Hasta qué columna se lee. La hoja tiene decenas, y las que
@@ -6830,6 +6842,19 @@ function resumenDelDia_(
   const alRitmo = transcurridos >= 90 && transcurridos < jornada;
   const factor = alRitmo ? jornada / transcurridos : 1;
 
+  // Y la otra forma de proyectar: contra cómo cae un día normal en vez
+  // de contra una recta. A las 11 de la mañana ya pasó bastante más
+  // que un quinto del día, y la recta no lo sabe.
+  const perfil = perfilHorario_(camionesRows, hoy);
+  const parte = parteDelDia_(perfil, ahora);
+
+  const porPerfil = parte !== null &&
+    parte >= CONFIG.PERFIL.MINIMA_PARTE &&
+    transcurridos > 0 &&
+    transcurridos < jornada
+      ? filas.length / parte
+      : null;
+
   const subproductos = Object.keys(porSub).sort().map(function(sub) {
     return {
       subproducto: sub,
@@ -6850,6 +6875,57 @@ function resumenDelDia_(
     return total + (Number(fila.ts) || 0);
   }, 0);
 
+  // Cómo va cayendo el día hora por hora, al lado de cómo cae uno
+  // normal. Es lo que explica por qué la proyección sube o baja: no
+  // es lo mismo ir corto a las nueve que ir corto a las seis.
+  const horas = {};
+
+  filas.forEach(function(fila) {
+    const minutos = minutosDeHora_(fila.hora);
+
+    if (minutos < 0) { return; }
+
+    const h = Math.floor(minutos / 60);
+
+    if (!horas[h]) { horas[h] = { camiones: 0, ts: 0, patios: [] }; }
+
+    horas[h].camiones++;
+    horas[h].ts += Number(fila.ts) || 0;
+
+    if (!fila.abierto && !fila.horaDudosa && fila.patio !== null) {
+      horas[h].patios.push(fila.patio);
+    }
+  });
+
+  const conDato = Object.keys(horas).map(Number);
+  const primeraHora = Math.min.apply(
+    null, [Math.floor(desde / 60)].concat(conDato)
+  );
+  const ultimaHora = Math.max.apply(
+    null, [Math.floor(hasta / 60)].concat(conDato)
+  );
+
+  const porHora = [];
+
+  for (let h = primeraHora; h <= ultimaHora; h++) {
+    const dato = horas[h] || { camiones: 0, ts: 0, patios: [] };
+    const suParte = perfil.horas[h] ? perfil.horas[h].parte : 0;
+
+    porHora.push({
+      hora: h,
+      camiones: dato.camiones,
+      ts: round_(dato.ts, 2),
+      patio: estadisticaDeMinutos_(dato.patios).mediana,
+      // Qué parte del día trae esta hora normalmente.
+      parte: suParte,
+      // Y cuántos camiones serían, en un día del tamaño que se
+      // proyecta. Sin proyección no hay con qué comparar.
+      esperado: porPerfil === null ? null : round_(porPerfil * suParte, 1),
+      // Si esta hora ya pasó: la que está corriendo no se juzga.
+      corrida: (h + 1) * 60 <= ahora
+    });
+  }
+
   return {
     fecha: hoy,
     fechaLabel: formatDateKey_(hoy),
@@ -6859,6 +6935,12 @@ function resumenDelDia_(
     enCurso: filas.filter(function(f) { return f.enCurso; }).length,
     enSap: filas.filter(function(f) { return f.enSap; }).length,
     demora: demora,
+    // En qué se va el tiempo: cuántos salen rápido y cuántos se quedan.
+    demoraTramos: tramosDeDemora_(cerrados.map(function(f) {
+      return f.patio;
+    })),
+    perfil: perfil,
+    porHora: porHora,
     porSubproducto: subproductos,
     jornada: {
       desde: CONFIG.JORNADA.DESDE,
@@ -6873,7 +6955,20 @@ function resumenDelDia_(
       camiones: Math.round(camiones * factor),
       ts: round_(ts * factor, 2),
       // Cuántos faltarían por entrar de aquí al cierre.
-      faltan: Math.max(0, Math.round(camiones * factor) - camiones)
+      faltan: Math.max(0, Math.round(camiones * factor) - camiones),
+      // Lo mismo, contra la forma del día. Es el número bueno cuando
+      // hay con qué calcularlo; la recta queda al lado para poder ver
+      // cuánto se equivocaba.
+      perfil: {
+        hay: porPerfil !== null,
+        parte: parte,
+        dias: perfil.dias,
+        camiones: porPerfil === null ? null : Math.round(porPerfil),
+        ts: porPerfil === null ? null : round_(ts / parte, 2),
+        faltan: porPerfil === null
+          ? null
+          : Math.max(0, Math.round(porPerfil) - camiones)
+      }
     }
   };
 }
@@ -7288,6 +7383,145 @@ function archivarHoy() {
   return archivarDia(
     Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd')
   );
+}
+
+/**
+ * A qué hora llegan los camiones en un día normal.
+ *
+ * El día no es parejo: hay una punta en la mañana, baja al mediodía y
+ * vuelve a subir. Por eso la regla de tres de "lleva 20 a las 11, a
+ * este ritmo cierra con 60" miente: a las 11 ya pasó la mitad de la
+ * mañana, no un tercio del día.
+ *
+ * Esto mira los días anteriores del libro y arma la forma: qué parte
+ * del día entra en cada hora. Después, saber qué parte del día
+ * típico ya pasó convierte lo que va entrado en un cierre.
+ *
+ * Se promedian las PARTES de cada día, no los camiones: así un martes
+ * de cuarenta camiones y un sábado de diez pesan lo mismo en la forma.
+ * Lo que pesa es cómo se reparte el día, no cuánto trajo.
+ */
+function perfilHorario_(camionesRows, hoy) {
+  const porDia = {};
+
+  (camionesRows || []).forEach(function(row) {
+    if (!row.fecha || row.fecha >= hoy) { return; }
+
+    const minutos = minutosDeHora_(row.llegada);
+
+    if (minutos < 0) { return; }
+
+    const hora = Math.floor(minutos / 60);
+
+    if (!porDia[row.fecha]) { porDia[row.fecha] = { total: 0, horas: {} }; }
+
+    porDia[row.fecha].total++;
+    porDia[row.fecha].horas[hora] = (porDia[row.fecha].horas[hora] || 0) + 1;
+  });
+
+  const dias = Object.keys(porDia).filter(function(fecha) {
+    return porDia[fecha].total >= CONFIG.PERFIL.MINIMO_CAMIONES;
+  }).sort();
+
+  const horas = [];
+  let acumulado = 0;
+
+  for (let h = 0; h < 24; h++) {
+    let suma = 0;
+
+    dias.forEach(function(fecha) {
+      suma += (porDia[fecha].horas[h] || 0) / porDia[fecha].total;
+    });
+
+    const parte = dias.length ? suma / dias.length : 0;
+
+    acumulado += parte;
+
+    horas.push({
+      hora: h,
+      parte: round_(parte, 4),
+      acumulado: round_(Math.min(1, acumulado), 4)
+    });
+  }
+
+  // Las horas que concentran el movimiento. No es curiosidad: es a qué
+  // hora conviene tener gente en la romana.
+  const punta = horas.slice().sort(function(a, b) {
+    return b.parte - a.parte;
+  }).slice(0, CONFIG.PERFIL.HORAS_PUNTA).filter(function(x) {
+    return x.parte > 0;
+  });
+
+  return {
+    dias: dias.length,
+    desde: dias[0] || '',
+    hasta: dias[dias.length - 1] || '',
+    horas: horas,
+    punta: punta.map(function(x) { return x.hora; }).sort(function(a, b) {
+      return a - b;
+    }),
+    parteEnPunta: round_(punta.reduce(function(t, x) {
+      return t + x.parte;
+    }, 0), 4)
+  };
+}
+
+/**
+ * Qué parte del día típico ya pasó a esta hora.
+ *
+ * Dentro de la hora en curso se reparte parejo: no hay con qué afinar
+ * más, y para una proyección que se mira cada media hora sobra.
+ */
+function parteDelDia_(perfil, minutos) {
+  if (!perfil || !perfil.dias || minutos < 0) { return null; }
+
+  const hora = Math.floor(minutos / 60);
+  const dentro = (minutos % 60) / 60;
+  let acumulado = 0;
+
+  for (let h = 0; h <= hora && h < 24; h++) {
+    const parte = perfil.horas[h] ? perfil.horas[h].parte : 0;
+
+    acumulado += h === hora ? parte * dentro : parte;
+  }
+
+  return round_(Math.min(1, acumulado), 4);
+}
+
+/**
+ * En qué tramos cae la demora. El último es abierto a propósito: lo
+ * que importa de un camión de cinco horas no es que sean cinco.
+ */
+const TRAMOS_DEMORA = Object.freeze([
+  { hasta: 15, nombre: 'hasta 15′' },
+  { hasta: 30, nombre: '15 a 30′' },
+  { hasta: 60, nombre: '30′ a 1h' },
+  { hasta: 120, nombre: '1 a 2h' },
+  { hasta: null, nombre: 'más de 2h' }
+]);
+
+function tramosDeDemora_(valores) {
+  const lista = (valores || []).filter(function(x) {
+    return typeof x === 'number' && isFinite(x);
+  });
+
+  // Arranca en −1 para que un camión de cero minutos caiga en el
+  // primer tramo y no se pierda entre dos.
+  let desde = -1;
+
+  return TRAMOS_DEMORA.map(function(tramo) {
+    const camiones = lista.filter(function(v) {
+      return v > desde && (tramo.hasta === null || v <= tramo.hasta);
+    }).length;
+
+    if (tramo.hasta !== null) { desde = tramo.hasta; }
+
+    return {
+      nombre: tramo.nombre,
+      camiones: camiones,
+      parte: lista.length ? round_(camiones / lista.length, 4) : 0
+    };
+  });
 }
 
 /**
