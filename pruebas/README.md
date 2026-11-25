@@ -18,6 +18,7 @@ puede subirlos ni por error.
 ## Correrlas
 
 ```
+node pruebas/enteras.js
 node pruebas/camiones.js
 node pruebas/dia.js
 node pruebas/archivo.js
@@ -27,13 +28,14 @@ node pruebas/panel.js
 
 | Archivo | Qué cuida |
 |---|---|
+| `enteras.js` | Que no se llame a ninguna función que ya no exista. Apps Script no avisa: el error sale al apretar el botón |
 | `camiones.js` | Que el libro en vivo se lea como viene y que el cruce por guía no cuente un camión dos veces |
 | `dia.js` | La proyección de cierre del día (08:30 a 23:00) y el plan convertido a camiones |
 | `archivo.js` | Que la copia diaria caiga en la carpeta del mes que corresponde y no invente demoras en el día que ya pasó |
 | `homologacion.js` | Los dos tiempos, los grupos de tres hojas y asignarlos de una vez |
 | `panel.js` | Que el panel dibuje lo que el servidor le manda: homologación y el conteo de camiones por material |
 
-Las cuatro primeras leen `Codigo.gs` y `panel.js` lee `Index.html`;
+Las cinco primeras leen `Codigo.gs` y `panel.js` lee `Index.html`;
 todas recortan de ahí las funciones que necesitan, así que prueban el
 código de verdad y no una copia. `panel.js` corre el dibujo con un DOM
 de mentira: no abre un navegador.

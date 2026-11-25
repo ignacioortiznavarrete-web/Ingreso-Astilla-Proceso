@@ -3540,6 +3540,31 @@ function readPlan_(spreadsheet, month) {
  * nombres por su cuenta. Solo eso: el nombre del proveedor del plan no
  * viaja, porque en pantalla se muestra el de Ingresos.
  */
+/**
+ * Los camiones escritos en una celda.
+ *
+ * La hoja los trae como número o como texto, y el texto puede venir
+ * con el punto de los miles y la coma decimal. Lo que no parezca un
+ * número vale cero: una celda con una nota adentro no son camiones.
+ */
+function camionesDeCelda_(crudo, mostrado) {
+  if (typeof crudo === 'number') {
+    return isFinite(crudo) ? crudo : 0;
+  }
+
+  const texto = text_(mostrado !== '' && mostrado !== undefined
+    ? mostrado
+    : crudo);
+
+  if (!/^-?\d{1,3}(\.\d{3})*(,\d+)?$|^-?\d+([.,]\d+)?$/.test(texto)) {
+    return 0;
+  }
+
+  const n = parseOptionalNumber_(texto);
+
+  return n === null || !isFinite(n) ? 0 : n;
+}
+
 function readPlanMeses_(spreadsheet, desde, hasta) {
   const vacio = { meses: [], porMes: {} };
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PLAN);
