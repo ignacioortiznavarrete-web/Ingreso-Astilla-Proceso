@@ -406,6 +406,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Astilla Dashboard')
     .addItem('Abrir dashboard', 'abrirDashboard')
+    .addItem('¿Qué link comparto?', 'revisarAcceso')
     .addSeparator()
     .addItem('Validar hoja Plan (no modifica)', 'prepararHojaPlan')
     .addItem('¿Por qué no toma el plan?', 'diagnosticarPlan')
@@ -512,6 +513,202 @@ function abrirDashboard() {
   );
 }
 
+/**
+ * La planilla del panel, abierta como quien está mirando.
+ *
+ * Todo lo que el panel pide pasa por acá, así que acá se explica el
+ * único error que deja la pantalla en blanco: que la cuenta con la que
+ * corre el panel no tenga acceso a la planilla.
+ *
+ * El libro de camiones no necesita esto: readCamiones_ lo anota en
+ * "faltan" y el panel sigue con lo de SAP. Sin la planilla, en cambio,
+ * no hay nada que mostrar.
+ */
+function abrirPanel_() {
+  try {
+    return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  } catch (error) {
+    throw new Error(
+      explicarPermiso_(error, 'la planilla del panel')
+    );
+  }
+}
+
+
+/**
+ * El error de permiso, dicho de manera que se pueda arreglar.
+ *
+ * Apps Script dice "No cuentas con el permiso necesario para acceder
+ * al documento solicitado" y no dice qué documento ni qué hacer: para
+ * quien abre el panel es una pantalla en blanco sin explicación.
+ *
+ * Hay dos casos y los separa la cuenta. Si el panel corre con la
+ * cuenta de quien lo abre, el link que se compartió es el equivocado.
+ * Si corre con la cuenta de quien lo implementó, el que perdió el
+ * acceso es él y compartir otro link no cambia nada.
+ */
+function explicarPermiso_(error, documento) {
+  const texto = String((error && error.message) || error || '');
+  const cual = documento || 'uno de los documentos que necesita';
+
+  // Cualquier otra falla se deja tal cual: cambiarla por este texto
+  // mandaría a revisar permisos a quien tiene otro problema.
+  if (
+    texto.indexOf('permiso') === -1 &&
+    texto.toLowerCase().indexOf('permission') === -1
+  ) {
+    return texto;
+  }
+
+  const dueno = cuentaDelPanel_();
+  const mira = autorActual_();
+
+  if (dueno && mira && dueno !== mira) {
+    return 'No pude abrir ' + cual + '.\n\n' +
+      'El panel corre con la cuenta ' + dueno + ', la de quien lo ' +
+      'implementó, y esa cuenta ya no tiene acceso. Hay que ' +
+      'devolverle el acceso, o volver a implementar el panel desde ' +
+      'una cuenta que lo tenga.';
+  }
+
+  return 'No pude abrir ' + cual + '.\n\n' +
+    'El panel está corriendo con tu propia cuenta' +
+    (mira ? ' (' + mira + ')' : '') + ', y esa cuenta no tiene ' +
+    'acceso.\n\n' +
+    'Es el link. El de prueba termina en /dev y corre con la cuenta ' +
+    'de quien lo abre, así que cada persona necesitaría acceso a la ' +
+    'planilla y al libro de camiones. El que hay que compartir ' +
+    'termina en /exec: ese corre con la cuenta de quien implementó y ' +
+    'con ese nadie más necesita acceso a nada.\n\n' +
+    'El menú "Astilla Dashboard · ¿Qué link comparto?" lo muestra.';
+}
+
+
+/**
+ * La cuenta con la que corre el panel, que no es la de quien lo mira.
+ *
+ * En una aplicación web publicada con "Ejecutar como: yo" son dos
+ * cuentas distintas, y esa diferencia es justo lo que hace que el
+ * panel funcione para gente que no tiene acceso a nada.
+ */
+function cuentaDelPanel_() {
+  try {
+    return Session.getEffectiveUser().getEmail() || '';
+  } catch (ignored) {
+    return '';
+  }
+}
+
+
+/**
+ * Qué link compartir y qué alcanza a leer.
+ *
+ * El panel se puede abrir de tres maneras y solo una sirve para los
+ * demás: el link de la implementación. El del menú y el de prueba
+ * corren con la cuenta de quien los abre, y como el libro de camiones
+ * es de otra área, ahí se cae.
+ *
+ * Esto dice cuál es el link, con qué cuenta corre y si esa cuenta
+ * alcanza a abrir la planilla y el libro del mes.
+ */
+function revisarAcceso() {
+  const lineas = ['Quién puede ver el panel', ''];
+
+  lineas.push('Esta cuenta: ' + (autorActual_() || 'desconocida'));
+
+  let url = '';
+
+  try {
+    url = ScriptApp.getService().getUrl() || '';
+  } catch (ignored) {
+    url = '';
+  }
+
+  lineas.push('');
+
+  if (!url) {
+    lineas.push(
+      'Todavía no hay una implementación publicada, así que no hay ' +
+      'link que compartir. Se publica en Apps Script: Implementar · ' +
+      'Nueva implementación · Aplicación web, con "Ejecutar como: ' +
+      'yo" y "Quién tiene acceso: cualquier persona de la ' +
+      'organización".'
+    );
+  } else {
+    lineas.push('Link para compartir:');
+    lineas.push(url);
+    lineas.push('');
+
+    if (url.slice(-5) === '/exec') {
+      lineas.push(
+        'Termina en /exec, que es el correcto: corre con la cuenta ' +
+        'de quien implementó, así que quien lo abra no necesita ' +
+        'acceso ni a la planilla ni al libro de camiones.'
+      );
+      lineas.push('');
+      lineas.push(
+        'Ojo con dos cosas: el código nuevo recién llega a ese link ' +
+        'cuando se implementa una versión nueva, y el link de ' +
+        'prueba, el que termina en /dev, no sirve para compartir.'
+      );
+    } else {
+      lineas.push(
+        'No termina en /exec, así que es el de prueba: ese corre con ' +
+        'la cuenta de quien lo abre y a los demás les va a decir que ' +
+        'no tienen permiso. Hay que implementar una versión y ' +
+        'compartir el link que termina en /exec.'
+      );
+    }
+  }
+
+  lineas.push('');
+  lineas.push('Lo que alcanza a leer esta cuenta:');
+
+  let spreadsheet = null;
+
+  try {
+    spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    lineas.push('  La planilla del panel: sí');
+  } catch (error) {
+    lineas.push('  La planilla del panel: NO');
+  }
+
+  if (spreadsheet) {
+    const timezone =
+      spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
+
+    const aMano = leerFuentes_(spreadsheet);
+
+    mesesDelLibro_(getCurrentMonthWindow_(timezone)).forEach(
+      function(mes) {
+        const fuente = aMano[mes] || buscarLibroEnDrive_(mes);
+
+        if (!fuente || !fuente.id) {
+          lineas.push('  El libro de ' + mes + ': no lo encuentro');
+          return;
+        }
+
+        try {
+          const libro = SpreadsheetApp.openById(fuente.id);
+          lineas.push(
+            '  El libro de ' + mes + ': sí · ' + libro.getName()
+          );
+        } catch (error) {
+          lineas.push('  El libro de ' + mes + ': NO');
+        }
+      }
+    );
+  }
+
+  const texto = lineas.join('\n');
+
+  Logger.log(texto);
+  avisarEnPantalla_(texto);
+
+  return texto;
+}
+
+
 
 /**
  * Compatibilidad con el menú anterior.
@@ -535,7 +732,7 @@ function prepararHojaPlan() {
  * filas del Plan que nadie usó.
  */
 function diagnosticarPlan() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const timezone =
     spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
   const month = getCurrentMonthWindow_(timezone);
@@ -636,7 +833,7 @@ function diagnosticarPlan() {
 }
 
 function validarHojaPlan() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const timezone =
     spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
   const month = getCurrentMonthWindow_(timezone);
@@ -704,10 +901,27 @@ function validarHojaPlan() {
  * API DEL DASHBOARD
  * ===================================================================== */
 
+/**
+ * Todo lo que el panel muestra, en una sola respuesta.
+ *
+ * El envoltorio existe por una sola cosa: cuando falla un permiso,
+ * Apps Script manda "No cuentas con el permiso necesario para acceder
+ * al documento solicitado" y el panel lo pone tal cual en el aviso
+ * rojo. Para quien abrió el link eso es una pantalla en blanco sin
+ * explicación, y la explicación siempre es la misma: con qué cuenta
+ * está corriendo el panel.
+ */
 function getDashboardData() {
-  const spreadsheet = SpreadsheetApp.openById(
-    CONFIG.SPREADSHEET_ID
-  );
+  try {
+    return armarPanel_();
+  } catch (error) {
+    throw new Error(explicarPermiso_(error));
+  }
+}
+
+
+function armarPanel_() {
+  const spreadsheet = abrirPanel_();
 
   const timezone =
     spreadsheet.getSpreadsheetTimeZone() ||
@@ -1644,7 +1858,7 @@ const SUGERENCIAS_PROVEEDORES = Object.freeze([
  * y agrega al final los que faltan.
  */
 function rellenarProveedores() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const ui = SpreadsheetApp.getUi();
 
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROVEEDORES);
@@ -1918,7 +2132,7 @@ function homologarProveedor_(nombre, homologacion) {
  * llega con la lista de pendientes escrita.
  */
 function instalarProveedores() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const ui = SpreadsheetApp.getUi();
 
   let sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROVEEDORES);
@@ -2904,7 +3118,7 @@ function asignarProveedor(alias, proveedorSap) {
     throw new Error('Hacen falta el nombre de la planilla y el de SAP.');
   }
 
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROVEEDORES);
 
   if (!sheet) {
@@ -3037,7 +3251,7 @@ function declararProveedor(nombre) {
     );
   }
 
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROVEEDORES);
 
   if (!sheet) {
@@ -3121,7 +3335,7 @@ function reasignarProveedor(actual, nuevo) {
     throw new Error('El grupo ya se llama así.');
   }
 
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_PROVEEDORES);
 
   if (!sheet) {
@@ -5098,7 +5312,7 @@ const FUENTES_HEADERS = Object.freeze([
  * otro pegando su enlace.
  */
 function instalarFuentes() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
 
   let sheet = spreadsheet.getSheetByName(CONFIG.SHEET_FUENTES);
 
@@ -5141,7 +5355,7 @@ function instalarFuentes() {
  * correr cuando el libro cambió de nombre o apareció el del mes nuevo.
  */
 function buscarLibroDelMes() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const timezone =
     spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
   const mes = getCurrentMonthWindow_(timezone).prefix;
@@ -5766,7 +5980,7 @@ function carpetaDelMes_(mesPrefijo) {
  * por día sería pagar veinte veces lo mismo.
  */
 function contextoDeArchivo_(mesPrefijo) {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const timezone =
     spreadsheet.getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
   const homologacion = leerProveedores_(spreadsheet);
@@ -6971,7 +7185,7 @@ function parseCoordenadas_(texto) {
  * relleno de los estados vacíos. Se puede correr las veces que sea.
  */
 function instalarMapeos() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
 
   let sheet = spreadsheet.getSheetByName(CONFIG.SHEET_MAPEOS);
 
@@ -7114,7 +7328,7 @@ function instalarMapeos() {
  * Nunca pisa una fila que ya tiene latitud.
  */
 function ubicarMapeos() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_MAPEOS);
 
   if (!sheet || sheet.getLastRow() < 2) {
@@ -7250,7 +7464,7 @@ function ubicarMapeos() {
  * coordenadas, para poder mostrarlos aparte en vez de perderlos.
  */
 function getMapeos() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_MAPEOS);
 
   const base = {
@@ -7398,7 +7612,7 @@ function guardarMapeo(payload) {
   lock.waitLock(15000);
 
   try {
-    const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const spreadsheet = abrirPanel_();
     const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_MAPEOS);
 
     if (!sheet) {
@@ -7470,7 +7684,7 @@ function guardarUbicacion(payload) {
   lock.waitLock(15000);
 
   try {
-    const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const spreadsheet = abrirPanel_();
     const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_MAPEOS);
 
     if (!sheet) {
@@ -7537,7 +7751,7 @@ function agregarMapeo(payload) {
   lock.waitLock(15000);
 
   try {
-    const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const spreadsheet = abrirPanel_();
     const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_MAPEOS);
 
     if (!sheet) {
@@ -7800,7 +8014,7 @@ function semanaDe_(dateKey) {
 }
 
 function instalarApuntes() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
 
   let sheet = spreadsheet.getSheetByName(CONFIG.SHEET_APUNTES);
 
@@ -7892,7 +8106,7 @@ function filaDeApunte_(sheet, columnas, id) {
 }
 
 function getApuntes() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_APUNTES);
 
   const timezone =
@@ -7993,7 +8207,7 @@ function guardarApunte(payload) {
     );
   }
 
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_APUNTES);
 
   if (!sheet) {
@@ -8080,7 +8294,7 @@ function eliminarApunte(id) {
     throw new Error('Falta el identificador del apunte.');
   }
 
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_APUNTES);
 
   if (!sheet) {
@@ -8155,7 +8369,7 @@ function columnasRutas_(sheet) {
 }
 
 function instalarRutas() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
 
   let sheet = spreadsheet.getSheetByName(CONFIG.SHEET_RUTAS);
 
@@ -8337,7 +8551,7 @@ function duracionLegible_(minutos) {
 /* --- Lectura -------------------------------------------------------- */
 
 function getRutas() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const spreadsheet = abrirPanel_();
   const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_RUTAS);
 
   const base = {
@@ -8444,7 +8658,7 @@ function guardarRuta(payload) {
   lock.waitLock(20000);
 
   try {
-    const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const spreadsheet = abrirPanel_();
     const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_RUTAS);
 
     if (!sheet) {
@@ -8720,7 +8934,7 @@ function eliminarRuta(id) {
   lock.waitLock(15000);
 
   try {
-    const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const spreadsheet = abrirPanel_();
     const sheet = spreadsheet.getSheetByName(CONFIG.SHEET_RUTAS);
 
     if (!sheet || sheet.getLastRow() < 2) {

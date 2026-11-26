@@ -75,6 +75,7 @@ eval([
   'puedeEditar_', 'exigirEdicion_',
   'candidatosDelCruce_', 'uniqueTokens_', 'levenshtein_',
   'uniqueSorted_', 'isTotalText_',
+  'abrirPanel_', 'explicarPermiso_', 'cuentaDelPanel_',
   'autorActual_', 'normalizeHeader_', 'normalizeKey_', 'text_',
   'round_'
 ].map(recortar)).join('\n'));
